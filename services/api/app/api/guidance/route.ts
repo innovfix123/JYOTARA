@@ -56,14 +56,24 @@ function outputText(payload: unknown) {
     .trim();
 }
 
+function practicalAdviceScope(packet: ReturnType<typeof buildEvidencePacket>) {
+  if (['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category)) return true;
+  const q = packet.question.toLocaleLowerCase();
+  if (/chart|astrolog|jathag|jothid|panchang|nakshatra|lagna|dasha|dasa|planet|ஜாதக|ஜோதிட|பஞ்சாங்க|நட்சத்திர|லக்ன|தசை|கிரக/u.test(q)) return false;
+  // Keep the reviewed career-reading route for broad vocation questions.
+  if (packet.category === 'Career') return /compar|offer|interview|practic|prepar|salary|resign|apply|applying|test|சம்பள|தயார|வேலை மாற|வேலையை விட|eppadi|practice/u.test(q);
+  return ['Education', 'Daily', 'Family', 'Business'].includes(packet.category);
+}
+
 async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePacket>, sessionId: string, style: ResponseStyle, history: string[] = []) {
-  const relationshipAdvice = ['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category);
+  const practicalScope = practicalAdviceScope(packet);
   const openRouterKey = env.OPENROUTER_API_KEY;
   const openAiKey = env.OPENAI_API_KEY;
   const apiKey = openRouterKey || openAiKey;
+  if (!practicalScope) return null;
   // Career uses its separately constrained reviewed catalogue. Do not let a
   // fluent model response bypass that gate or label fact repetition personal.
-  if (!apiKey || packet.support === 'unsupported' || packet.category === 'Career') return null;
+  if (!apiKey || packet.intent === 'high_stakes' || packet.intent === 'additional_profile_required') return null;
   const safetyIdentifier = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sessionId))
     .then((value) => Array.from(new Uint8Array(value)).map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 48));
 
@@ -98,21 +108,21 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         'Do not infer relationship status, cheating, hidden enemies, family acceptance, lifespan, or exact future events from chart facts. Do not ask unnecessary follow-up questions.',
         'The supplied rules describe the permitted scope. If they contain no interpretation linking a placement to an outcome, do not invent that link from memory.',
         'When data is missing, say what is missing in one calm sentence. Never turn missing data into a prediction.',
-        ...(relationshipAdvice ? [
-          'For this relationship question, provide practical guidance from the user-described situation only. No chart-to-personality or chart-to-outcome interpretation has been established. Do not use astrological signs, planets, nakshatras, houses or periods as explanations or support.',
+        ...(practicalScope ? [
+          'For this practical question, provide useful guidance from the user-described situation only. No chart-to-personality or chart-to-outcome interpretation has been established. Do not use astrological signs, planets, nakshatras, houses or periods as explanations or support.',
           'Give one small concrete action and, where helpful, an example sentence the user can say. Avoid vague motivational language. Do not infer facts or traits the user did not state. Birth time is not needed for this practical advice.',
           'If asked for a chart-based conclusion, briefly say the chart cannot establish that conclusion and then address the real concern. Do not request more birth details as though they would prove it.',
         ] : []),
         languageInstruction(style),
       ].join('\n'),
-      input: JSON.stringify(relationshipAdvice
+      input: JSON.stringify(practicalScope
         ? { question: packet.question, category: packet.category, previousUserMessages: history }
         : { ...packet, previousUserMessages: history }),
     }),
   });
   if (!response.ok) return null;
   const answer = outputText(await response.json().catch(() => null));
-  const unsupportedAstrology = relationshipAdvice && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
+  const unsupportedAstrology = practicalScope && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
   return !unsupportedAstrology && acceptableAnswer(answer, style) && periodClaimsAgree(answer, packet.facts) ? answer : null;
 }
 
@@ -216,7 +226,7 @@ export async function POST(request: Request) {
   const practical = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, history, style);
   const initialPacket = buildEvidencePacket({ category: body.category, question, language,
     birthTimeKnown: trusted.birthTimeKnown, chart });
-  if (!practical && trusted.contextLocation && initialPacket.support !== 'unsupported') {
+  if (!practical && !practicalAdviceScope(initialPacket) && trusted.contextLocation && initialPacket.support !== 'unsupported') {
     // Location comes only from the authenticated calculation ticket. Raw timed
     // Panchang intervals are re-selected at each question, not cached as names.
     const now = Date.now();
@@ -239,7 +249,7 @@ export async function POST(request: Request) {
   });
 
   let generated: string | null = null;
-  const career = packet.category === 'Career' ? reviewedCareerResponse({
+  const career = packet.category === 'Career' && !practicalAdviceScope(packet) ? reviewedCareerResponse({
     snapshotId: trusted.profileId, questionId: identity.id, packet, style,
   }) : null;
   try {
@@ -248,17 +258,17 @@ export async function POST(request: Request) {
     generated = null;
   }
   const answer = practical?.answer ?? (career?.ok ? career.answer : generated || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style)));
-  const modelRelationshipAdvice = !!generated && ['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category);
-  const answerMode = practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (modelRelationshipAdvice ? 'model_guidance' : 'personalised') : 'grounded_fallback';
+  const modelPracticalAdvice = !!generated && practicalAdviceScope(packet);
+  const answerMode = practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (modelPracticalAdvice ? 'model_guidance' : 'personalised') : 'grounded_fallback';
   const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
 
   const reply = {
     replayed: false,
     answeredAt: new Date().toISOString(),
     answer,
-    evidence: practical || modelRelationshipAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
+    evidence: practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
     // Reviewed copy already includes its reviewed limitation in the answer.
-    limitation: practical || modelRelationshipAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
+    limitation: practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
     support: practical ? 'partially_supported' : packet.support,
     answerMode,
     profileId: trusted.profileId,
