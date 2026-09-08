@@ -1,0 +1,26 @@
+[Unit]
+Description=Jyotara invited tester API
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+[Service]
+Type=simple
+User=jyotara
+Group=jyotara
+WorkingDirectory=/opt/jyotara/current
+EnvironmentFile=/etc/jyotara/api.env
+ExecStart=/opt/jyotara-node/bin/node /opt/jyotara/current/server.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=35
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+UMask=0077
+[Install]
+WantedBy=multi-user.target

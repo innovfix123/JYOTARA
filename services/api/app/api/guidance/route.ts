@@ -21,7 +21,6 @@ const allowedCategories = new Set<GuidanceCategory>([
 const allowedLanguages = new Set(['ta', 'en']);
 const allowedAgeBands = new Set(['18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
 const sessionCookie = 'nirayana_pilot_session';
-const questionLimit = 3;
 const researchConsentVersion = 'anonymous-questions-v1';
 
 function redactContactDetails(value: string) {
@@ -58,6 +57,7 @@ function outputText(payload: unknown) {
 }
 
 async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePacket>, sessionId: string, style: ResponseStyle, history: string[] = []) {
+  const relationshipAdvice = ['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category);
   const openRouterKey = env.OPENROUTER_API_KEY;
   const openAiKey = env.OPENAI_API_KEY;
   const apiKey = openRouterKey || openAiKey;
@@ -98,14 +98,22 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         'Do not infer relationship status, cheating, hidden enemies, family acceptance, lifespan, or exact future events from chart facts. Do not ask unnecessary follow-up questions.',
         'The supplied rules describe the permitted scope. If they contain no interpretation linking a placement to an outcome, do not invent that link from memory.',
         'When data is missing, say what is missing in one calm sentence. Never turn missing data into a prediction.',
+        ...(relationshipAdvice ? [
+          'For this relationship question, provide practical guidance from the user-described situation only. No chart-to-personality or chart-to-outcome interpretation has been established. Do not use astrological signs, planets, nakshatras, houses or periods as explanations or support.',
+          'Give one small concrete action and, where helpful, an example sentence the user can say. Avoid vague motivational language. Do not infer facts or traits the user did not state. Birth time is not needed for this practical advice.',
+          'If asked for a chart-based conclusion, briefly say the chart cannot establish that conclusion and then address the real concern. Do not request more birth details as though they would prove it.',
+        ] : []),
         languageInstruction(style),
       ].join('\n'),
-      input: JSON.stringify({ ...packet, previousUserMessages: history }),
+      input: JSON.stringify(relationshipAdvice
+        ? { question: packet.question, category: packet.category, previousUserMessages: history }
+        : { ...packet, previousUserMessages: history }),
     }),
   });
   if (!response.ok) return null;
   const answer = outputText(await response.json().catch(() => null));
-  return acceptableAnswer(answer, style) && periodClaimsAgree(answer, packet.facts) ? answer : null;
+  const unsupportedAstrology = relationshipAdvice && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
+  return !unsupportedAstrology && acceptableAnswer(answer, style) && periodClaimsAgree(answer, packet.facts) ? answer : null;
 }
 
 async function ensureRequestTable() {
@@ -131,6 +139,7 @@ export async function DELETE(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const questionLimit = env.JYOTARA_QUESTION_LIMIT === '15' ? 15 : 3;
   const body = (await request.json().catch(() => null)) as null | {
     category?: GuidanceCategory;
     question?: string;
@@ -179,7 +188,7 @@ export async function POST(request: Request) {
     ...identity, session: session.id, category: body.category, language, now: Date.now(), limit: questionLimit,
   });
   if (reservation.kind === 'limit') {
-    return Response.json({ error: 'The three-question pilot limit has been reached.' }, { status: 429 });
+    return Response.json({ error: `The ${questionLimit}-question tester limit has been reached.` }, { status: 429 });
   }
   if (reservation.kind === 'existing') {
     const receipt = reservation.receipt;
@@ -239,16 +248,17 @@ export async function POST(request: Request) {
     generated = null;
   }
   const answer = practical?.answer ?? (career?.ok ? career.answer : generated || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style)));
-  const answerMode = practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? 'personalised' : 'grounded_fallback';
+  const modelRelationshipAdvice = !!generated && ['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category);
+  const answerMode = practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (modelRelationshipAdvice ? 'model_guidance' : 'personalised') : 'grounded_fallback';
   const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
 
   const reply = {
     replayed: false,
     answeredAt: new Date().toISOString(),
     answer,
-    evidence: practical ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
+    evidence: practical || modelRelationshipAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
     // Reviewed copy already includes its reviewed limitation in the answer.
-    limitation: practical || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
+    limitation: practical || modelRelationshipAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
     support: practical ? 'partially_supported' : packet.support,
     answerMode,
     profileId: trusted.profileId,

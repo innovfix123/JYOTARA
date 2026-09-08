@@ -79,6 +79,17 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Welcome, tester': 'சோதனைப் பயனரே, வரவேற்கிறோம்',
+  'This build is available to invited testers. Enter the access code shared with you.': 'அழைக்கப்பட்ட சோதனைப் பயனர்களுக்கான பதிப்பு இது. உங்களுடன் பகிரப்பட்ட அணுகல் குறியீட்டை உள்ளிடவும்.',
+  'Tester access code': 'சோதனை அணுகல் குறியீடு',
+  'Checking access…': 'அணுகல் சரிபார்க்கப்படுகிறது…',
+  'Enter the complete tester access code.': 'முழுமையான சோதனை அணுகல் குறியீட்டை உள்ளிடவும்.',
+  'The tester code is invalid or expired.': 'சோதனை குறியீடு செல்லுபடியாகவில்லை அல்லது காலாவதியாகிவிட்டது.',
+  'Unable to verify access. Please try again.': 'அணுகலைச் சரிபார்க்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+  'Unable to verify or save access. Check your connection and try again.': 'அணுகலைச் சரிபார்க்கவோ சேமிக்கவோ முடியவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.',
+  'Tester access could not be restored. Enter your code again.': 'சோதனை அணுகலை மீட்டெடுக்க முடியவில்லை. குறியீட்டை மீண்டும் உள்ளிடவும்.',
+  'Usage limits are enforced by the test service. Failed or uncertain requests may still count. Ask the test coordinator for your assigned limits. Payments are not enabled in this build.': 'பயன்பாட்டு வரம்புகளைச் சோதனைச் சேவை கட்டுப்படுத்துகிறது. தோல்வியடைந்த அல்லது உறுதிப்படுத்தப்படாத கோரிக்கைகளும் கணக்கில் சேரலாம். உங்கள் வரம்புகளைச் சோதனை ஒருங்கிணைப்பாளரிடம் கேளுங்கள். இந்தப் பதிப்பில் கட்டண வசதி இல்லை.',
+
   'Continue': 'தொடரவும்',
   'Select your gender': 'உங்கள் பாலினத்தைத் தேர்ந்தெடுக்கவும்',
   'Choose what you want to share. You can change this later.': 'நீங்கள் பகிர விரும்புவதைத் தேர்ந்தெடுக்கவும். பின்னர் இதை மாற்றலாம்.',

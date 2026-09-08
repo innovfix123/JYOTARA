@@ -1,0 +1,7 @@
+[Unit]
+Description=Nightly Jyotara database backup
+[Timer]
+OnCalendar=*-*-* 20:00:00
+Persistent=true
+[Install]
+WantedBy=timers.target

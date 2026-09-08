@@ -4,7 +4,7 @@ import { sealReply, openReply } from './guidance-requests';
 export async function completeProfile(db: D1Database, secret: string, input: {
   id: string; session: string; reply: Record<string, unknown>; expiresAt: number; now: number;
 }) {
-  const encrypted = await sealReply(secret, `profile:${input.id}`, input.reply);
+  const encrypted = await sealReply(secret, `profile:${input.id}`, input.reply, 2_000_000);
   const result = await db.prepare(`UPDATE profile_generations
     SET status = 'success', credits = 320, updated_at = ?, response_ciphertext = ?, response_expires_at = ?
     WHERE id = ? AND session_id = ? AND status = 'started'`)
@@ -23,7 +23,7 @@ export async function recoverProfile(db: D1Database, secret: string, input: {
   if (!row || row.status !== 'success' || row.request_hash !== input.hash ||
       !row.response_ciphertext || !row.response_expires_at || row.response_expires_at <= input.now) return null;
   try {
-    const reply = await openReply(secret, `profile:${row.id}`, row.response_ciphertext);
+    const reply = await openReply(secret, `profile:${row.id}`, row.response_ciphertext, 2_000_000);
     if (!reply || typeof reply !== 'object' || Array.isArray(reply)) return null;
     return reply as Record<string, unknown>;
   } catch { return null; }

@@ -1,0 +1,7 @@
+[Unit]
+Description=Back up Jyotara database
+After=postgresql.service
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/backup-jyotara
+UMask=0077

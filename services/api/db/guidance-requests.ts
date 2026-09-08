@@ -16,16 +16,16 @@ export async function requestIdentity(secret: string, session: string, requestId
   return { id: await sign(['guidance-id-v1', session, requestId]), hash: await sign(['guidance-body-v1', payload]) };
 }
 
-export async function sealReply(secret: string, id: string, reply: unknown) {
+export async function sealReply(secret: string, id: string, reply: unknown, maxBytes = 100_000) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const text = encoder.encode(JSON.stringify(reply));
-  if (text.length > 100_000) throw new Error('Reply too large');
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 2_000_000 || text.length > maxBytes) throw new Error('Reply too large');
   const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: encoder.encode(`nirayana:guidance-reply:v1:${id}`) }, await encryptionKey(secret), text);
   return `${hex(iv.buffer)}.${hex(ciphertext)}`;
 }
 
-export async function openReply(secret: string, id: string, value: string): Promise<unknown> {
-  if (!/^[a-f\d]{24}\.[a-f\d]{32,200032}$/.test(value)) throw new Error('Invalid receipt');
+export async function openReply(secret: string, id: string, value: string, maxBytes = 100_000): Promise<unknown> {
+  if (!Number.isInteger(maxBytes) || maxBytes < 1 || maxBytes > 2_000_000 || value.length > 25 + 2 * (maxBytes + 16) || !/^[a-f\d]{24}\.[a-f\d]{32,}$/.test(value)) throw new Error('Invalid receipt');
   const [iv, ciphertext] = value.split('.');
   if (ciphertext.length % 2) throw new Error('Invalid receipt');
   const text = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: bytes(iv), additionalData: encoder.encode(`nirayana:guidance-reply:v1:${id}`) }, await encryptionKey(secret), bytes(ciphertext));

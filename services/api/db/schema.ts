@@ -96,3 +96,16 @@ export const profileGenerations = sqliteTable(
     uniqueIndex('idx_profile_generations_session_day').on(table.sessionId, table.dayKey),
   ],
 );
+
+
+// Hash of an invitation code only; never the raw tester code or profile data.
+export const testerSessions = sqliteTable('tester_sessions', {
+  sessionId: text('session_id').primaryKey(),
+  testerKey: text('tester_key').notNull(),
+  createdAt: integer('created_at').notNull(),
+});
+export const testerDailyUsage = sqliteTable('tester_daily_usage', {
+  id: text('id').primaryKey(),
+  dayKey: text('day_key').notNull(),
+  requests: integer('requests').notNull(),
+}, table => [index('idx_tester_daily_usage_day').on(table.dayKey)]);

@@ -122,8 +122,9 @@ class GuidanceResponse {
 }
 
 class JyotaraApiClient {
-  JyotaraApiClient({http.Client? client, String? baseUrl})
-    : _client = client ?? http.Client(),
+  JyotaraApiClient({http.Client? client, String? baseUrl, String? Function()? testerCode})
+    : _testerCode = testerCode ?? (() => null),
+      _client = client ?? http.Client(),
       _baseUri = Uri.parse(baseUrl ?? defaultApiBaseUrl) {
     final localDebug =
         kDebugMode &&
@@ -140,6 +141,7 @@ class JyotaraApiClient {
     }
   }
 
+  final String? Function() _testerCode;
   final http.Client _client;
   final Uri _baseUri;
   String? _sessionCookie;
@@ -314,6 +316,7 @@ class JyotaraApiClient {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
               'Cookie': ?_sessionCookie,
+              'X-Jyotara-Tester-Code': ?_testerCode(),
             },
             body: jsonEncode(body),
           )

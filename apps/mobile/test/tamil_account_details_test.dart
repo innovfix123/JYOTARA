@@ -15,7 +15,7 @@ void main() {
       child: MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)), child: child!)),
       home: const Scaffold(body: AccountScreen())));
     for (final entry in {
-      'திட்டங்கள் மற்றும் மீதமுள்ள கேள்விகள்': 'இந்தச் சோதனைப் பதிப்பில்',
+      'திட்டங்கள் மற்றும் மீதமுள்ள கேள்விகள்': 'பயன்பாட்டு வரம்புகளைச் சோதனைச் சேவை',
       'உரையாடல் வரலாறு': 'உங்கள் பிறப்பு விவரங்களும் உரையாடல்களும்',
       'இந்தப் பதிப்பு பற்றி': 'Jyotara ஒரு உள் சோதனைப் பதிப்பு',
     }.entries) {

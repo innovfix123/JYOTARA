@@ -15,10 +15,14 @@ import 'birth_form.dart';
 import 'south_chart.dart';
 import 'navamsa_section.dart';
 import 'research_consent_dialog.dart';
+import 'services/tester_access.dart';
+import 'tester_access_screen.dart';
 
 final languagePreferences = LanguagePreferences();
 final uiLanguagePreferences = UiLanguagePreferences();
+final testerAccess = TesterAccess();
 final profileSession = ProfileSession(
+  api: JyotaraApiClient(testerCode: () => testerAccess.code),
   preferences: languagePreferences,
   vault: LocalProfileVault(),
 );
@@ -35,6 +39,7 @@ Future<void> main() async {
   } catch (_) {
     /* UI preference failure must not erase the independent chat preference. */
   }
+  if (const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')) await testerAccess.restore();
   await profileSession.restore();
   runApp(const JyotaraApp());
 }
@@ -132,7 +137,9 @@ class JyotaraApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const IntroScreen(),
+        home: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
+            ? TesterAccessScreen(access: testerAccess, child: const IntroScreen())
+            : const IntroScreen(),
       ),
     );
   }
@@ -1404,7 +1411,7 @@ class AccountScreen extends StatelessWidget {
                   return;
                 }
                 final detail = switch (item.$2) {
-                  'Plans & question balance' => 'The test backend allows three question requests per session and one chart attempt per session per day, within a shared daily cap. Uncertain or failed attempts may still count to prevent duplicate charges. Payments are not enabled in this build.',
+                  'Plans & question balance' => 'Usage limits are enforced by the test service. Failed or uncertain requests may still count. Ask the test coordinator for your assigned limits. Payments are not enabled in this build.',
                   'Chat history' => 'Your profile and conversations are saved in encrypted device storage. Reopen a guide to see its history. Changing or deleting the profile removes the previous history. This is not cloud backup or cross-device account recovery. Check the Chart tab for storage errors.',
                   _ => 'Jyotara is an internal test build, not a public release. Guides are automated, not human astrologers. Traditional interpretations are not guarantees. Do not use them as medical, legal or investment advice.',
                 };

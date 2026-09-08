@@ -330,3 +330,14 @@ test('guidance refresh uses ticket-bound location and shared context, never call
     assert.equal(providerRequests.length, 2, 'unsupported intents must not trigger context work');
   } finally { globalThis.fetch = originalFetch; delete globalThis.__receiptTestEnv; db.close(); }
 });
+
+ test('large chart recovery is explicit while chat receipts retain their smaller cap', async () => {
+  const secret = '12'.repeat(32);
+  const chart = { synthetic: 'x'.repeat(150_000) };
+  await assert.rejects(sealReply(secret, 'profile:large', chart));
+  const sealed = await sealReply(secret, 'profile:large', chart, 2_000_000);
+  await assert.rejects(openReply(secret, 'profile:large', sealed));
+  assert.deepEqual(await openReply(secret, 'profile:large', sealed, 2_000_000), chart);
+  await assert.rejects(openReply(secret, 'profile:other', sealed, 2_000_000));
+  await assert.rejects(sealReply(secret, 'profile:large', { value: 'x'.repeat(2_000_001) }, 2_000_000));
+});

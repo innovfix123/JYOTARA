@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+umask 077
+backup_dir=/var/backups/jyotara
+mkdir -p "$backup_dir"
+chmod 700 "$backup_dir"
+backup_file="$backup_dir/jyotara-$(date -u +%Y%m%dT%H%M%SZ).dump"
+trap 'rm -f "$backup_file.partial"' EXIT HUP INT TERM
+runuser -u postgres -- pg_dump --format=custom --dbname=jyotara > "$backup_file.partial"
+pg_restore --list "$backup_file.partial" >/dev/null
+mv "$backup_file.partial" "$backup_file"
+find "$backup_dir" -maxdepth 1 -type f -name 'jyotara-*.dump' -mtime +7 -delete

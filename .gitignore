@@ -35,3 +35,6 @@ toolchains/
 local.properties
 key.properties
 .flutter-plugins-dependencies
+
+# Native Node build output
+dist-node/

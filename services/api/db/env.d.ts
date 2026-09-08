@@ -1,6 +1,7 @@
 declare namespace Cloudflare {
   interface Env {
     DB: D1Database;
+    JYOTARA_QUESTION_LIMIT?: string;
     PROKERALA_CLIENT_ID?: string;
     PROKERALA_CLIENT_SECRET?: string;
     PROKERALA_ENVIRONMENT?: 'test' | 'production';

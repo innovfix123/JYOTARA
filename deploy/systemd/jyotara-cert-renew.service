@@ -1,0 +1,7 @@
+[Unit]
+Description=Renew Jyotara TLS certificate
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/opt/jyotara-certbot/bin/certbot renew --quiet

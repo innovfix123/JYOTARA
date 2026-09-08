@@ -54,7 +54,11 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     modelReply = 'Mercury Mahadasha and Venus Antardasha are the supplied periods.';
     let response = await request(base);
     assert.equal(response.status, 200);
-    assert.equal((await response.json()).answerMode, 'personalised');
+    assert.equal((await response.json()).answerMode, 'grounded_fallback');
+    modelReply = 'Write down one need you want to express. Pick a calm moment and say: I would like us to plan some uninterrupted time together this week.';
+    const practicalModel = await (await request(base)).json();
+    assert.equal(practicalModel.answerMode, 'model_guidance');
+    assert.deepEqual(practicalModel.evidence, []);
     for (const bad of ['Mars Mahadasha is running.', 'Start at 4 PM.', 'You will definitely marry.']) {
       modelReply = bad;
       const output = await (await request(base)).json();
@@ -91,7 +95,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     assert.match(career.answer, /Practical next step/);
     assert.match(career.answer, /not a personalised astrological conclusion/);
     const requests = writes.filter(w => w.sql.includes('UPDATE guide_requests SET\n    support_level'));
-    assert.equal(requests.length, 8);
+    assert.equal(requests.length, 9);
     assert.ok(requests.every(w => w.values[2] === null), 'question text not stored without research consent');
     // In-memory synthetic catalogues exercise the approved HTTP branch only.
     // No production source or review record is edited or approved by this test.
