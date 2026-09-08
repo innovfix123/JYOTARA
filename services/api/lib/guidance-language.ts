@@ -6,14 +6,17 @@ export function responseStyle(value: unknown, language: string): ResponseStyle {
 }
 
 export function languageInstruction(style: ResponseStyle): string {
-  if (style === 'tanglish') return 'Reply in conversational Tamil written ONLY in Latin letters (Tanglish), with familiar English words where natural. Do not use Tamil script. Example style: Unga kelvikku, indha chart facts-ai vechu...';
-  if (style === 'tamil') return 'Reply in natural conversational Tamil using Tamil script. Preserve familiar Jyotish terminology.';
+  if (style === 'tanglish') return 'Reply in conversational Tamil written ONLY in Latin letters (Tanglish), with familiar English words where natural. Do not use Tamil script. Use simple, respectful spoken Tamil, not literal English translations. Example style: Oru nerathil oru thevaiyai mattum theliva sollunga.';
+  if (style === 'tamil') return 'Reply in clear, natural conversational Tamil using Tamil script. Use respectful நீங்கள் forms, short sentences and idiomatic wording. Avoid literal English translations and unrelated foreign scripts. Preserve familiar Jyotish terminology only when relevant.';
   return 'Reply in clear conversational English. Preserve familiar Jyotish terminology.';
 }
 
 // This rejects obvious bad output; it is not a complete semantic verifier.
 export function acceptableAnswer(answer: string, style: ResponseStyle): boolean {
   if (!answer.trim() || answer.length > 6000) return false;
+  // Reject unrelated scripts even when the reply also contains valid Tamil.
+  const letters = answer.match(/\p{L}/gu) ?? [];
+  if (letters.some(letter => !/\p{Script=Latin}/u.test(letter) && !(style === 'tamil' && /\p{Script=Tamil}/u.test(letter)))) return false;
   // No activity-specific date/window is currently part of the answer contract.
   // Do not make arbitrary model dates acceptable merely because a date also
   // occurs in the question or a Dasa interval. A future timing feature needs

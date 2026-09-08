@@ -94,3 +94,12 @@ test('a narrow denial phrase does not hide an actual guarantee elsewhere',async(
  assert.equal(acceptableAnswer('Proceed without expecting fixed dates or guaranteed results. You will definitely marry.', 'english'),false);
  assert.equal(acceptableAnswer('Your marriage is guaranteed.', 'english'),false);
 });
+
+test('language validation rejects foreign-script contamination',async()=>{
+ const {acceptableAnswer}=await import(moduleUrl('../lib/guidance-language.ts'));
+ assert.equal(acceptableAnswer('எனக்கு поддержки வேண்டும் என்று சொல்லுங்கள்.', 'tamil'),false);
+ assert.equal(acceptableAnswer('ஒரு நேர்மையான句ை சொல்லலாம்.', 'tamil'),false);
+ assert.equal(acceptableAnswer('Enakku உதவி venum.', 'tanglish'),false);
+ assert.equal(acceptableAnswer('எனக்கு உங்கள் உதவி வேண்டும் என்று சொல்லுங்கள்.', 'tamil'),true);
+ assert.equal(acceptableAnswer('Enakku unga udhavi venum nu sollunga.', 'tanglish'),true);
+});
