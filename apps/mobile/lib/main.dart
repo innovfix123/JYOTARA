@@ -44,6 +44,8 @@ Future<void> main() async {
   runApp(const JyotaraApp());
 }
 
+const appBuildLabel = String.fromEnvironment('JYOTARA_BUILD_LABEL', defaultValue: 'Development');
+
 const ink = Color(0xFF090612);
 const panel = Color(0xFF171022);
 const line = Color(0xFF322643);
@@ -1290,7 +1292,7 @@ class AccountScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
+                        UiText(
                           'Local test session',
                           style: TextStyle(
                             fontSize: 17,
@@ -1298,14 +1300,13 @@ class AccountScreen extends StatelessWidget {
                           ),
                         ),
                         SizedBox(height: 4),
-                        Text(
+                        UiText(
                           'Not signed in · OTP not configured',
                           style: TextStyle(color: muted),
                         ),
                       ],
                     ),
                   ),
-                  const Icon(Icons.chevron_right_rounded),
                 ],
               ),
             ),
@@ -1419,7 +1420,13 @@ class AccountScreen extends StatelessWidget {
                   context: context,
                   builder: (context) => AlertDialog(
                     title: UiText(item.$2),
-                    content: SingleChildScrollView(child: UiText(detail)),
+                    content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      UiText(detail),
+                      if (item.$2 == 'About this build') ...[
+                        const SizedBox(height: 12),
+                        SelectableText('Jyotara $appBuildLabel'),
+                      ],
+                    ])),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),

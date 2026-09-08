@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""Switch an already-migrated release; restore the previous link on failed health."""
+import argparse, json, os, re, subprocess, time, urllib.request
+from pathlib import Path
+parser=argparse.ArgumentParser()
+parser.add_argument('release')
+parser.add_argument('--evaluation',action='store_true',help='Use isolated evaluation service and link')
+args=parser.parse_args()
+if not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9._-]{0,80}',args.release):parser.error('Invalid release name')
+root=Path('/opt/jyotara/releases').resolve();target=(root/args.release).resolve()
+if target.parent!=root or not (target/'server.mjs').is_file():parser.error('Release server is missing')
+link=Path('/opt/jyotara/eval-current' if args.evaluation else '/opt/jyotara/current')
+service='jyotara-eval' if args.evaluation else 'jyotara-api'
+port=3001 if args.evaluation else 3000
+if not link.is_symlink():parser.error('Existing release link required')
+previous=link.resolve()
+def switch(path):
+ temporary=link.with_name(link.name+'.next')
+ if temporary.exists() or temporary.is_symlink():raise RuntimeError('Pending release link exists')
+ temporary.symlink_to(path);os.replace(temporary,link)
+def restart():
+ subprocess.run(['systemctl','restart',service],check=True,capture_output=True)
+def healthy():
+ for _ in range(12):
+  try:
+   with urllib.request.urlopen(f'http://127.0.0.1:{port}/healthz',timeout=1) as r:
+    if r.status==200 and json.load(r).get('status')=='ok':return True
+  except Exception:pass
+  time.sleep(0.5)
+ return False
+try:
+ switch(target);restart()
+ if not healthy():raise RuntimeError('New release did not become healthy')
+ print('Activated healthy release: '+target.name)
+except Exception:
+ switch(previous);restart()
+ if not healthy():raise SystemExit('CRITICAL: previous release was restored but is not healthy')
+ raise SystemExit('Activation failed; previous healthy release restored: '+previous.name)
