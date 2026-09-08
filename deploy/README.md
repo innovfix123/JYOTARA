@@ -3,7 +3,7 @@
 The Android API is hosted at https://168.144.64.47. Nginx terminates TLS and forwards to a Node process bound to 127.0.0.1:3000. PostgreSQL is loopback-only. The systemd service runs as the unprivileged `jyotara` user.
 
 Runtime layout:
-- `/opt/jyotara/releases/20260908-tester`: bundled server, pg dependencies, migration script and SQL migrations.
+- `/opt/jyotara/releases/RELEASE`: immutable bundled server, pg dependencies, migration script and SQL migrations. The current API release is `3d8ab8d`; `20260908-tester` is inactive staging.
 - `/opt/jyotara/current`: active release symlink.
 - `/etc/jyotara/api.env`: root-only configuration loaded by systemd. Never commit or print this file.
 - `/etc/letsencrypt/live/jyotara-ip`: certificate managed by Certbot. The supplied timer checks renewal twice daily; the deploy hook checks and reloads Nginx.
@@ -12,7 +12,7 @@ Build the server using `node scripts/build-server.mjs` from services/api. The ru
 
 Required environment names: DATABASE_URL, PROKERALA_CLIENT_ID, PROKERALA_CLIENT_SECRET, PROKERALA_ENVIRONMENT, JYOTARA_CHART_TICKET_KEY (or preserved NIRAYANA_CHART_TICKET_KEY), JYOTARA_TESTER_CODES_SHA256, JYOTARA_TESTER_EXPIRES_AT. Set JYOTARA_QUESTION_LIMIT=15 for this restricted test. Configure OPENROUTER_API_KEY and OPENROUTER_MODEL before evaluating model answers. Raw invitation codes belong only in private tester delivery records; no provider credentials or shared invitation is compiled into the APK.
 
-Verification on 8 September: health returned 200 with an application-table query, missing invitation returned 401, valid invitation returned 200, malformed chart input returned 400 without requesting a provider calculation. Simulated certificate renewal and reload succeeded. These checks do not establish answer quality, backup recovery or physical Android readiness. The model key was not configured at this checkpoint.
+Verification on 8 September: health returned 200 with an application-table query, missing invitation returned 401, valid invitation returned 200, malformed chart input returned 400 without requesting a provider calculation. Simulated certificate renewal and reload succeeded. These checks do not establish answer quality, backup recovery or physical Android readiness. Model credentials were configured later that day; see the current model state below.
 
 ## Verified release switching
 
@@ -26,4 +26,4 @@ The configured model is now `openai/gpt-5.4`; credentials are loaded from the ro
 
 ## Tester APK
 
-From `apps/mobile`, run `python3 tool/build_tester_apk.py BUILD_NUMBER --flutter PATH_TO_FLUTTER` with the configured Android/JDK environment. It sets HTTPS, invitation gating and visible build metadata together. Verify and apply the established internal QA signing identity before handoff. Do not replace an installed tester app's signing identity or uninstall it to work around an upgrade failure: that may lose local profiles and history. These debug candidates are for internal testing, not store distribution.
+From `apps/mobile`, run `python3 tool/build_tester_apk.py BUILD_NUMBER --flutter PATH_TO_FLUTTER` with the configured Android/JDK environment. It sets HTTPS, invitation gating and visible build metadata together. Verify and apply the established internal QA signing identity before handoff. Do not replace an installed tester app's signing identity or uninstall it to work around an upgrade failure: that may lose local profiles and history. The script defaults to an optimized release build; use `--mode debug` only for development. Both modes use the established internal QA certificate after signing and remain internal-test artifacts, not store distribution builds.
