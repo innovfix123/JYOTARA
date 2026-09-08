@@ -1948,8 +1948,8 @@ class _DisclosureCard extends StatelessWidget {
         Icon(Icons.shield_outlined, color: lavender, size: 20),
         SizedBox(width: 11),
         Expanded(
-          child: Text(
-            'Birth data is sensitive. Production storage, consent and deletion controls will be connected before testing with real users.',
+          child: UiText(
+            'Your birth details are sensitive. Manage or delete your saved profile from the Chart tab. Research sharing is optional.',
             style: TextStyle(color: muted, height: 1.4),
           ),
         ),

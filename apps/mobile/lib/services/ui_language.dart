@@ -303,6 +303,8 @@ const tamilUi = <String, String>{
   'Research sharing is on for this session':
       'இந்த அமர்வில் ஆய்வுக்கான பகிர்வு இயங்குகிறது',
   'Research sharing is off': 'ஆய்வுக்கான பகிர்வு முடக்கப்பட்டுள்ளது',
+  'Your birth details are sensitive. Manage or delete your saved profile from the Chart tab. Research sharing is optional.':
+      'உங்கள் பிறப்பு விவரங்கள் தனிப்பட்டவை. ஜாதகம் பகுதியில் சேமித்த விவரங்களை நிர்வகிக்கலாம் அல்லது நீக்கலாம். ஆய்வுக்கான பகிர்வு உங்கள் விருப்பம்.',
   'About this build': 'இந்தப் பதிப்பு பற்றி',
   'Internal integration test': 'உள் ஒருங்கிணைப்புச் சோதனை',
   'Local test session': 'சாதனச் சோதனை அமர்வு',
