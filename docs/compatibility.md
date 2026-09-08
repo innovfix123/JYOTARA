@@ -14,3 +14,8 @@ These old identifiers are deliberately retained because changing them would requ
 Changing the API origin is a server migration, not just a rename: saved server sessions and chart tickets belong to their original origin. Existing client origin checks remain in place. Existing records require the matching database and encryption key on the new service; importing source does not perform that migration.
 
 Local tests cover persisted sessions, profile restore/replacement/deletion, pending request replay, encrypted tickets and stored replies. A signed in-place device upgrade with an existing profile is still needed before a release compatibility claim.
+
+
+## Gender selection
+
+New profiles explicitly select Male, Female, Non-binary or Prefer not to say. Nothing is preselected. Existing profiles without this field remain readable; missing/unrecognized metadata is treated as unselected. The value is saved alongside the profile in the existing encrypted local vault and cleared on profile replacement/deletion. Updating it with unchanged birth inputs preserves the chart and conversations. It is not included in chart-provider or guidance requests in this version and is not part of the calculation identity. No calculation-accuracy or language-personalization claim is made from this field alone.

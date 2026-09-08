@@ -12,6 +12,7 @@ import 'local_profile_vault.dart';
 import 'chart_instant.dart';
 import 'birth_profile_input.dart';
 import 'guidance_message.dart';
+import 'profile_gender.dart';
 
 /// Owns one chart and API session for all specialist guides.
 class ProfileSession extends ChangeNotifier {
@@ -50,6 +51,7 @@ class ProfileSession extends ChangeNotifier {
       'session': _api.sessionForStorage,
       'profileKey': _profileKey,
       'nickname': nickname,
+      'gender': gender?.value,
       'birthplaceLabel': birthplaceLabel,
       'raw': _raw,
       'birthTimeKnown': birthTimeKnown,
@@ -187,6 +189,7 @@ class ProfileSession extends ChangeNotifier {
       _facts = restoredFacts;
       _profileKey = saved['profileKey'];
       nickname = _displayValue(saved['nickname'], 60) ?? '';
+      gender = ProfileGender.fromStored(saved['gender']);
       birthplaceLabel = _displayValue(saved['birthplaceLabel'], 160);
       birthTimeKnown = known;
       calculatedAt = timestamp;
@@ -219,6 +222,7 @@ class ProfileSession extends ChangeNotifier {
 
   String? _profileKey;
   String nickname = '';
+  ProfileGender? gender;
   String? birthplaceLabel;
   BirthProfileInput? get birthInput => BirthProfileInput.fromKey(_profileKey);
   static String? _displayValue(dynamic value, int max) =>
@@ -385,6 +389,7 @@ class ProfileSession extends ChangeNotifier {
     required bool exactTime,
     String? nickname,
     String? birthplaceLabel,
+    ProfileGender? gender,
   }) async {
     if (deleting || _deletionCapability != null) {
       throw const JyotaraApiException(
@@ -412,6 +417,7 @@ class ProfileSession extends ChangeNotifier {
       await renewChatAccess();
       if (savedRevision != _revision) throw const JyotaraApiException('Your profile changed while chat access was being renewed.');
       if (nickname != null) this.nickname = nickname.trim();
+      if (gender != null) this.gender = gender;
       if (birthplaceLabel != null) {
         this.birthplaceLabel = birthplaceLabel.trim();
       }
@@ -462,9 +468,11 @@ class ProfileSession extends ChangeNotifier {
         _requestIds.clear();
         _requestContexts.clear();
         this.nickname = '';
+        this.gender = null;
         this.birthplaceLabel = null;
       }
       if (nickname != null) this.nickname = nickname.trim();
+      if (gender != null) this.gender = gender;
       if (birthplaceLabel != null) {
         this.birthplaceLabel = birthplaceLabel.trim();
       }
@@ -685,6 +693,7 @@ class ProfileSession extends ChangeNotifier {
     _raw = null;
     _profileKey = null;
     nickname = '';
+    gender = null;
     birthplaceLabel = null;
     calculatedAt = null;
     profileRequestUnconfirmed = false;

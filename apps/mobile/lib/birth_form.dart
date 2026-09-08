@@ -4,6 +4,7 @@ import 'services/adult_birth_date.dart';
 import 'services/profile_session.dart';
 import 'services/jyotara_api.dart';
 import 'services/ui_language.dart';
+import 'services/profile_gender.dart';
 
 class BirthForm extends StatefulWidget {
   const BirthForm({super.key, required this.session});
@@ -15,6 +16,8 @@ class BirthForm extends StatefulWidget {
 class _BirthFormState extends State<BirthForm> {
   final _placeQuery = TextEditingController();
   final _nickname = TextEditingController();
+  ProfileGender? _gender;
+  bool _showGender = false;
   DateTime? _date;
   TimeOfDay? _time;
   bool _unknown = false, _consent = false, _busy = false, _searching = false;
@@ -27,6 +30,8 @@ class _BirthFormState extends State<BirthForm> {
   void initState() {
     super.initState();
     _nickname.text = widget.session.nickname;
+    _gender = widget.session.gender;
+    _showGender = _gender == null && widget.session.birthInput == null;
     final saved = widget.session.birthInput;
     if (saved == null) return;
     final stamp = saved.indiaDateTime;
@@ -89,6 +94,10 @@ class _BirthFormState extends State<BirthForm> {
 
   Future<void> _calculate() async {
     if (_busy) return;
+    if (_gender == null) {
+      setState(() => _showGender = true);
+      return;
+    }
     if (_date == null ||
         (!_unknown && _time == null) ||
         _place == null ||
@@ -113,6 +122,7 @@ class _BirthFormState extends State<BirthForm> {
         longitude: (_place![7] as num).toDouble(),
         exactTime: !_unknown,
         nickname: _nickname.text,
+        gender: _gender,
         birthplaceLabel: _place![0] == 'saved'
             ? widget.session.birthplaceLabel
             : '${_place![1]}, ${_place![2]}',
@@ -134,11 +144,54 @@ class _BirthFormState extends State<BirthForm> {
 
   @override
   Widget build(BuildContext context) {
+    if (_showGender) {
+      return Scaffold(
+        appBar: AppBar(title: const UiText('Your birth profile')),
+        body: ListView(
+          key: const ValueKey('gender-step-list'),
+          padding: const EdgeInsets.all(20),
+          children: [
+            const UiText('Select your gender',
+                style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            const UiText('Choose what you want to share. You can change this later.'),
+            const SizedBox(height: 20),
+            for (final option in ProfileGender.values)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Semantics(
+                  selected: _gender == option,
+                  child: ListTile(
+                    key: ValueKey('gender-${option.value}'),
+                    title: UiText(option.label),
+                    selected: _gender == option,
+                    trailing: Icon(_gender == option
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked),
+                    onTap: () => setState(() => _gender = option),
+                  ),
+                ),
+              ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const ValueKey('gender-continue'),
+              onPressed: _gender == null
+                  ? null
+                  : () => setState(() => _showGender = false),
+              child: const UiText('Continue'),
+            ),
+            const SizedBox(height: 16),
+            const UiText('Saved with your profile on this device. Not sent for chart calculations.'),
+          ],
+        ),
+      );
+    }
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
         appBar: AppBar(title: const UiText('Your birth profile')),
         body: ListView(
+          key: const ValueKey('birth-details-list'),
           padding: const EdgeInsets.all(20),
           children: [
             const UiText(
@@ -166,6 +219,13 @@ class _BirthFormState extends State<BirthForm> {
                   'Nickname (optional, saved only on this device)',
                 ),
               ),
+            ),
+            ListTile(
+              key: const ValueKey('edit-gender'),
+              title: const UiText('Gender'),
+              subtitle: UiText(_gender?.label ?? 'Not selected'),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: _busy ? null : () => setState(() => _showGender = true),
             ),
             ListTile(
               title: const UiText('Date of birth'),

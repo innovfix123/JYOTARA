@@ -21,6 +21,11 @@ void main() {
       expect(find.text('உங்கள் கணக்கு'), findsOneWidget);
       await tester.tap(find.text('பிறப்பு விவரங்கள்'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('gender-female')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('gender-continue')));
+      await tester.tap(find.byKey(const ValueKey('gender-continue')));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('பிறந்த தேதி'));
       await tester.pumpAndSettle();
       final dateContext = tester.element(find.byType(DatePickerDialog));

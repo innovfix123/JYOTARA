@@ -79,6 +79,17 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Continue': 'தொடரவும்',
+  'Select your gender': 'உங்கள் பாலினத்தைத் தேர்ந்தெடுக்கவும்',
+  'Choose what you want to share. You can change this later.': 'நீங்கள் பகிர விரும்புவதைத் தேர்ந்தெடுக்கவும். பின்னர் இதை மாற்றலாம்.',
+  'Male': 'ஆண்',
+  'Female': 'பெண்',
+  'Non-binary': 'ஆண் அல்லது பெண் என அடையாளப்படுத்தாதவர்',
+  'Prefer not to say': 'பகிர விரும்பவில்லை',
+  'Gender': 'பாலினம்',
+  'Not selected': 'தேர்ந்தெடுக்கப்படவில்லை',
+  'Saved with your profile on this device. Not sent for chart calculations.': 'இந்தச் சாதனத்தில் உங்கள் விவரங்களுடன் சேமிக்கப்படும். ஜாதகக் கணக்கீட்டுக்கு அனுப்பப்படாது.',
+
   'These periods belong to the saved calculation date. New chat answers check the current period separately.': 'இவை சேமித்த கணக்கீட்டுத் தேதிக்கான தசை–புக்திகள். புதிய உரையாடல் பதில்களுக்கு நடப்புக் காலம் தனியாகச் சரிபார்க்கப்படும்.',
   'Navamsa (D9)': 'நவாம்சம் (D9)',
   'Rasi chart · South Indian layout': 'ராசிக் கட்டம் · தென்னிந்திய முறை',

@@ -33,6 +33,14 @@ void main() {
         ),
       );
       expect(find.text('உங்கள் பிறப்பு விவரங்கள்'), findsOneWidget);
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('gender-prefer_not_to_say')), 200);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('gender-prefer_not_to_say')));
+      await tester.pump();
+      await tester.scrollUntilVisible(find.byKey(const ValueKey('gender-continue')), 200);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('gender-continue')));
+      await tester.pumpAndSettle();
       final scroll = find
           .descendant(
             of: find.byType(ListView),
@@ -148,7 +156,6 @@ void main() {
       expect(restored.birthplaceLabel, 'Erode, Tamil Nadu');
       await tester.pumpWidget(MaterialApp(home: BirthForm(session: restored)));
       expect(find.text('29/7/2002'), findsOneWidget);
-      expect(find.text('5:00 AM'), findsOneWidget);
       expect(find.widgetWithText(TextField, 'Nickname Two'), findsOneWidget);
       final formScroll = find
           .descendant(
@@ -156,6 +163,10 @@ void main() {
             matching: find.byType(Scrollable),
           )
           .first;
+      await tester.drag(formScroll, const Offset(0, -250));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('5:00 AM'), 100, scrollable: formScroll);
+      expect(find.text('5:00 AM'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Erode, Tamil Nadu'),
         200,
