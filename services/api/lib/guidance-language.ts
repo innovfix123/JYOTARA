@@ -98,10 +98,17 @@ export function relationshipFollowup(question: string): boolean {
 /** Narrow, practical responses. These are NOT approved chart interpretations.
  * Tamil/Tanglish copy is a candidate for founder review, not language sign-off. */
 export function relationshipResponse(category: string, question: string, history: string[], style: ResponseStyle): {answer: string; kind: string} | null {
-  if (!['Love', 'Relationships', 'Breakup', 'Marriage'].includes(category)) return null;
+  if (!['Love', 'Relationships', 'Breakup', 'Marriage', 'Daily', 'Panchang'].includes(category)) return null;
   const q = question.normalize('NFKC').toLocaleLowerCase();
   const context = relationshipFollowup(q) ? [...history, q].join('\n').toLocaleLowerCase() : q;
   const copy = (kind: string, en: string, ta: string, tanglish: string) => ({kind, answer: style === 'tamil' ? ta : style === 'tanglish' ? tanglish : en});
+  if (category === 'Daily' || category === 'Panchang') {
+    if ((category === 'Panchang' || /panchang|பஞ்சாங்க/u.test(q)) && /guarantee|ensure|certain|urudhi|uruthi|உறுதி/u.test(q)) return copy('panchang_limits',
+      'No. Panchang describes traditional calendar factors; it cannot guarantee that your work will succeed. An auspicious label does not establish the result of a task or another person’s response.\n\nFor the work itself, check the deadline, what needs to be ready and whose help you need. Choose one concrete next step you can complete, and use actual progress to decide what to do next.',
+      'இல்லை. பஞ்சாங்கம் பாரம்பரிய நாள்காட்டித் தகவல்களைக் காட்டுகிறது; உங்கள் வேலை வெற்றி பெறும் என்று உறுதிசெய்யாது. நல்ல நாள் என்ற குறிப்பை மட்டும் வைத்து வேலையின் முடிவையோ மற்றொருவரின் பதிலையோ அறிய முடியாது.\n\nவேலைக்கான காலக்கெடு, தேவையான தயாரிப்பு, யாருடைய உதவி தேவை என்பவற்றைச் சரிபாருங்கள். இப்போது செய்யக்கூடிய ஒரு சிறிய செயலைத் தேர்ந்தெடுத்து முடிக்க முயற்சி செய்யுங்கள். நடந்த முன்னேற்றத்தை வைத்து அடுத்த படியை முடிவுசெய்யலாம்.',
+      'Illai. Panchangam paarambariya naalkaatti thagavalgalai kaattum; unga velai vetri perum-nu urudhi seyyaadhu. Nalla naal-ngra kurippai mattum vechu velai mudivaiyo innoruvarin badhilaiyo therinjukka mudiyaadhu.\n\nVelai deadline, thevaiyaana preparation, yaarudaiya udhavi venum-ngradha check pannunga. Ippo seiya mudiyura oru chinna step-ai choose panni mudikka muyarchi pannunga. Nadandha progress-ai vechu adutha step-ai decide pannalaam.');
+    return null;
+  }
   // Explicit practical requests take precedence over a generic other-person gate.
   if (/secretly|ரகசியமாக|\b(?:secret-a|secret ah|hack|spy)\b/u.test(q) && /phone|போன|password|account/u.test(q)) return copy('privacy',
     'Do not check their phone secretly. That would cross a privacy boundary, and a chart cannot establish whether they are cheating.\n\nDescribe the behaviour that worries you and ask for an honest conversation. If trust cannot be rebuilt, you can set a boundary or step away without investigating their private accounts.',
@@ -131,7 +138,7 @@ export function relationshipResponse(category: string, question: string, history
     'I cannot give you an exact date for meeting a partner or promise that you will marry. Another person’s choices cannot be guaranteed by a chart.\n\nIf you want to meet someone, focus on regular opportunities to connect and on whether your values and expectations fit. A more detailed calculation would not turn this into a certain outcome.',
     'காதல் எப்போது வரும் என்று துல்லியமான தேதியையோ திருமணம் நிச்சயம் என்ற வாக்குறுதியையோ தர முடியாது. மற்றவரின் முடிவுகளை ஜாதகம் உறுதிசெய்யாது.\n\nபுதியவர்களைச் சந்திக்க வாய்ப்புகளை உருவாக்குங்கள். உங்கள் மதிப்புகளும் எதிர்பார்ப்புகளும் ஒத்துப்போகிறதா என்பதைப் பாருங்கள். கூடுதல் கணக்கீடுகள் இருந்தாலும் முடிவு நிச்சயமாகிவிடாது.',
     'Love eppo varum nu exact date-um marriage nichayam nu promise-um kudukka mudiyaadhu. Innoruvaroda mudivai jathagam urudhi pannaadhu.\n\nPudhusa aalunga sandhikka vaaippugalai uruvaakkunga. Unga madhippugalum edhirpaarppugalum oththu pogudha nu paarunga. Kooduthal calculation irundhaalum mudivu nichayam aagidaadhu.');
-  if (/long.distance|sandai|சண்டை|argu(?:e|ing|ments)/u.test(q)) return copy('communication',
+  if (/long.distance/u.test(q)) return copy('communication',
     'Start with one small agreement: choose a regular time to talk, and discuss one issue at a time. Long distance can make misunderstandings harder to clear up, so agree when each of you can realistically reply.\n\nUse “I felt…” rather than accusations. If an argument gets heated, agree to pause and name a time to return to it. This is a practical communication step, not a conclusion about your compatibility from the chart.',
     'முதலில் ஒரு சிறிய ஒப்பந்தம் செய்துகொள்ளுங்கள்: பேசுவதற்கு ஒரு நேரத்தை முடிவுசெய்து, ஒரு நேரத்தில் ஒரு பிரச்சினையை மட்டும் பேசுங்கள். தொலைவில் இருக்கும்போது எப்போது பதில் தர முடியும் என்பதையும் தெளிவுபடுத்துங்கள்.\n\nகுற்றம் சாட்டுவதற்குப் பதிலாக “எனக்கு இப்படித் தோன்றியது” என்று சொல்லுங்கள். வாக்குவாதம் அதிகமானால் சிறிது இடைவெளி எடுத்துவிட்டு மீண்டும் எப்போது பேசுவது என்று முடிவுசெய்யுங்கள். இது நடைமுறை ஆலோசனை; ஜாதகப் பொருத்தத்தின் முடிவு அல்ல.',
     'Mudhalil oru chinna agreement pannunga: pesa oru neram fix panni, oru nerathil oru prachinaiyai mattum pesunga. Long distance-la eppo reply panna mudiyum nu rendu perum theliva sollikkonga.\n\nKutram saattaama “Enakku ippadi thonichu” nu sollunga. Sandai adhigamaanaal konjam break eduthu, thirumba eppo pesalaam nu mudivu pannunga. Idhu practical advice; jathaga porutham paththina mudivu illai.');

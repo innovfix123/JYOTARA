@@ -112,6 +112,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         ...(practicalScope ? [
           'For this practical question, provide useful guidance from the user-described situation only. No chart-to-personality or chart-to-outcome interpretation has been established. Do not use astrological signs, planets, nakshatras, houses or periods as explanations or support.',
           'Give one small concrete action and, where helpful, an example sentence the user can say. Avoid vague motivational language. Do not infer facts or traits the user did not state. Birth time is not needed for this practical advice.',
+          'Offer adjustable suggestions rather than mandatory check-ins or fixed waiting periods. Respect both people’s choice. Do not add timed breathing routines. Keep numerical examples internally consistent.',
           'If asked for a chart-based conclusion, briefly say the chart cannot establish that conclusion and then address the real concern. Do not request more birth details as though they would prove it.',
         ] : []),
         languageInstruction(style),

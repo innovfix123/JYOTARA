@@ -117,3 +117,21 @@ test('language validation rejects foreign-script contamination',async()=>{
  assert.equal(acceptableAnswer('எனக்கு உங்கள் உதவி வேண்டும் என்று சொல்லுங்கள்.', 'tamil'),true);
  assert.equal(acceptableAnswer('Enakku unga udhavi venum nu sollunga.', 'tanglish'),true);
 });
+
+test('Panchang certainty questions receive a direct limit and useful next step in each style',async()=>{
+ const {relationshipResponse}=await import(moduleUrl('../lib/guidance-language.ts'));
+ for(const [style,q] of [['english','Can Panchang guarantee success?'],['tamil','இன்றைய பஞ்சாங்கம் என் வேலை வெற்றியை உறுதிசெய்யுமா?'],['tanglish','Panchangam vetriyai urudhi seiyuma?']]) {
+   const reply=relationshipResponse('Daily',q,[],style);
+   assert.equal(reply.kind,'panchang_limits');
+   assert.ok(reply.answer.length>120);
+ }
+ assert.equal(relationshipResponse('Panchang','What is the tithi?',[],'english'),null);
+});
+
+test('ordinary conflict or a negated argument does not imply long distance',async()=>{
+ const {relationshipResponse}=await import(moduleUrl('../lib/guidance-language.ts'));
+ for(const q of ['Naan mattum plans podren. Sandai illaama eppadi sollalaam?','எங்கள் குடும்பங்களின் பழக்கங்கள் வேறுபடுகின்றன. சண்டையை எப்படிக் குறைக்கலாம்?']) {
+   assert.equal(relationshipResponse('Marriage',q,[],'tamil'),null);
+ }
+ assert.equal(relationshipResponse('Relationships','We are in a long distance relationship.',[],'english').kind,'communication');
+});
