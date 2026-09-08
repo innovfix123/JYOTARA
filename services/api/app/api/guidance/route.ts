@@ -57,6 +57,7 @@ function outputText(payload: unknown) {
 }
 
 function practicalAdviceScope(packet: ReturnType<typeof buildEvidencePacket>) {
+  if (packet.intent === 'additional_profile_required' && !/how|what (?:can|should) (?:i|we)|help|discuss|plan|explain|எப்படி|என்ன.*செய்ய|பேச|eppadi|enna.*(?:panna|seiya)|share|express/iu.test(packet.question)) return false;
   if (['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category)) return true;
   const q = packet.question.toLocaleLowerCase();
   if (/chart|astrolog|jathag|jothid|panchang|nakshatra|lagna|dasha|dasa|planet|ஜாதக|ஜோதிட|பஞ்சாங்க|நட்சத்திர|லக்ன|தசை|கிரக/u.test(q)) return false;
@@ -73,7 +74,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
   if (!practicalScope) return null;
   // Career uses its separately constrained reviewed catalogue. Do not let a
   // fluent model response bypass that gate or label fact repetition personal.
-  if (!apiKey || packet.intent === 'high_stakes' || packet.intent === 'additional_profile_required') return null;
+  if (!apiKey || packet.intent === 'high_stakes') return null;
   const safetyIdentifier = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sessionId))
     .then((value) => Array.from(new Uint8Array(value)).map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 48));
 
