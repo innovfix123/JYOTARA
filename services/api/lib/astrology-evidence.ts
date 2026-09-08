@@ -223,12 +223,18 @@ function inferIntent(category: GuidanceCategory, question: string) {
   // This endpoint currently carries only one chart. Never substitute it for
   // an explicitly mentioned other person or a two-person calculation.
   const normalized = question.normalize('NFKC').toLocaleLowerCase();
-  if (includesAny(normalized, ['compatible', 'compatibility', 'porutham', 'பொருத்தம்', 'பொருத்தமா', 'rendu per', 'இருவர'], true)) return 'additional_profile_required';
+  const relationshipCategory = ['Love', 'Relationships', 'Breakup', 'Marriage'].includes(category);
+  const asksCompatibility = includesAny(normalized, ['compatible', 'compatibility', 'porutham', 'பொருத்தம்', 'பொருத்தமா'], true);
+  // "பொருத்தமாக" also means suitable for a course or job. It does not
+  // establish that the user is asking about another person's chart.
+  const pluralPeople = includesAny(normalized, ['we', 'us', 'nanga', 'naanga', 'எங்களுக்கு', 'நாங்கள்', 'நாங்க'], true);
+  if (((relationshipCategory || pluralPeople) && asksCompatibility) ||
+      includesAny(normalized, ['rendu per', 'rendu perum', 'இருவர'], true)) return 'additional_profile_required';
   if (includesAny(normalized, [
     'my child', 'my son', 'my daughter', 'my grandchild', 'my partner', 'my wife', 'my husband',
     'my boyfriend', 'my girlfriend', 'my parents', 'my mother', 'my father', 'future partner',
     'en child', 'en paiyan', 'en ponnu', 'en partner', 'en wife', 'en husband',
-    'என் குழந்தை', 'என் மகன்', 'என் மகள்', 'என் பேர', 'என் துணை', 'என் கணவர்', 'என் மனைவி',
+    'என் குழந்தை', 'என் மகன', 'என் மகள', 'என் பேர', 'என் துணை', 'என் கணவர', 'என் மனைவி',
     'என் காதல', 'என் பெற்றோ', 'என் அம்மா', 'என் அப்பா',
   ], true)) return 'additional_profile_required';
   if (category === 'Daily') return includesAny(question, ['time', 'neram', 'hora', 'நேர', 'ஹோர']) ? 'daily_timing' : 'daily_guidance';

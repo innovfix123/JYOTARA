@@ -13,6 +13,14 @@ const chart = {
 };
 const packet = (question, category = 'Career', birthTimeKnown = true) => buildEvidencePacket({ question, category, birthTimeKnown, language: 'en', chart, now: new Date('2026-09-06T00:00:00Z') });
 
+test('personal course suitability does not request a second birth profile', () => {
+  assert.equal(packet('எனக்கு எந்த படிப்பு துறை பொருத்தமாக இருக்கும்?', 'Education').intent, 'education_decision');
+  assert.notEqual(packet('எனக்கு எந்த வேலை பொருத்தமாக இருக்கும்?', 'Career').intent, 'additional_profile_required');
+  assert.equal(packet('எங்கள் திருமண பொருத்தம் எப்படி?', 'Marriage').intent, 'additional_profile_required');
+  assert.equal(packet('Are we compatible?', 'Love').intent, 'additional_profile_required');
+  assert.equal(packet('என் மகளுக்கு எந்த படிப்பு பொருத்தமாக இருக்கும்?', 'Education').intent, 'additional_profile_required');
+});
+
 test('employment fallback addresses the specific intent in all three languages', () => {
   const cases = [
     ['Retirement plan start panna nalla period ah?', ['retirement', 'ஓய்வு', 'Retirement']],
