@@ -18,9 +18,18 @@ void main() {
     final first = access();
     await first.verify(code);
     expect(first.authorized, true);
-    final restored = access();
+    var networkCalls = 0;
+    final restored = TesterAccess(baseUrl: 'https://example.test', read: () async => saved,
+      client: MockClient((_) async { networkCalls++; throw Exception('offline'); }));
     await restored.restore();
     expect(restored.code, code);
+    expect(networkCalls, 0);
+  });
+  test('malformed stored invitation does not unlock local access', () async {
+    final access = TesterAccess(read: () async => 'invalid');
+    await access.restore();
+    expect(access.authorized, false);
+    expect(access.code, null);
   });
   test('invalid, expired and unsaved invitations never authorize', () async {
     var calls = 0;

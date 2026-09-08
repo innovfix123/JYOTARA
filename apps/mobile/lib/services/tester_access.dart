@@ -20,7 +20,17 @@ class TesterAccess extends ChangeNotifier {
   String? get code => authorized ? _code : null;
 
   Future<void> restore() async {
-    try { final saved = await _read(); if (saved != null) await verify(saved); }
+    try {
+      final saved = await _read();
+      if (saved != null && RegExp(r'^[a-f0-9]{48}$').hasMatch(saved)) {
+        // Only verify() writes this secure slot after a successful server check.
+        // Local history must remain accessible offline or after invitation expiry.
+        // Every API request still carries the code and is authenticated server-side.
+        _code = saved;
+        authorized = true;
+        notifyListeners();
+      }
+    }
     catch (_) { error = 'Tester access could not be restored. Enter your code again.'; notifyListeners(); }
   }
   Future<void> verify(String input) async {
