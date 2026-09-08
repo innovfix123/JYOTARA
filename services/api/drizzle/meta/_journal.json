@@ -1,0 +1,83 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1788246913139,
+      "tag": "0000_perpetual_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1788281052472,
+      "tag": "0001_chilly_purple_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788418369887,
+      "tag": "0002_broad_spacker_dave",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788505321397,
+      "tag": "0003_reflective_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788505479781,
+      "tag": "0004_powerful_juggernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788601653927,
+      "tag": "0005_quiet_jackpot",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788688815772,
+      "tag": "0006_cute_may_parker",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1788780742060,
+      "tag": "0007_cold_inhumans",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1788781441579,
+      "tag": "0008_damp_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1788784903207,
+      "tag": "0009_salty_skrulls",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1788789768512,
+      "tag": "0010_green_johnny_blaze",
+      "breakpoints": true
+    }
+  ]
+}

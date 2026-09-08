@@ -1,0 +1,227 @@
+{
+  "provenance": "Fabricated test geometry. No person or provider record.",
+  "profiles": [
+    {
+      "id": "synthetic-1",
+      "facts": {
+        "lagna": "Tula",
+        "rashi": "Karka",
+        "nakshatra": "Synthetic",
+        "planets": [
+          {
+            "name": "Sun",
+            "rasi": "Vrishabha",
+            "position": 2,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Moon",
+            "rasi": "Karka",
+            "position": 4,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mars",
+            "rasi": "Mithuna",
+            "position": 3,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mercury",
+            "rasi": "Simha",
+            "position": 5,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Jupiter",
+            "rasi": "Kanya",
+            "position": 6,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Venus",
+            "rasi": "Vrischika",
+            "position": 8,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Saturn",
+            "rasi": "Dhanu",
+            "position": 9,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Rahu",
+            "rasi": "Makara",
+            "position": 10,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Ketu",
+            "rasi": "Kumbha",
+            "position": 11,
+            "degree": 1,
+            "isRetrograde": false
+          }
+        ],
+        "yogas": []
+      }
+    },
+    {
+      "id": "synthetic-2",
+      "facts": {
+        "lagna": "Mesha",
+        "rashi": "Mithuna",
+        "nakshatra": "Synthetic",
+        "planets": [
+          {
+            "name": "Sun",
+            "rasi": "Vrishabha",
+            "position": 2,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Moon",
+            "rasi": "Mithuna",
+            "position": 3,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mars",
+            "rasi": "Karka",
+            "position": 4,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mercury",
+            "rasi": "Simha",
+            "position": 5,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Jupiter",
+            "rasi": "Makara",
+            "position": 10,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Venus",
+            "rasi": "Kanya",
+            "position": 6,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Saturn",
+            "rasi": "Tula",
+            "position": 7,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Rahu",
+            "rasi": "Vrischika",
+            "position": 8,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Ketu",
+            "rasi": "Dhanu",
+            "position": 9,
+            "degree": 1,
+            "isRetrograde": false
+          }
+        ],
+        "yogas": []
+      }
+    },
+    {
+      "id": "synthetic-3",
+      "facts": {
+        "lagna": "Karka",
+        "rashi": "Simha",
+        "nakshatra": "Synthetic",
+        "planets": [
+          {
+            "name": "Sun",
+            "rasi": "Mithuna",
+            "position": 3,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Moon",
+            "rasi": "Simha",
+            "position": 5,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mars",
+            "rasi": "Karka",
+            "position": 4,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Mercury",
+            "rasi": "Kanya",
+            "position": 6,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Jupiter",
+            "rasi": "Mesha",
+            "position": 1,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Venus",
+            "rasi": "Tula",
+            "position": 7,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Saturn",
+            "rasi": "Vrischika",
+            "position": 8,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Rahu",
+            "rasi": "Dhanu",
+            "position": 9,
+            "degree": 1,
+            "isRetrograde": false
+          },
+          {
+            "name": "Ketu",
+            "rasi": "Makara",
+            "position": 10,
+            "degree": 1,
+            "isRetrograde": false
+          }
+        ],
+        "yogas": []
+      }
+    }
+  ]
+}

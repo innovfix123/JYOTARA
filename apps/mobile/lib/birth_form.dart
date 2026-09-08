@@ -1,0 +1,309 @@
+import 'package:flutter/material.dart';
+import 'services/adult_birth_date.dart';
+
+import 'services/profile_session.dart';
+import 'services/jyotara_api.dart';
+import 'services/ui_language.dart';
+
+class BirthForm extends StatefulWidget {
+  const BirthForm({super.key, required this.session});
+  final ProfileSession session;
+  @override
+  State<BirthForm> createState() => _BirthFormState();
+}
+
+class _BirthFormState extends State<BirthForm> {
+  final _placeQuery = TextEditingController();
+  final _nickname = TextEditingController();
+  DateTime? _date;
+  TimeOfDay? _time;
+  bool _unknown = false, _consent = false, _busy = false, _searching = false;
+  List<List<dynamic>> _places = [];
+  List<dynamic>? _place;
+  String? _error;
+  int _searchRevision = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _nickname.text = widget.session.nickname;
+    final saved = widget.session.birthInput;
+    if (saved == null) return;
+    final stamp = saved.indiaDateTime;
+    _date = DateTime(stamp.year, stamp.month, stamp.day);
+    _unknown = !saved.exactTime;
+    _time = saved.exactTime
+        ? TimeOfDay(hour: stamp.hour, minute: stamp.minute)
+        : null;
+    final label =
+        widget.session.birthplaceLabel ??
+        'Saved birthplace (${saved.latitude.toStringAsFixed(4)}, ${saved.longitude.toStringAsFixed(4)})';
+    _placeQuery.text = label;
+    _place = [
+      'saved',
+      label,
+      '',
+      '',
+      'IN',
+      'Asia/Kolkata',
+      saved.latitude,
+      saved.longitude,
+    ];
+    // Processing consent must be confirmed for this edit, not inferred from
+    // having a saved chart. Research consent remains a separate control.
+  }
+
+  @override
+  void dispose() {
+    _placeQuery.dispose();
+    _nickname.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search() async {
+    final query = _placeQuery.text.trim();
+    if (query.length < 3 || _searching) return;
+    final revision = ++_searchRevision;
+    setState(() {
+      _searching = true;
+      _error = null;
+      _place = null;
+    });
+    try {
+      final rows = await widget.session.searchLocations(query);
+      if (!mounted || revision != _searchRevision) return;
+      setState(() {
+        _places = rows;
+        if (rows.isEmpty) _error = 'No Indian birthplace found. Try the nearest town name in English.';
+      });
+    } catch (_) {
+      if (mounted && revision == _searchRevision) {
+        setState(
+          () => _error = 'Place search is unavailable. Please retry; no chart was requested.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _calculate() async {
+    if (_busy) return;
+    if (_date == null ||
+        (!_unknown && _time == null) ||
+        _place == null ||
+        !_consent) {
+      setState(
+        () => _error =
+            'Choose your date, time and birthplace, then confirm consent.',
+      );
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final time = _unknown ? const TimeOfDay(hour: 12, minute: 0) : _time!;
+    final stamp =
+        '${_date!.toIso8601String().substring(0, 10)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+05:30';
+    try {
+      await widget.session.calculate(
+        dateTime: stamp,
+        latitude: (_place![6] as num).toDouble(),
+        longitude: (_place![7] as num).toDouble(),
+        exactTime: !_unknown,
+        nickname: _nickname.text,
+        birthplaceLabel: _place![0] == 'saved'
+            ? widget.session.birthplaceLabel
+            : '${_place![1]}, ${_place![2]}',
+      );
+      if (mounted) Navigator.of(context).pop();
+    } on JyotaraApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The chart could not be verified. Please try again later.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_busy,
+      child: Scaffold(
+        appBar: AppBar(title: const UiText('Your birth profile')),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            const UiText(
+              'Personal guidance starts with your chart',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            const UiText(
+              'India · Age 18+ · Times are Indian Standard Time (UTC+05:30).',
+            ),
+            if (widget.session.facts != null) ...[
+              const SizedBox(height: 12),
+              const UiText(
+                'Changing your birth date, time or place replaces this device’s chart and clears its previous guide chats only after the new chart is verified. If calculation fails, your existing profile and chats stay unchanged. Refreshing the same details keeps your chats.',
+              ),
+            ],
+            const SizedBox(height: 20),
+            TextField(
+              controller: _nickname,
+              enabled: !_busy,
+              maxLength: 60,
+              decoration: InputDecoration(
+                labelText: uiText(
+                  context,
+                  'Nickname (optional, saved only on this device)',
+                ),
+              ),
+            ),
+            ListTile(
+              title: const UiText('Date of birth'),
+              subtitle: UiText(
+                _date == null
+                    ? 'Select date'
+                    : '${_date!.day}/${_date!.month}/${_date!.year}',
+              ),
+              trailing: const Icon(Icons.calendar_month),
+              onTap: _busy
+                  ? null
+                  : () async {
+                      final now = DateTime.now();
+                      final latest = latestAdultBirthDate(now);
+                      final date = await showDatePicker(
+                        context: context,
+                        initialDate: _date == null || _date!.isAfter(latest)
+                            ? latest
+                            : _date!.isBefore(DateTime(1900)) ? DateTime(1900) : _date,
+                        firstDate: DateTime(1900),
+                        lastDate: latest,
+                      );
+                      if (date != null && mounted) setState(() => _date = date);
+                    },
+            ),
+            SwitchListTile(
+              title: const UiText('I don’t know my exact birth time'),
+              value: _unknown,
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _unknown = value),
+            ),
+            if (!_unknown)
+              ListTile(
+                title: const UiText('Exact birth time'),
+                subtitle: UiText(
+                  _time?.format(context) ?? 'Select time (AM/PM)',
+                ),
+                trailing: const Icon(Icons.schedule),
+                onTap: _busy
+                    ? null
+                    : () async {
+                        final time = await showTimePicker(
+                          context: context,
+                          initialTime:
+                              _time ?? const TimeOfDay(hour: 12, minute: 0),
+                        );
+                        if (time != null && mounted) {
+                          setState(() => _time = time);
+                        }
+                      },
+              ),
+            if (_unknown)
+              const UiText(
+                'A noon estimate will be used. Rasi/Nakshatra may change during the day; Lagnam and Dasa guidance are withheld.',
+              ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _placeQuery,
+              enabled: !_busy,
+              onChanged: (_) {
+                _searchRevision++;
+                setState(() {
+                  _place = null;
+                  _places = [];
+                });
+              },
+              onSubmitted: (_) => _search(),
+              decoration: InputDecoration(
+                labelText: uiText(context, 'Birth town or city'),
+                hintText: uiText(context, 'For example: Erode'),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _busy || _searching ? null : _search,
+              icon: const Icon(Icons.search),
+              label: UiText(_searching ? 'Searching…' : 'Search birthplace'),
+            ),
+            const UiText(
+              'Location data: Prokerala',
+              style: TextStyle(fontSize: 12),
+            ),
+            ..._places.map(
+              (row) => ListTile(
+                selected: _place?[0] == row[0],
+                trailing: Icon(
+                  _place?[0] == row[0]
+                      ? Icons.check_circle
+                      : Icons.circle_outlined,
+                ),
+                onTap: _busy ? null : () => setState(() => _place = row),
+                title: UiText('${row[1]}, ${row[2]}'),
+                subtitle: const UiText('India · IST'),
+              ),
+            ),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: _consent,
+              onChanged: _busy
+                  ? null
+                  : (value) => setState(() => _consent = value ?? false),
+              title: const UiText(
+                'I am 18+ and agree to process my birth details for automated Vedic guidance.',
+              ),
+              subtitle: const UiText(
+                'Birth details go to our calculation service; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. Server deletion controls are not yet available in this test build.',
+              ),
+            ),
+            const UiText(
+              'Retry recovery is separate from research: the server keeps an encrypted answer until this chart session expires (up to 24 hours). Expired copies are cleared when requests arrive, not on a guaranteed schedule. Request receipts remain to prevent duplicate usage.',
+            ),
+            const UiText('For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.'),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: UiText(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            FilledButton(
+              onPressed: _busy ? null : _calculate,
+              child: UiText(
+                _busy ? 'Calculating your chart…' : 'Calculate my chart',
+              ),
+            ),
+            if (_busy)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: LinearProgressIndicator(),
+              ),
+            const SizedBox(height: 12),
+            const UiText(
+              'Traditional guidance is interpretive, not a guarantee of future events. Pilot usage limits apply.',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
