@@ -21,18 +21,19 @@ export function acceptableAnswer(answer: string, style: ResponseStyle): boolean 
   // Do not make arbitrary model dates acceptable merely because a date also
   // occurs in the question or a Dasa interval. A future timing feature needs
   // separately validated evidence and deterministic rendering.
-  const timingText = answer.normalize('NFKC').replace(/[௦-௯]/g, digit => String(digit.charCodeAt(0) - 0x0BE6));
+  const timingText = answer.normalize('NFKC').replace(/[௦-௯]/g, digit => String(digit.charCodeAt(0) - 0x0BE6))
+    .replace(/[0-9]+(?:\s*[-–]\s*[0-9]+)?\s*(?:நிமிட(?:ம்|ங்கள்)?|விநாடி(?:கள்)?)/gu, 'சிறிது நேரம்');
   const numberWord = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)';
   if (/[0-9]{1,2}\s*:\s*[0-9]{2}/i.test(timingText)
     || /[0-9]{1,2}\s*\.\s*[0-9]{2}\s*(?:a\.?m\.?|p\.?m\.?)/i.test(timingText)
     || /\b[0-9]{1,2}\s*(?:a\.?m\.?|p\.?m\.?|o.clock|hours?\b|mani\b)/i.test(timingText)
     || new RegExp(`\\b${numberWord}\\s*(?:a\\.?m\\.?|p\\.?m\\.?|o.clock|in the (?:morning|afternoon|evening))`, 'i').test(timingText)
-    || /(?:காலை|மாலை|இரவு|மதியம்)\s*(?:[0-9]+|ஒன்று|இரண்டு|மூன்று|நான்கு|ஐந்து|ஆறு|ஏழு|எட்டு|ஒன்பது|பத்து)/.test(timingText)
+    || /(?:காலை|மாலை|இரவு|மதியம்)\s*(?:[0-9]+(?![0-9])|ஒன்று|இரண்டு|மூன்று|நான்கு|ஐந்து|ஆறு|ஏழு|எட்டு|ஒன்பது|பத்து)(?!\s*(?:நிமிட|விநாடி))/.test(timingText)
     || /[0-9]+\s*மணி/.test(timingText)
     || /\b[0-9]{4}-[0-9]{2}-[0-9]{2}\b|\b[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}\b/.test(timingText)
     || /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+[0-9]{1,2}\b/i.test(timingText)
     || /\b[0-9]{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(timingText)) return false;
-  const claimsText = answer.replace(/\bwithout expecting fixed dates or guaranteed results\b/gi, '').replace(/\b(?:not guaranteed|cannot be guaranteed|can't be guaranteed|isn't guaranteed|no guaranteed outcome)\b/gi, '');
+  const claimsText = answer.replace(/\bwithout expecting fixed dates or guaranteed results\b/gi, '').replace(/\b(?:not a guaranteed (?:result|outcome|prediction|date)|not guaranteed|cannot be guaranteed|can't be guaranteed|isn't guaranteed|no guaranteed outcome)\b/gi, '');
   if (/100\s*%|guaranteed|definitely (?:marry|break|die)|hidden enemy|secret enemy|கண்டிப்பாக.*(?:திருமணம்|பிரிவு|மரணம்)/i.test(claimsText)) return false;
   if (style === 'tanglish' && /[\u0B80-\u0BFF]/.test(answer)) return false;
   if (style === 'tamil' && !/[\u0B80-\u0BFF]/.test(answer)) return false;
@@ -174,4 +175,39 @@ export function providerReadingSources(chart: {yogas: Array<{name:string;descrip
   const rows = chart.yogas.filter(row => match.test(row.description)).map(row => ({name:row.name, interpretation:row.description}));
   if (category === 'Marriage' && chart.mangalDosha?.description) rows.push({name:'Mangal Dosha',interpretation:chart.mangalDosha.description});
   return rows.slice(0,3).map((row,index) => ({id:`prokerala-${index+1}`, name:row.name, interpretation:row.interpretation.slice(0,4000)}));
+}
+
+export function conversationTopic(question:string, fallback:string, history:string[] = []): string {
+  const q=question.toLowerCase();
+  if (/business|startup|வியாபார|வணிக|தொழில் தொடங்க|thozhil thodang/u.test(q)) return 'Business';
+  if (/marriage|wedding|திருமண|கல்யாண|kalyanam/u.test(q)) return 'Marriage';
+  if (/job|career|promotion|interview|வேலை|பணி|சம்பள|velai|velaikku|தொழில் பற்றி/u.test(q)) return 'Career';
+  if (/exam|education|stud(?:y|ies)|college|படிப்பு|படிக்க|தேர்வு|padippu/u.test(q)) return 'Education';
+  if (/property|buy.*house|வீடு வாங்க|நிலம் வாங்க/u.test(q)) return 'Property';
+  if (/love|relationship|காதல்|உறவு|kaadhal/u.test(q)) return 'Love';
+  for (const earlier of [...history].reverse()) {
+    const topic = conversationTopic(earlier, '');
+    if (topic) return topic;
+  }
+  return fallback;
+}
+
+/** Shorten only at sentence boundaries. Never display a cut-off promise or
+ * partial sentence; the complete source reply is safety-checked first. */
+export function conciseReply(answer:string): string {
+  const quotes:string[]=[];
+  const masked=answer.trim().replace(/“[^”]*”|"[^"]*"/gu, value => `\uE000${quotes.push(value)-1}\uE001${/[.!?][”"]$/u.test(value)?'.':''}`);
+  const sentences = masked.match(/[^.!?。！？]+(?:[.!?。！？]+[”"’']*|$)/gu) ?? [];
+  const selected:string[]=[];
+  let asked=false;
+  for(const part of sentences) {
+    const asks=/[?？]/u.test(part);
+    if(asks && asked)continue;
+    const sentence=part.trim().replace(/\uE000(\d+)\uE001(\.)?/gu, (_,index,end)=>quotes[Number(index)]+(end && !/[.!?][”"]$/u.test(quotes[Number(index)])?'.':'')).replace(/\s+/gu,' ');
+    if(!sentence)continue;
+    if(selected.length>=3 || [...selected,sentence].join(' ').split(/\s+/u).length>85)break;
+    selected.push(sentence);
+    if(asks)asked=true;
+  }
+  return selected.join(' ');
 }

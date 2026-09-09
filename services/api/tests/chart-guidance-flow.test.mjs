@@ -55,6 +55,8 @@ test('actual calculation-to-guidance routes use provider ticket, never caller ch
     const address = String(input);
     if (address.endsWith('/token')) return Response.json({access_token: 'TEST', expires_in: 3600});
     if (address.includes('/astrology/kundli')) {
+      assert.equal(new URL(address).pathname, '/v2/astrology/kundli/advanced');
+      assert.equal(new URL(address).searchParams.get('la'), 'en');
       assert.ok(['2002-07-29T12:00:00+05:30','2002-07-29T05:00:00+05:30'].includes(new URL(address).searchParams.get('datetime')));
       return Response.json({data: {nakshatra_details: {
       chandra_rasi: {name: 'Meena'}, nakshatra: {name: 'Uttara Bhadrapada', pada: 1}}, yoga_details: []}});

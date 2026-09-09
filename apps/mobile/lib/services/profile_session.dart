@@ -42,7 +42,12 @@ class ProfileSession extends ChangeNotifier {
   Future<void> flushStorage() => _pendingPersistence;
 
   void _persist({bool deletionCheckpoint = false}) {
-    if ((!deletionCheckpoint && (deleting || _deletionCapability != null)) || vault == null || _raw == null || _facts == null) return;
+    if ((!deletionCheckpoint && (deleting || _deletionCapability != null)) ||
+        vault == null ||
+        _raw == null ||
+        _facts == null) {
+      return;
+    }
     final revision = _revision;
     final snapshot = <String, dynamic>{
       'version': 1,
@@ -74,7 +79,9 @@ class ProfileSession extends ChangeNotifier {
         }),
       ),
       'requestIds': Map<String, String>.from(_requestIds),
-      'requestContexts': _requestContexts.map((key, value) => MapEntry(key, List<String>.from(value))),
+      'requestContexts': _requestContexts.map(
+        (key, value) => MapEntry(key, List<String>.from(value)),
+      ),
     };
     _pendingPersistence = vault!
         .save(snapshot)
@@ -97,7 +104,8 @@ class ProfileSession extends ChangeNotifier {
       final saved = await vault!.load();
       if (saved == null || revision != _revision) return;
       if (saved['kind'] == 'pending-profile') {
-        if (saved['origin'] != _api.storageOrigin || saved['session'] is! String) {
+        if (saved['origin'] != _api.storageOrigin ||
+            saved['session'] is! String) {
           throw const FormatException('Saved request is incompatible');
         }
         _api.restoreSession(saved['session'] as String);
@@ -119,9 +127,12 @@ class ProfileSession extends ChangeNotifier {
       }
       final raw = saved['raw'] as Map<String, dynamic>;
       final deletionRequested = saved['deletionRequested'] ?? false;
-      if (deletionRequested is! bool || (deletionRequested &&
-          (raw['chartTicket'] is! String || (raw['chartTicket'] as String).isEmpty ||
-           raw['profileId'] is! String || (raw['profileId'] as String).isEmpty))) {
+      if (deletionRequested is! bool ||
+          (deletionRequested &&
+              (raw['chartTicket'] is! String ||
+                  (raw['chartTicket'] as String).isEmpty ||
+                  raw['profileId'] is! String ||
+                  (raw['profileId'] as String).isEmpty))) {
         throw const FormatException('Saved deletion request is invalid');
       }
       final known = saved['birthTimeKnown'] as bool;
@@ -134,15 +145,29 @@ class ProfileSession extends ChangeNotifier {
       );
       final chats = saved['conversations'];
       final ids = saved['requestIds'] ?? <String, dynamic>{};
-      if (ids is! Map<String, dynamic> || ids.length > 5000 ||
-          ids.entries.any((entry) => entry.key.length > 2000 ||
-              entry.value is! String || !RegExp(r'^[a-f0-9]{32}$').hasMatch(entry.value as String))) {
+      if (ids is! Map<String, dynamic> ||
+          ids.length > 5000 ||
+          ids.entries.any(
+            (entry) =>
+                entry.key.length > 2000 ||
+                entry.value is! String ||
+                !RegExp(r'^[a-f0-9]{32}$').hasMatch(entry.value as String),
+          )) {
         throw const FormatException('Invalid saved request identities');
       }
       final contexts = saved['requestContexts'] ?? <String, dynamic>{};
-      if (contexts is! Map<String, dynamic> || contexts.length > 5000 ||
-          contexts.entries.any((e) => !ids.containsKey(e.key) || e.value is! List ||
-              (e.value as List).length > 6 || (e.value as List).any((v) => v is! String || v.trim().isEmpty || v.runes.length > 240))) {
+      if (contexts is! Map<String, dynamic> ||
+          contexts.length > 5000 ||
+          contexts.entries.any(
+            (e) =>
+                !ids.containsKey(e.key) ||
+                e.value is! List ||
+                (e.value as List).length > 6 ||
+                (e.value as List).any(
+                  (v) =>
+                      v is! String || v.trim().isEmpty || v.runes.length > 240,
+                ),
+          )) {
         throw const FormatException('Invalid saved conversation context');
       }
       if (chats is! Map<String, dynamic> || chats.length > 20) {
@@ -160,7 +185,12 @@ class ProfileSession extends ChangeNotifier {
         final conversation = GuideConversation()
           ..language = chat['language'] as String
           ..ended = chat['ended'] == true
-          ..rating = chat['rating'] is int && chat['rating'] >= 1 && chat['rating'] <= 5 ? chat['rating'] as int : null;
+          ..rating =
+              chat['rating'] is int &&
+                  chat['rating'] >= 1 &&
+                  chat['rating'] <= 5
+              ? chat['rating'] as int
+              : null;
         for (final message in chat['messages']) {
           if (message is! Map ||
               message['fromUser'] is! bool ||
@@ -205,16 +235,21 @@ class ProfileSession extends ChangeNotifier {
         ..addAll(ids.cast<String, String>());
       _requestContexts
         ..clear()
-        ..addAll(contexts.map((k, v) => MapEntry(k, List<String>.from(v as List))));
+        ..addAll(
+          contexts.map((k, v) => MapEntry(k, List<String>.from(v as List))),
+        );
       for (final chat in _conversations.values) {
         chat.addListener(_persist);
       }
-      _deletionCapability = deletionRequested ? {
-        'chartTicket': raw['chartTicket'] as String,
-        'profileId': raw['profileId'] as String,
-      } : null;
+      _deletionCapability = deletionRequested
+          ? {
+              'chartTicket': raw['chartTicket'] as String,
+              'profileId': raw['profileId'] as String,
+            }
+          : null;
       storageError = deletionRequested
-          ? 'Deletion was requested but not completed on this device. Retry deletion before continuing.' : null;
+          ? 'Deletion was requested but not completed on this device. Retry deletion before continuing.'
+          : null;
       _revision++;
       notifyListeners();
     } catch (_) {
@@ -270,10 +305,15 @@ class ProfileSession extends ChangeNotifier {
 
   /// Commit the displayed answer and retire its retry identity in one vault
   /// generation. Until this point, a restart must recover the same request.
-  Future<bool> recordGuidanceResponse(GuidanceResponse result,
-      GuideConversation target, String language) async {
+  Future<bool> recordGuidanceResponse(
+    GuidanceResponse result,
+    GuideConversation target,
+    String language,
+  ) async {
     final receipt = _responseReceipts[result];
-    if (receipt == null || receipt.revision != _revision || deleting ||
+    if (receipt == null ||
+        receipt.revision != _revision ||
+        deleting ||
         _requestIds[receipt.key] != receipt.id ||
         !_conversations.values.any((chat) => identical(chat, target))) {
       return false;
@@ -285,14 +325,19 @@ class ProfileSession extends ChangeNotifier {
     if (_requestIds[receipt.key] == receipt.id) _requestIds.remove(receipt.key);
     target.changed(); // Persists the answer and identity removal together.
     await flushStorage();
-    if (receipt.revision == _revision && vault != null && storageError != null) {
+    if (receipt.revision == _revision &&
+        vault != null &&
+        storageError != null) {
       // A failed write must not make another send billable. The original disk
       // generation still contains this identity, and memory must agree.
       _requestIds.putIfAbsent(receipt.key, () => receipt.id);
-      if (originalContext != null) _requestContexts.putIfAbsent(receipt.key, () => originalContext);
+      if (originalContext != null) {
+        _requestContexts.putIfAbsent(receipt.key, () => originalContext);
+      }
     }
     return true;
   }
+
   GuideConversation conversation(String guide) => _conversations.putIfAbsent(
     guide,
     () => GuideConversation()
@@ -325,8 +370,11 @@ class ProfileSession extends ChangeNotifier {
     if (_raw?['chatAuthorizedAt'] != null || _raw?['chatExpiresAt'] != null) {
       final start = parseChartInstant(_raw?['chatAuthorizedAt']);
       final end = parseChartInstant(_raw?['chatExpiresAt']);
-      return start != null && end != null && end.difference(start) == const Duration(hours: 24) &&
-          !now.toUtc().isBefore(start) && now.toUtc().isBefore(end);
+      return start != null &&
+          end != null &&
+          end.difference(start) == const Duration(hours: 24) &&
+          !now.toUtc().isBefore(start) &&
+          now.toUtc().isBefore(end);
     }
     final timestamp = calculatedAt;
     if (timestamp == null) return false;
@@ -337,22 +385,34 @@ class ProfileSession extends ChangeNotifier {
   Future<void>? _renewal;
   Future<void> renewChatAccess() {
     if (deleting || _deletionCapability != null || _raw == null) {
-      return Future.error(const JyotaraApiException('A saved active profile is required to renew chat access.'));
+      return Future.error(
+        const JyotaraApiException(
+          'A saved active profile is required to renew chat access.',
+        ),
+      );
     }
-    if (calculatedAt == null || _clock().toUtc().isBefore(calculatedAt!.toUtc())) {
-      return Future.error(const JyotaraApiException('Check the device clock before renewing chat access.'));
+    if (calculatedAt == null ||
+        _clock().toUtc().isBefore(calculatedAt!.toUtc())) {
+      return Future.error(
+        const JyotaraApiException(
+          'Check the device clock before renewing chat access.',
+        ),
+      );
     }
     if (_sessionIsFresh(_clock())) return Future.value();
     if (_renewal != null) return _renewal!;
     final completion = Completer<void>();
     _renewal = completion.future;
-    _renewChatAccess().then((_) {
-      _renewal = null;
-      completion.complete();
-    }, onError: (Object error, StackTrace stack) {
-      _renewal = null;
-      completion.completeError(error, stack);
-    });
+    _renewChatAccess().then(
+      (_) {
+        _renewal = null;
+        completion.complete();
+      },
+      onError: (Object error, StackTrace stack) {
+        _renewal = null;
+        completion.completeError(error, stack);
+      },
+    );
     return completion.future;
   }
 
@@ -361,16 +421,25 @@ class ProfileSession extends ChangeNotifier {
     final ticket = _raw?['chartTicket'];
     final profile = _raw?['profileId'];
     if (ticket is! String || profile is! String) {
-      throw const JyotaraApiException('A protected saved chart is required to renew chat access.');
+      throw const JyotaraApiException(
+        'A protected saved chart is required to renew chat access.',
+      );
     }
-    final result = await _api.renewChartSession(chartTicket: ticket, profileId: profile);
+    final result = await _api.renewChartSession(
+      chartTicket: ticket,
+      profileId: profile,
+    );
     if (revision != _revision || deleting || _deletionCapability != null) {
-      throw const JyotaraApiException('Your profile changed while chat access was being renewed.');
+      throw const JyotaraApiException(
+        'Your profile changed while chat access was being renewed.',
+      );
     }
     final start = parseChartInstant(result['chatAuthorizedAt'])!;
     final end = parseChartInstant(result['chatExpiresAt'])!;
     if (_clock().toUtc().isBefore(start) || !_clock().toUtc().isBefore(end)) {
-      throw const JyotaraApiException('Check the device clock before renewing chat access.');
+      throw const JyotaraApiException(
+        'Check the device clock before renewing chat access.',
+      );
     }
     // Only the capability metadata changes; original birth/chart timestamps,
     // evidence, conversation history and request identities stay intact.
@@ -380,9 +449,15 @@ class ProfileSession extends ChangeNotifier {
       ..['chatExpiresAt'] = result['chatExpiresAt'];
     _persist();
     await flushStorage();
-    if (revision != _revision) throw const JyotaraApiException('Your profile changed while chat access was being renewed.');
+    if (revision != _revision) {
+      throw const JyotaraApiException(
+        'Your profile changed while chat access was being renewed.',
+      );
+    }
     if (vault != null && storageError != null) {
-      throw const JyotaraApiException('Renewed access could not be saved. The question was not sent; please retry.');
+      throw const JyotaraApiException(
+        'Renewed access could not be saved. The question was not sent; please retry.',
+      );
     }
   }
 
@@ -419,7 +494,11 @@ class ProfileSession extends ChangeNotifier {
     if (_profileKey == key && _facts != null) {
       final savedRevision = _revision;
       await renewChatAccess();
-      if (savedRevision != _revision) throw const JyotaraApiException('Your profile changed while chat access was being renewed.');
+      if (savedRevision != _revision) {
+        throw const JyotaraApiException(
+          'Your profile changed while chat access was being renewed.',
+        );
+      }
       if (nickname != null) this.nickname = nickname.trim();
       if (gender != null) this.gender = gender;
       if (birthplaceLabel != null) {
@@ -439,15 +518,21 @@ class ProfileSession extends ChangeNotifier {
     try {
       if (_raw == null && vault != null) {
         if (storageError != null) {
-          throw const JyotaraApiException('Saved data must be recovered or deleted before creating a new chart.');
+          throw const JyotaraApiException(
+            'Saved data must be recovered or deleted before creating a new chart.',
+          );
         }
         try {
           await vault!.save({
-            'version': 1, 'kind': 'pending-profile',
-            'origin': _api.storageOrigin, 'session': previousSession,
+            'version': 1,
+            'kind': 'pending-profile',
+            'origin': _api.storageOrigin,
+            'session': previousSession,
           });
         } catch (_) {
-          throw const JyotaraApiException('The chart request was not sent because its recovery record could not be saved. Please retry.');
+          throw const JyotaraApiException(
+            'The chart request was not sent because its recovery record could not be saved. Please retry.',
+          );
         }
       }
       if (revision != _revision) return;
@@ -460,7 +545,8 @@ class ProfileSession extends ChangeNotifier {
         currentDateTime: now.toIso8601String(),
         birthTimeKnown: exactTime,
       );
-      final originalCalculation = parseChartInstant(response.chart['chartCalculatedAt']) ?? now;
+      final originalCalculation =
+          parseChartInstant(response.chart['chartCalculatedAt']) ?? now;
       final converted = normalizeChartFacts(
         response.chart,
         birthTimeKnown: exactTime,
@@ -513,7 +599,9 @@ class ProfileSession extends ChangeNotifier {
       );
     }
     if (deleting || _deletionCapability != null) {
-      throw const JyotaraApiException('Finish or retry deletion before asking another question.');
+      throw const JyotaraApiException(
+        'Finish or retry deletion before asking another question.',
+      );
     }
     final revision = _revision;
     if (chart == null || calculating) {
@@ -524,7 +612,11 @@ class ProfileSession extends ChangeNotifier {
     final now = _clock().toUtc();
     if (!_sessionIsFresh(now)) {
       await renewChatAccess();
-      if (revision != _revision) throw const JyotaraApiException('Your profile changed before the question was sent.');
+      if (revision != _revision) {
+        throw const JyotaraApiException(
+          'Your profile changed before the question was sent.',
+        );
+      }
     }
     final ticket = _raw?['chartTicket'];
     final profileId = _raw?['profileId'];
@@ -562,23 +654,57 @@ class ProfileSession extends ChangeNotifier {
     notifyListeners();
     try {
       final consent = researchConsent;
-      final normalizedQuestion = question.trim().replaceAll(RegExp(r'\s+'), ' ');
-      final legacyKey = jsonEncode([profileId, category, normalizedQuestion, responseStyle, consent]);
-      final requestKey = _requestIds.containsKey(legacyKey) || guide == null ? legacyKey
-          : jsonEncode([profileId, category, normalizedQuestion, responseStyle, consent, guide]);
+      final normalizedQuestion = question.trim().replaceAll(
+        RegExp(r'\s+'),
+        ' ',
+      );
+      final legacyKey = jsonEncode([
+        profileId,
+        category,
+        normalizedQuestion,
+        responseStyle,
+        consent,
+      ]);
+      final requestKey = _requestIds.containsKey(legacyKey) || guide == null
+          ? legacyKey
+          : jsonEncode([
+              profileId,
+              category,
+              normalizedQuestion,
+              responseStyle,
+              consent,
+              guide,
+            ]);
       if (!_requestIds.containsKey(requestKey)) {
         if (_requestIds.length >= 5000) {
-          throw const JyotaraApiException('This device request history is full. Please contact support.');
+          throw const JyotaraApiException(
+            'This device request history is full. Please contact support.',
+          );
         }
         // The current question is already visible. Only prior user statements
         // from this guide are context; assistant claims are never chart facts.
-        final messages = guide == null ? <String>[] : (_conversations[guide]?.messages ?? <ChatMessage>[])
-            .where((m) => m.fromUser && m.text.trim().isNotEmpty && m.text.runes.length <= 240)
-            .map((m) => m.text.trim().replaceAll(RegExp(r'\s+'), ' ')).toList();
-        if (messages.isNotEmpty && messages.last == normalizedQuestion) messages.removeLast();
-        _requestContexts[requestKey] = messages.skip(max(0, messages.length - 6)).toList(growable: false);
+        final messages = guide == null
+            ? <String>[]
+            : (_conversations[guide]?.messages ?? <ChatMessage>[])
+                  .where(
+                    (m) =>
+                        m.fromUser &&
+                        m.text.trim().isNotEmpty &&
+                        m.text.runes.length <= 240,
+                  )
+                  .map((m) => m.text.trim().replaceAll(RegExp(r'\s+'), ' '))
+                  .toList();
+        if (messages.isNotEmpty && messages.last == normalizedQuestion) {
+          messages.removeLast();
+        }
+        _requestContexts[requestKey] = messages
+            .skip(max(0, messages.length - 6))
+            .toList(growable: false);
         final random = Random.secure();
-        _requestIds[requestKey] = List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+        _requestIds[requestKey] = List.generate(
+          16,
+          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+        ).join();
       }
       final requestId = _requestIds[requestKey]!;
       // Persist identity BEFORE transport so a process restart cannot turn an
@@ -586,10 +712,14 @@ class ProfileSession extends ChangeNotifier {
       _persist();
       await flushStorage();
       if (revision != _revision) {
-        throw const JyotaraApiException('Your profile changed before the question was sent.');
+        throw const JyotaraApiException(
+          'Your profile changed before the question was sent.',
+        );
       }
       if (vault != null && storageError != null) {
-        throw const JyotaraApiException('The question was not sent because its recovery record could not be saved. Please retry.');
+        throw const JyotaraApiException(
+          'The question was not sent because its recovery record could not be saved. Please retry.',
+        );
       }
       final result = await _api.askGuidance(
         category: category,
@@ -602,6 +732,7 @@ class ProfileSession extends ChangeNotifier {
         researchConsent: consent,
         requestId: requestId,
         previousUserMessages: _requestContexts[requestKey] ?? const [],
+        guide: guide,
       );
       if (revision != _revision) {
         throw const JyotaraApiException(
@@ -613,7 +744,11 @@ class ProfileSession extends ChangeNotifier {
           'No answer was returned. Please try again.',
         );
       }
-      _responseReceipts[result] = (key: requestKey, id: requestId, revision: revision);
+      _responseReceipts[result] = (
+        key: requestKey,
+        id: requestId,
+        revision: revision,
+      );
       return result;
     } finally {
       if (revision == _revision) {
@@ -624,13 +759,24 @@ class ProfileSession extends ChangeNotifier {
   }
 
   Map<String, String>? _deletionCapability;
-  bool get canDeleteServer => _deletionCapability != null ||
-      (_raw?['chartTicket'] is String && (_raw!['chartTicket'] as String).isNotEmpty &&
-       _raw?['profileId'] is String && (_raw!['profileId'] as String).isNotEmpty);
+  bool get canDeleteServer =>
+      _deletionCapability != null ||
+      (_raw?['chartTicket'] is String &&
+          (_raw!['chartTicket'] as String).isNotEmpty &&
+          _raw?['profileId'] is String &&
+          (_raw!['profileId'] as String).isNotEmpty);
 
   Future<void> discardUnfinished() async {
-    if (calculating || answering || deleting) throw const JyotaraApiException('Please wait for the current request to finish.');
-    if (_facts != null || _raw != null) throw const JyotaraApiException('Use saved chart deletion for a completed Kundli.');
+    if (calculating || answering || deleting) {
+      throw const JyotaraApiException(
+        'Please wait for the current request to finish.',
+      );
+    }
+    if (_facts != null || _raw != null) {
+      throw const JyotaraApiException(
+        'Use saved chart deletion for a completed Kundli.',
+      );
+    }
     deleting = true;
     try {
       if (profileRequestUnconfirmed) await _api.discardPendingChart();
@@ -647,8 +793,10 @@ class ProfileSession extends ChangeNotifier {
     final completion = Completer<void>();
     _deletion = completion.future;
     deleting = true;
-    (includeServer ? _deleteServerAndDevice() : _deleteProfile())
-        .then(completion.complete, onError: completion.completeError);
+    (includeServer ? _deleteServerAndDevice() : _deleteProfile()).then(
+      completion.complete,
+      onError: completion.completeError,
+    );
     return completion.future;
   }
 
@@ -656,7 +804,9 @@ class ProfileSession extends ChangeNotifier {
     var serverConfirmed = false;
     try {
       if (!canDeleteServer) {
-        throw const JyotaraApiException('A saved chart is required for server deletion.');
+        throw const JyotaraApiException(
+          'A saved chart is required for server deletion.',
+        );
       }
       _deletionCapability ??= {
         'chartTicket': _raw!['chartTicket'] as String,
@@ -674,7 +824,9 @@ class ProfileSession extends ChangeNotifier {
         _persist(deletionCheckpoint: true);
         await flushStorage();
         if (storageError != null) {
-          throw const JyotaraApiException('Deletion was not sent because its retry state could not be saved. Please retry.');
+          throw const JyotaraApiException(
+            'Deletion was not sent because its retry state could not be saved. Please retry.',
+          );
         }
       }
       await _api.deleteChartSession(

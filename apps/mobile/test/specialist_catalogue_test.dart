@@ -2,6 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jyotara/main.dart';
 
 void main() {
+  test('all guides have unique images and concise multilingual welcomes', () {
+    expect(guides.map((g) => g.asset).toSet().length, 12);
+    for (final guide in guides) {
+      for (final language in ['english', 'tamil', 'tanglish']) {
+        final greeting = guideWelcome(guide, 'Tester', language);
+        expect(greeting, contains('Tester'));
+        expect(greeting, contains(guide.name));
+        expect(greeting.split('?').length, 2);
+        expect(greeting, isNot(contains('reviewed interpretation')));
+      }
+    }
+  });
+
   test(
     'twelve guides retain legacy identities and explicit category routing',
     () {

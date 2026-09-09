@@ -84,6 +84,24 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Name: Profile B'), findsOneWidget);
       expect(find.text('Private A question'), findsNothing);
+      expect(
+        find.textContaining('Hi Profile B, I’m Aadhirai.'),
+        findsOneWidget,
+      );
+      await tester.enterText(find.byKey(const Key('chatInput')), 'hello');
+      await tester.tap(find.byKey(const Key('sendMessage')));
+      await tester.pumpAndSettle();
+      expect(
+        requests,
+        isEmpty,
+        reason: 'A greeting must not spend a paid reading or question quota',
+      );
+      expect(b.conversation('Aadhirai').pending, isFalse);
+      expect(
+        b.conversation('Aadhirai').messages.last.text,
+        contains('Hi Profile B'),
+      );
+
       await tester.enterText(
         find.byKey(const Key('chatInput')),
         'How can I communicate better?',
@@ -91,6 +109,7 @@ void main() {
       await tester.tap(find.byKey(const Key('sendMessage')));
       await tester.pumpAndSettle();
       expect(requests.single['chartTicket'], 'ticket-Profile B');
+      expect(requests.single['guide'], 'Aadhirai');
       expect(a.conversation('Aadhirai').messages.length, 1);
       await tester.tap(find.text('End'));
       await tester.pumpAndSettle();

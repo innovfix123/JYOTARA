@@ -47,10 +47,16 @@ class ChartResponse {
   final Map<String, dynamic> moduleStatus;
 
   factory ChartResponse.fromJson(Map<String, dynamic> json) {
-    if ((json.containsKey('chartCalculatedAt') && parseChartInstant(json['chartCalculatedAt']) == null) ||
-        (json.containsKey('profileRecovered') && json['profileRecovered'] is! bool) ||
-        (json['profileRecovered'] == true && parseChartInstant(json['chartCalculatedAt']) == null)) {
-      throw const JyotaraApiException('Invalid chart recovery information.', deliveryUncertain: true);
+    if ((json.containsKey('chartCalculatedAt') &&
+            parseChartInstant(json['chartCalculatedAt']) == null) ||
+        (json.containsKey('profileRecovered') &&
+            json['profileRecovered'] is! bool) ||
+        (json['profileRecovered'] == true &&
+            parseChartInstant(json['chartCalculatedAt']) == null)) {
+      throw const JyotaraApiException(
+        'Invalid chart recovery information.',
+        deliveryUncertain: true,
+      );
     }
     return ChartResponse(
       sandbox: json['sandbox'] == true,
@@ -122,10 +128,13 @@ class GuidanceResponse {
 }
 
 class JyotaraApiClient {
-  JyotaraApiClient({http.Client? client, String? baseUrl, String? Function()? testerCode})
-    : _testerCode = testerCode ?? (() => null),
-      _client = client ?? http.Client(),
-      _baseUri = Uri.parse(baseUrl ?? defaultApiBaseUrl) {
+  JyotaraApiClient({
+    http.Client? client,
+    String? baseUrl,
+    String? Function()? testerCode,
+  }) : _testerCode = testerCode ?? (() => null),
+       _client = client ?? http.Client(),
+       _baseUri = Uri.parse(baseUrl ?? defaultApiBaseUrl) {
     final localDebug =
         kDebugMode &&
         (const bool.fromEnvironment('JYOTARA_LOCAL_QA') ||
@@ -152,8 +161,10 @@ class JyotaraApiClient {
     if (_sessionCookie != null) return _sessionCookie!;
     final random = Random.secure();
     _sessionRevision++;
-    return _sessionCookie = 'nirayana_pilot_session=${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
+    return _sessionCookie =
+        'nirayana_pilot_session=${List.generate(16, (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0')).join()}';
   }
+
   void restoreSession(String? value) {
     if (value != null &&
         !RegExp(r'^nirayana_pilot_session=[A-Za-z0-9_-]{1,128}$')
@@ -201,7 +212,11 @@ class JyotaraApiClient {
   Future<void> discardPendingChart() async {
     ensureSession();
     final result = await _post('/api/profile/discard', {});
-    if (result['deleted'] != true) throw const JyotaraApiException('Unfinished Kundli deletion was not confirmed.');
+    if (result['deleted'] != true) {
+      throw const JyotaraApiException(
+        'Unfinished Kundli deletion was not confirmed.',
+      );
+    }
   }
 
   Future<List<List<dynamic>>> searchLocations(String query) async {
@@ -250,6 +265,7 @@ class JyotaraApiClient {
     String? ageBand,
     String? requestId,
     List<String> previousUserMessages = const [],
+    String? guide,
   }) async {
     final language = responseStyle == 'english' ? 'en' : 'ta';
     if (chartTicket == null ||
@@ -262,6 +278,7 @@ class JyotaraApiClient {
     }
     final response = await _post('/api/guidance', {
       'category': category,
+      'guide': ?guide,
       'question': question,
       'language': language,
       // The current pilot accepts ta/en. The mobile contract carries the
@@ -273,7 +290,8 @@ class JyotaraApiClient {
       'researchConsent': researchConsent,
       'ageBand': ?ageBand,
       'requestId': ?requestId,
-      if (previousUserMessages.isNotEmpty) 'previousUserMessages': List<String>.from(previousUserMessages),
+      if (previousUserMessages.isNotEmpty)
+        'previousUserMessages': List<String>.from(previousUserMessages),
     });
     if (response['profileId'] != profileId) {
       throw const JyotaraApiException(
@@ -284,27 +302,50 @@ class JyotaraApiClient {
     return GuidanceResponse.fromJson(response);
   }
 
-  Future<Map<String, dynamic>> renewChartSession({required String chartTicket, required String profileId}) async {
-    final result = await _post('/api/profile/renew', {'chartTicket': chartTicket, 'profileId': profileId});
+  Future<Map<String, dynamic>> renewChartSession({
+    required String chartTicket,
+    required String profileId,
+  }) async {
+    final result = await _post('/api/profile/renew', {
+      'chartTicket': chartTicket,
+      'profileId': profileId,
+    });
     final authorized = parseChartInstant(result['chatAuthorizedAt']);
     final expires = parseChartInstant(result['chatExpiresAt']);
-    if (result['profileId'] != profileId || result['renewed'] != true || result['natalRecalculated'] != false ||
-        result['chartTicket'] is! String || (result['chartTicket'] as String).isEmpty ||
-        authorized == null || expires == null || expires.difference(authorized) != const Duration(hours: 24)) {
-      throw const JyotaraApiException('The renewed chat access could not be verified. Your saved chart was not replaced.');
+    if (result['profileId'] != profileId ||
+        result['renewed'] != true ||
+        result['natalRecalculated'] != false ||
+        result['chartTicket'] is! String ||
+        (result['chartTicket'] as String).isEmpty ||
+        authorized == null ||
+        expires == null ||
+        expires.difference(authorized) != const Duration(hours: 24)) {
+      throw const JyotaraApiException(
+        'The renewed chat access could not be verified. Your saved chart was not replaced.',
+      );
     }
     return result;
   }
 
-  Future<void> deleteChartSession({required String chartTicket, required String profileId}) async {
+  Future<void> deleteChartSession({
+    required String chartTicket,
+    required String profileId,
+  }) async {
     if (chartTicket.isEmpty || profileId.isEmpty || _sessionCookie == null) {
-      throw const JyotaraApiException('A saved chart is required for server deletion.');
+      throw const JyotaraApiException(
+        'A saved chart is required for server deletion.',
+      );
     }
     final response = await _post('/api/profile/delete', {
-      'chartTicket': chartTicket, 'profileId': profileId,
+      'chartTicket': chartTicket,
+      'profileId': profileId,
     });
-    if (response['deleted'] != true || response['scope'] != 'anonymous_chart_session') {
-      throw const JyotaraApiException('Server deletion was not confirmed. Please retry.', deliveryUncertain: true);
+    if (response['deleted'] != true ||
+        response['scope'] != 'anonymous_chart_session') {
+      throw const JyotaraApiException(
+        'Server deletion was not confirmed. Please retry.',
+        deliveryUncertain: true,
+      );
     }
   }
 
@@ -326,7 +367,7 @@ class JyotaraApiClient {
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 40));
     } on TimeoutException {
       throw const JyotaraApiException(
         'The request timed out before an answer was received.',
@@ -354,7 +395,10 @@ class JyotaraApiClient {
       if (match != null) {
         final value = match.group(1)!;
         if (!RegExp(r'^[A-Za-z0-9_-]{1,128}$').hasMatch(value)) {
-          throw const JyotaraApiException('The service returned an invalid session.', deliveryUncertain: true);
+          throw const JyotaraApiException(
+            'The service returned an invalid session.',
+            deliveryUncertain: true,
+          );
         }
         _sessionCookie = 'nirayana_pilot_session=$value';
       }
@@ -380,7 +424,8 @@ class JyotaraApiClient {
             ? payload['error'] as String
             : 'Jyotara service is unavailable.',
         statusCode: response.statusCode,
-        deliveryUncertain: response.statusCode >= 500 ||
+        deliveryUncertain:
+            response.statusCode >= 500 ||
             payload['code'] == 'request_already_received',
       );
     }

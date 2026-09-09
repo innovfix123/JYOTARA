@@ -278,7 +278,7 @@ const guides = <Guide>[
     category: 'Relationships',
     speciality: 'Relationships',
     description: 'Communication, trust and relationship questions.',
-    asset: 'assets/images/aadhirai.png',
+    asset: 'assets/images/iniya.png',
     icon: Icons.favorite_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What does my Kundli say about relationships?'],
@@ -288,7 +288,7 @@ const guides = <Guide>[
     category: 'Family',
     speciality: 'Family',
     description: 'Family bonds and household questions.',
-    asset: 'assets/images/tharagai.png',
+    asset: 'assets/images/nila.png',
     icon: Icons.people_alt_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What family themes appear in my chart?'],
@@ -298,7 +298,7 @@ const guides = <Guide>[
     category: 'Career',
     speciality: 'Jobs',
     description: 'Job search, interviews and employment questions.',
-    asset: 'assets/images/arivan.png',
+    asset: 'assets/images/vetri.png',
     icon: Icons.work_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What does my chart show about work?'],
@@ -308,7 +308,7 @@ const guides = <Guide>[
     category: 'Business',
     speciality: 'Business',
     description: 'Business direction and partnership questions.',
-    asset: 'assets/images/arivan.png',
+    asset: 'assets/images/valan.png',
     icon: Icons.storefront_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What business themes appear in my Kundli?'],
@@ -318,7 +318,7 @@ const guides = <Guide>[
     category: 'Education',
     speciality: 'Higher Education',
     description: 'Further study and learning direction.',
-    asset: 'assets/images/medha.png',
+    asset: 'assets/images/oli.png',
     icon: Icons.school_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What study themes appear in my chart?'],
@@ -328,7 +328,7 @@ const guides = <Guide>[
     category: 'Property',
     speciality: 'Property',
     description: 'Home and property questions.',
-    asset: 'assets/images/tharagai.png',
+    asset: 'assets/images/agam.png',
     icon: Icons.home_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['What does my chart show about home life?'],
@@ -338,12 +338,48 @@ const guides = <Guide>[
     category: 'Spiritual',
     speciality: 'Spiritual',
     description: 'Traditional Yoga meanings and spiritual reflection.',
-    asset: 'assets/images/kaalam.png',
+    asset: 'assets/images/arul.png',
     icon: Icons.auto_awesome_rounded,
     colors: [Color(0xFF5A54A8), Color(0xFF263255)],
     prompts: ['Explain the Yogas in my Kundli.'],
   ),
 ];
+
+String guideWelcome(Guide guide, String name, String language) {
+  final person = name.trim().isEmpty ? '' : ' ${name.trim()}';
+  final topics = <String, List<String>>{
+    'Love': ['love', 'காதல்', 'love'],
+    'Relationships': ['your relationship', 'உங்கள் உறவு', 'unga relationship'],
+    'Marriage': ['marriage', 'திருமணம்', 'marriage'],
+    'Family': ['family', 'குடும்பம்', 'family'],
+    'Career': [
+      guide.name == 'Vetri' ? 'your job search' : 'your career',
+      'வேலை',
+      'unga velai',
+    ],
+    'Business': ['your business', 'வணிகம்', 'unga business'],
+    'Education': ['your studies', 'படிப்பு', 'unga padippu'],
+    'Property': [
+      'home or property',
+      'வீடு அல்லது சொத்து',
+      'veedu allathu property',
+    ],
+    'Spiritual': [
+      'what you are reflecting on',
+      'உங்கள் மனதில் இருக்கும் எண்ணங்கள்',
+      'unga manasula irukkira vishayam',
+    ],
+    'Daily': ['today', 'இன்றைய நாள்', 'innaiku'],
+  };
+  final topic = topics[guide.category] ?? topics['Daily']!;
+  if (language == 'tamil') {
+    return 'வணக்கம்$person! நான் ${guide.name}. ${topic[1]} பற்றி எதைப் பேச விரும்புகிறீர்கள்? உங்கள் நிலையைச் சொல்லுங்கள்; ஒன்றாகப் பார்ப்போம்.';
+  }
+  if (language == 'tanglish') {
+    return 'Vanakkam$person! Naan ${guide.name}. ${topic[2]} pathi enna pesa virumbureenga? Unga nilaimaiyai sollunga; serndhu paarkalaam.';
+  }
+  return 'Hi$person, I’m ${guide.name}. What’s on your mind about ${topic[0]}? Tell me a little about what’s happening, and we’ll take it from there.';
+}
 
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
@@ -863,7 +899,11 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(
         ChatMessage(
           fromUser: false,
-          text: 'Ask in English, Tamil or Tanglish and choose your preferred reply language above. Guidance depends on the chart information and reviewed interpretation available; future events are not guaranteed.',
+          text: guideWelcome(
+            widget.guide,
+            _session.nickname,
+            _language == ChatLanguage.auto ? 'english' : _language.name,
+          ),
           label: 'AI VEDIC GUIDE',
         ),
       );
@@ -924,6 +964,22 @@ class _ChatScreenState extends State<ChatScreen> {
       sentConversation.pending = true;
     });
     sentConversation.changed();
+    if (RegExp(
+      r'^(hi|hello|hey|vanakkam|வணக்கம்)[!.,\s]*$',
+      caseSensitive: false,
+    ).hasMatch(text)) {
+      _messages.add(
+        ChatMessage(
+          fromUser: false,
+          text: guideWelcome(widget.guide, _session.nickname, detected.name),
+          label: 'AI VEDIC GUIDE',
+        ),
+      );
+      sentConversation.pending = false;
+      sentConversation.changed();
+      await _session.flushStorage();
+      return;
+    }
     try {
       final category = widget.guide.category;
       final result = await _session.ask(

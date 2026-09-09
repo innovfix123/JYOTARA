@@ -101,13 +101,14 @@ export async function POST(request: Request) {
     const datetime = sandbox ? '2026-01-01T12:00:00+05:30' : birthDatetime;
     // Current context is server-owned, never a caller-selected historical date.
     const currentDatetime = sandbox ? '2026-09-01T12:00:00+05:30' : new Date().toISOString();
-    const language = body.language === 'en' ? 'en' : 'ta';
+    // Canonical structured names keep house/lord calculations consistent across UI languages.
+    const language = 'en';
     const fetchJson = (path: string, requestDatetime = datetime) => prokeralaJson(env, path, {
       datetime: requestDatetime, latitude: body.latitude!, longitude: body.longitude!, language,
     });
     // Natal modules and shared current-context modules use the same bounded,
     // non-retrying transport. Cache hits may reduce current-context requests.
-    const kundli = await fetchJson('/astrology/kundli');
+    const kundli = await prokeralaJson(env, '/astrology/kundli/advanced', {datetime, latitude:body.latitude!, longitude:body.longitude!, language:'en'});
     const contextRequest = sandbox
       ? Promise.all([fetchJson('/astrology/planet-position', currentDatetime), fetchJson('/astrology/panchang', currentDatetime)])
           .then(([transitPosition, panchang]) => ({ transitPosition, panchang, contextCalculatedAt: currentDatetime }))

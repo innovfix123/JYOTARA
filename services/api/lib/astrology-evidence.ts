@@ -671,3 +671,45 @@ export function buildFallbackAnswer(packet: EvidencePacket, style?: string) {
   }
   return `${englishFocus[packet.category]}: ${facts}. Treat these as reflective traditional indicators, not a guaranteed prediction.`;
 }
+
+/** Calculation context for a conversational traditional reading. House topics
+ * are interpretive conventions, not provider predictions or verified outcomes.
+ * Reference: https://vedicastrology.com/articles/houses (9 Sep 2026).
+ * All positions below are derived only from authenticated Prokerala positions;
+ * whole-sign Lagna houses are withheld when the birth time is unknown. */
+export function buildTopicContext(chart: ChartFacts, category: GuidanceCategory, known: boolean, now = Date.now()) {
+  const topics: Record<GuidanceCategory, {houses:number[]; focus:string}> = {
+    Love:{houses:[5,7],focus:'romance and partnership'}, Relationships:{houses:[5,7],focus:'partnership and connection'},
+    Breakup:{houses:[5,7],focus:'relationship reflection; never infer another person’s return'},
+    Marriage:{houses:[7,2,4],focus:'partnership, family resources and home'},
+    Family:{houses:[2,4,5],focus:'family resources, home and children'},
+    Career:{houses:[10,2,11],focus:'work, income and goals'}, Business:{houses:[7,10,2,11],focus:'partnership, work and resources'},
+    Education:{houses:[5,9],focus:'learning, teachers and higher study'}, Property:{houses:[4,2],focus:'home and resources'},
+    Spiritual:{houses:[9,12],focus:'reflection, teachers and retreat'}, Daily:{houses:[1,3],focus:'daily focus and initiative'},
+    Panchang:{houses:[],focus:'current calendar details'},
+  };
+  const topic=topics[category];
+  const meanings:Record<number,string>={1:'self and daily direction',2:'family and resources',3:'communication and initiative',4:'home and stability',5:'learning and romance',6:'service and routines',7:'partnership',8:'shared resources and change',9:'teachers and higher study',10:'work and public responsibilities',11:'goals and gains',12:'retreat and reflection'};
+  const lagna=known ? chartSignNumber(chart.lagna) : undefined;
+  const houseOf=(position:number) => lagna === undefined ? undefined : (position-lagna+12)%12+1;
+  const houses=lagna === undefined ? [] : topic.houses.map(house=>{
+    const sign=(lagna+house-2)%12+1;
+    const lord=traditionalSignLords[sign-1];
+    const placement=chart.planets.find(p=>p.name.toLowerCase()===lord.toLowerCase());
+    return {house,topic:meanings[house],sign,lord,occupants:chart.planets.filter(p=>p.position===sign).map(p=>p.name),
+      ...(placement ? {lordSign:placement.rasi,lordHouse:houseOf(placement.position),linkedTheme:meanings[houseOf(placement.position)!]} : {})};
+  });
+  const periods=known ? chart.dashaTimeline ? selectDashaTimeline(chart.dashaTimeline,now) : {
+    ...(activePeriod(chart.currentDasha,now)?{currentDasha:chart.currentDasha}:{}),
+    ...(activePeriod(chart.currentAntardasha,now)?{currentAntardasha:chart.currentAntardasha}:{}),
+  } : {};
+  return {basis:'Jyotara traditional interpretation of Prokerala calculations; not a Prokerala-written prediction',
+    focus:topic.focus, birthTimeKnown:known, houseConvention:'whole-sign from Lagna',
+    moonSign:chart.rashi, nakshatra:chart.nakshatra, ...(lagna?{lagna:chart.lagna}:{}), houses,
+    planets:known?chart.planets:[], periods,
+    navamsa:known && ['Love','Relationships','Marriage'].includes(category)?chart.navamsa:undefined,
+    currentPanchang:['Daily','Panchang'].includes(category)?chart.todayPanchang:undefined,
+    interpretationScope:'Only connect each supplied house topic with its supplied linkedTheme as a traditional area of reflection. Do not invent sign or nakshatra personality, planet-based occupations, skills, strengths or outcomes. Planet periods are calculated intervals, not evidence that a desired event will happen. A practical action comes from the user situation, not from the chart.',
+    constraint:known?'Discuss themes cautiously; no strength ranking, concrete event date, success probability, diagnosis or hidden feelings follows from these calculations alone.':'Unknown birth time: Moon sign and nakshatra are based on a noon reference and may vary during the birth day; do not treat them as precise or infer personality. Do not infer Lagna, houses, divisional charts or exact timing. Ask about the user’s situation; do not ask again for a time already marked unknown.',
+  };
+}

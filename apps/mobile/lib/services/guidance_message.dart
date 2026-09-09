@@ -11,6 +11,7 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       : language == 'tanglish'
       ? tanglish
       : english;
+  final chartReading = result.answerMode == 'chart_guidance';
   final provider = result.answerMode == 'provider_reading';
   final traditional = result.answerMode == 'reviewed_traditional';
   final limited = result.answerMode != 'personalised' && !traditional;
@@ -21,7 +22,7 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       ?.toIso8601String()
       .substring(0, 16)
       .replaceFirst('T', ' ');
-  final heading = provider
+  final heading = provider || chartReading
       ? copy('Reading source', 'பலனின் ஆதாரம்', 'Reading source')
       : limited
       ? copy(
@@ -50,7 +51,11 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       if (result.limitation?.trim().isNotEmpty == true)
         '${copy('Limitations', 'வரம்புகள்', 'Varambugal')}: ${result.limitation}',
     ].join('\n\n'),
-    label: provider
+    label: chartReading
+        ? copy('CHART GUIDANCE', 'ஜாதக வழிகாட்டல்', 'JATHAGA GUIDANCE')
+        : result.answerMode == 'model_guidance'
+        ? copy('GUIDANCE', 'வழிகாட்டல்', 'GUIDANCE')
+        : provider
         ? copy('PROKERALA READING', 'புரோகேரளா பலன்', 'PROKERALA READING')
         : result.answerMode == 'practical_guidance'
         ? copy(
