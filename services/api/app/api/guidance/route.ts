@@ -295,7 +295,10 @@ export async function POST(request: Request) {
         extract,seal:value=>sealReply(chartSecret,reportId,value),open:cipher=>openReply(chartSecret,reportId,cipher),
       });
       reportStatus=loaded.status==='ready'?(loaded.cached?'cached':'fetched'):loaded.status;
-      if(loaded.report) reportReply=marriageReportReply(loaded.report,style,question,new Date(),history);
+      if(loaded.report) {
+        reportReply=marriageReportReply(loaded.report,style,question,new Date(),history);
+        if(!reportReply)reportStatus='no_matching_period';
+      }
     }
   }
   const initialPacket = buildEvidencePacket({ category: body.category, question, language,
@@ -349,7 +352,8 @@ export async function POST(request: Request) {
     :style==='tanglish'
     ? missingBirth?'Kalyana kaalam paarka confirmed birth time thevai. Unga pirandha neram theriyuma?':refreshNeeded?'Saved birth details-a thirandhu jathagathai refresh pannunga. Appuram kalyana kaala report-a paarkalaam.':'Kalyana kaala report ippo kidaikkala. Pudhu report request thirumba anuppala; unga jathagam save aagirukku.'
     :missingBirth?'A marriage-period reading needs a confirmed birth time. Do you know your birth time?':refreshNeeded?'Please open your saved birth details and refresh the chart so I can check its marriage-period report.':'The marriage-period report is unavailable right now. No repeat report request was sent; your saved chart is still available.';
-  const answer = reportReply?.answer ?? (wantsMarriageTiming ? timingLimit : providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
+  const noPeriod=style==='tamil'?'நீங்கள் கேட்ட காலத்துக்குப் பொருந்தும் திருமணக் காலம் இந்த அறிக்கையில் இல்லை. அதனால் திருமணம் நடக்காது என்று பொருள் இல்லை.':style==='tanglish'?'Neenga ketta kaalathukku porundhum kalyana kaalam indha report-la illa. Adhanaala kalyanam nadakkaadhunu artham illa.':'This report does not list a marriage period matching the time you asked about. That does not mean marriage will not happen.';
+  const answer = reportReply?.answer ?? (wantsMarriageTiming ? reportStatus==='no_matching_period'?noPeriod:timingLimit : providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
   const providerReading = !!generated && requestsReading && providerSources.length > 0 && !chartContext;
   const chartReading = !!generated && !!chartContext && (chartContext.birthTimeKnown || !!chartContext.currentPanchang);
   const modelPracticalAdvice = !!generated && !providerReading && !chartReading;

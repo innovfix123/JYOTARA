@@ -35,9 +35,12 @@ const text='Synthetic cover\fFavourable Marriage Periods\nDasha Lord Sub Dasha L
 test('report parser cites the actual page and distinguishes timing follow-ups from new topics',()=>{
  const report=parseMarriageReport(text,'a'.repeat(64));
  assert.equal(report.page,2);
+ assert.equal(marriageReportReply(report,'english','In 2029?',new Date('2026-09-09')).window.start,'2028-01-01');
+ assert.equal(marriageReportReply(report,'english','In 2035?',new Date('2026-09-09')),null);
  assert.equal(marriageTimingQuestion('When will I get a job?',['When will I marry?'],'Marriage'),false);
  assert.equal(marriageTimingQuestion('What about after that?',['When will I marry?'],'Love'),true);
  assert.equal(marriageTimingQuestion('Hello',[],'Marriage'),false);
+ assert.equal(marriageTimingQuestion('In 2029?',['When will I marry?'],'Love'),true);
  assert.throws(()=>parseMarriageReport(text.replace('2027-01-01','2027-02-30'),'a'.repeat(64)));
  assert.equal(marriageReportReply(report,'english','What about next?',new Date('2026-09-09'),['When will I marry?']).window.start,'2028-01-01');
  for(const style of ['english','tamil','tanglish'])assert.ok(marriageReportReply(report,style,'When?',new Date('2026-09-09')).answer.length<600);

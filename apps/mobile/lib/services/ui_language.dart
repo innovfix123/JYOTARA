@@ -99,7 +99,7 @@ const tamilUi = <String, String>{
   'Prefer not to say': 'பகிர விரும்பவில்லை',
   'Gender': 'பாலினம்',
   'Not selected': 'தேர்ந்தெடுக்கப்படவில்லை',
-  'Saved with your profile on this device. Not sent for chart calculations.': 'இந்தச் சாதனத்தில் உங்கள் விவரங்களுடன் சேமிக்கப்படும். ஜாதகக் கணக்கீட்டுக்கு அனுப்பப்படாது.',
+  'Saved with your profile. Your selected gender is used when requesting a detailed astrology report.': 'உங்கள் விவரங்களுடன் சேமிக்கப்படும். விரிவான ஜாதக அறிக்கையைக் கோரும்போது நீங்கள் தேர்ந்தெடுத்த பாலினம் பயன்படுத்தப்படும்.',
 
   'These periods belong to the saved calculation date. New chat answers check the current period separately.': 'இவை சேமித்த கணக்கீட்டுத் தேதிக்கான தசை–புக்திகள். புதிய உரையாடல் பதில்களுக்கு நடப்புக் காலம் தனியாகச் சரிபார்க்கப்படும்.',
   'Navamsa (D9)': 'நவாம்சம் (D9)',
@@ -261,8 +261,8 @@ const tamilUi = <String, String>{
   'India · Age 18+ · Times are Indian Standard Time (UTC+05:30).':
       'இந்தியா · வயது 18+ · நேரங்கள் இந்திய நேரப்படி (UTC+05:30).',
   'Changing your birth date, time or place replaces this device’s chart and clears its previous guide chats only after the new chart is verified. If calculation fails, your existing profile and chats stay unchanged. Refreshing the same details keeps your chats.': 'பிறந்த தேதி, நேரம் அல்லது இடத்தை மாற்றினால், புதிய ஜாதகம் சரிபார்க்கப்பட்ட பிறகே இந்தச் சாதனத்தின் பழைய ஜாதகமும் உரையாடல்களும் மாற்றப்படும். கணக்கீடு தோல்வியடைந்தால் பழைய விவரங்களும் உரையாடல்களும் அப்படியே இருக்கும். அதே விவரங்களைப் புதுப்பித்தால் உரையாடல்கள் அழியாது.',
-  'Nickname (optional, saved only on this device)':
-      'அழைப்புப் பெயர் (விருப்பம்; இந்தச் சாதனத்தில் மட்டும் சேமிக்கப்படும்)',
+  'Name or alias (used on detailed reports)':
+      'பெயர் அல்லது புனைப்பெயர் (விரிவான அறிக்கைகளில் பயன்படுத்தப்படும்)',
   'Date of birth': 'பிறந்த தேதி',
   'Select date': 'தேதியைத் தேர்ந்தெடுக்கவும்',
   'I don’t know my exact birth time': 'எனது சரியான பிறந்த நேரம் தெரியாது',
@@ -276,7 +276,7 @@ const tamilUi = <String, String>{
   'Location data: Prokerala': 'இட விவரங்கள்: Prokerala',
   'India · IST': 'இந்தியா · இந்திய நேரம்',
   'I am 18+ and agree to process my birth details for automated Vedic guidance.': 'எனக்கு 18 வயது நிறைவடைந்துள்ளது. தானியங்கி வேத ஜோதிட வழிகாட்டலுக்காக எனது பிறப்பு விவரங்களைப் பயன்படுத்தச் சம்மதிக்கிறேன்.',
-  'Birth details go to our calculation service; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.': 'பிறப்பு விவரங்கள் கணக்கீட்டுச் சேவைக்கும், ஜாதக விவரங்களும் உங்கள் கேள்வியும் மொழிச் சேவைக்கும் அனுப்பப்படும். உங்கள் ஜாதகமும் உரையாடல்களும் இந்தச் சாதனத்தில் மறையாக்கம் செய்து சேமிக்கப்படும். ஜாதகம் பகுதியில் அவற்றை நீக்கலாம். புதிய பிறப்பு விவரங்களை உருவாக்கும்போது ஆய்வுக்கான விருப்பப் பகிர்வு முடக்கப்படும்; கணக்கு பகுதியில் தனியாகத் தேர்ந்தெடுக்கலாம். இணைக்கப்பட்ட பிறப்பு விவரத்திற்கு, ஜாதகம் பகுதியில் சேவையக ஜாதக மற்றும் பதில் நகல்களையும் நீக்கலாம். குறைந்தபட்ச பயன்பாட்டுப் பதிவுகள் இருக்கும்; காப்பு நகல்கள் எட்டு நாட்களுக்குள் காலாவதியாகும்.',
+  'Name or alias, selected gender and birth details go to Prokerala when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.': 'விரிவான அறிக்கையைக் கோரும்போது பெயர் அல்லது புனைப்பெயர், தேர்ந்தெடுத்த பாலினம் மற்றும் பிறப்பு விவரங்கள் புரோகேரளாவுக்கு அனுப்பப்படும்; ஜாதக விவரங்களும் உங்கள் கேள்வியும் மொழிச் சேவைக்கும் அனுப்பப்படும். உங்கள் ஜாதகமும் உரையாடல்களும் இந்தச் சாதனத்தில் மறையாக்கம் செய்து சேமிக்கப்படும். ஜாதகம் பகுதியில் அவற்றை நீக்கலாம். புதிய பிறப்பு விவரங்களை உருவாக்கும்போது ஆய்வுக்கான விருப்பப் பகிர்வு முடக்கப்படும்; கணக்கு பகுதியில் தனியாகத் தேர்ந்தெடுக்கலாம். இணைக்கப்பட்ட பிறப்பு விவரத்திற்கு, ஜாதகம் பகுதியில் சேவையக ஜாதக மற்றும் பதில் நகல்களையும் நீக்கலாம். குறைந்தபட்ச பயன்பாட்டுப் பதிவுகள் இருக்கும்; காப்பு நகல்கள் எட்டு நாட்களுக்குள் காலாவதியாகும்.',
   'Calculating your chart…': 'உங்கள் ஜாதகம் கணக்கிடப்படுகிறது…',
   'Calculate my chart': 'என் ஜாதகத்தைக் கணக்கிடவும்',
   'Traditional guidance is interpretive, not a guarantee of future events. Pilot usage limits apply.': 'பாரம்பரிய வழிகாட்டல் ஒரு விளக்கம் மட்டுமே; எதிர்கால நிகழ்வுகளுக்கான உறுதி அல்ல. சோதனைப் பயன்பாட்டு வரம்புகள் பொருந்தும்.',

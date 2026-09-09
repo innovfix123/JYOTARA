@@ -13,10 +13,10 @@ void main() {
   test('report birth details are frozen with the question for a safe retry', () async {
     final sent = <Map<String, dynamic>>[];
     final session = ProfileSession(api: JyotaraApiClient(baseUrl: 'https://example.test', client: MockClient((request) async {
-      if (request.url.path.endsWith('kundli')) return http.Response(jsonEncode({
+      if (request.url.path.endsWith('kundli')) { return http.Response(jsonEncode({
         'sandbox': false, 'chartTicket': 'test-ticket', 'profileId': 'test-profile',
         'result': {'data': {'nakshatra_details': {'chandra_rasi': {'name': 'Meena'}, 'nakshatra': {'name': 'Revati'}}}},
-      }), 200);
+      }), 200); }
       sent.add(jsonDecode(request.body) as Map<String, dynamic>);
       return http.Response('{"profileId":"test-profile","answer":"Test response","evidence":[]}', 200);
     })));

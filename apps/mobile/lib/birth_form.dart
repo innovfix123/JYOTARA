@@ -221,7 +221,7 @@ class _BirthFormState extends State<BirthForm> {
             ),
             const SizedBox(height: 16),
             const UiText(
-              'Saved with your profile on this device. Not sent for chart calculations.',
+              'Saved with your profile. Your selected gender is used when requesting a detailed astrology report.',
             ),
           ],
         ),
@@ -257,7 +257,7 @@ class _BirthFormState extends State<BirthForm> {
               decoration: InputDecoration(
                 labelText: uiText(
                   context,
-                  'Nickname (optional, saved only on this device)',
+                  'Name or alias (used on detailed reports)',
                 ),
               ),
             ),
@@ -374,7 +374,7 @@ class _BirthFormState extends State<BirthForm> {
                 'I am 18+ and agree to process my birth details for automated Vedic guidance.',
               ),
               subtitle: const UiText(
-                'Birth details go to our calculation service; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
+                'Name or alias, selected gender and birth details go to Prokerala when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
               ),
             ),
             const UiText(

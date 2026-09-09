@@ -13,7 +13,7 @@ export function reportPerson(value:unknown):ReportPerson|null {
 export function marriageTimingQuestion(question:string,history:string[]=[],category='') {
   const q=question.toLowerCase();
   const marriage=/marry|married|marriage|wedding|kalyanam|kalyaanam|திருமண|கல்யாண/iu;
-  const timing=/when|timing|period|date|soon|delay|year|month|next|after|later|miss|eppo|eppodhu|kaalam|neram|adutha|apram|எப்போது|காலம்|தேதி|தாமத|அடுத்து|பிறகு/iu;
+  const timing=/20\d{2}|21\d{2}|when|timing|period|date|soon|delay|year|month|next|after|later|miss|eppo|eppa|eppodhu|kaalam|neram|adutha|apram|எப்போது|காலம்|தேதி|தாமத|அடுத்து|பிறகு/iu;
   const otherTopic=/\b(job|career|business|education|exam|study|work)\b|வேலை|தொழில்|படிப்பு/iu;
   if(otherTopic.test(q)&&!marriage.test(q))return false;
   return timing.test(q)&&(marriage.test(q)||category==='Marriage'||history.slice(-3).some(v=>marriage.test(v)&&timing.test(v)));
@@ -31,7 +31,9 @@ export function parseMarriageReport(text:string,pdfSha256:string,now=new Date())
 }
 export function marriageReportReply(report:MarriageReport,style:string,question:string,now=new Date(),history:string[]=[]) {
   const day=new Date(now.getTime()+19800000).toISOString().slice(0,10);
-  const eligible=report.windows.filter(w=>w.end>=day);
+  const requestedYears=[...question.matchAll(/\b(20\d{2}|21\d{2})\b/g)].map(m=>Number(m[1]));
+  const year=requestedYears.length===1?requestedYears[0]:undefined;
+  const eligible=report.windows.filter(w=>w.end>=day && (year===undefined || (w.start<=`${year}-12-31` && w.end>=`${year}-01-01`)));
   const next=/next|after|later|miss|adutha|apram|அடுத்து|பிறகு/iu.test(question);
   const window=next&&eligible[0]?.start<=day?eligible[1]:eligible[0];
   if(!window)return null;
