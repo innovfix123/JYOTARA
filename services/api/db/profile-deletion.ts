@@ -7,7 +7,8 @@ export async function chartSessionDeleted(db: D1Database, session: string, now =
   return row?.revoked === 1;
 }
 
-/** Invoke only after authenticating a chart deletion capability. Atomic erasure
+/** Invoke only after authenticating a chart deletion capability or runtime
+ * invitation/session ownership for pending-request erasure. Atomic erasure
  * closes reservations before removing content; metering tombstones remain. */
 export async function deleteChartSession(db: D1Database, session: string, now = Date.now()) {
   await db.batch([

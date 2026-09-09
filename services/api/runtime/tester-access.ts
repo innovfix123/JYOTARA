@@ -8,7 +8,7 @@ export function testerIdentity(code: string | undefined, hashes: string, expiry:
   const matches = known.map(value => timingSafeEqual(digest, Buffer.from(value, 'hex')));
   if (!matches.some(Boolean)) return null;
   // Permit capability-authenticated erasure after the test period expires.
-  if (path !== '/api/profile/delete' && path !== '/api/pilot/events') {
+  if (path !== '/api/profile/delete' && path !== '/api/profile/discard' && path !== '/api/pilot/events') {
     const expiresAt = Date.parse(expiry);
     if (!Number.isFinite(expiresAt) || now >= expiresAt) return null;
   }
@@ -19,12 +19,12 @@ export async function admitTesterRequest(db: PostgresDatabase, tester: string, p
   const session = cookie.split(';').map(p => p.trim()).find(p => p.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
   const needsOwner = !['/api/locations', '/api/tester/check', '/api/horoscope/daily', '/api/kundli/matching'].includes(path);
   if (needsOwner && (!session || !/^[A-Za-z0-9_-]{1,128}$/.test(session))) return 400;
-  const limit = path === '/api/horoscope/daily' ? 60 : path === '/api/kundli/matching' ? 5 : path === '/api/astrology/kundli' ? 2 : path === '/api/guidance' ? 30 : path === '/api/locations' ? 100 : null;
+  const limit = path === '/api/horoscope/daily' ? 60 : path === '/api/kundli/matching' ? 5 : path === '/api/astrology/kundli' ? 10 : path === '/api/guidance' ? 30 : path === '/api/locations' ? 100 : null;
   const day = new Date(now + 19_800_000).toISOString().slice(0, 10);
   return db.transaction(async client => {
     let newChartSession = false;
     if (needsOwner) {
-      if (path === '/api/astrology/kundli') {
+      if (path === '/api/astrology/kundli' || path === '/api/profile/discard') {
         const inserted = await client.query('INSERT INTO tester_sessions (session_id,tester_key,created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [session, tester, now]);
         newChartSession = inserted.rowCount === 1;
       }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'services/adult_birth_date.dart';
+import 'services/birth_profile_input.dart';
 
 import 'services/profile_session.dart';
 import 'services/jyotara_api.dart';
@@ -13,9 +14,11 @@ class BirthForm extends StatefulWidget {
     required this.session,
     this.onSubmit,
     this.initialGender,
+    this.initialDetails,
   });
   final Future<void> Function(Map<String, dynamic>)? onSubmit;
   final ProfileGender? initialGender;
+  final Map<String, dynamic>? initialDetails;
   final ProfileSession session;
   @override
   State<BirthForm> createState() => _BirthFormState();
@@ -37,10 +40,20 @@ class _BirthFormState extends State<BirthForm> {
   @override
   void initState() {
     super.initState();
-    _nickname.text = widget.session.nickname;
+    _nickname.text =
+        widget.initialDetails?['nickname'] as String? ??
+        widget.session.nickname;
     _gender = widget.initialGender ?? widget.session.gender;
     _showGender = _gender == null && widget.session.birthInput == null;
-    final saved = widget.session.birthInput;
+    final input = widget.initialDetails;
+    final saved = input == null
+        ? widget.session.birthInput
+        : BirthProfileInput(
+            input['datetime'] as String,
+            (input['latitude'] as num).toDouble(),
+            (input['longitude'] as num).toDouble(),
+            input['exactTime'] == true,
+          );
     if (saved == null) return;
     final stamp = saved.indiaDateTime;
     _date = DateTime(stamp.year, stamp.month, stamp.day);
@@ -49,6 +62,7 @@ class _BirthFormState extends State<BirthForm> {
         ? TimeOfDay(hour: stamp.hour, minute: stamp.minute)
         : null;
     final label =
+        widget.initialDetails?['birthplaceLabel'] as String? ??
         widget.session.birthplaceLabel ??
         'Saved birthplace (${saved.latitude.toStringAsFixed(4)}, ${saved.longitude.toStringAsFixed(4)})';
     _placeQuery.text = label;
@@ -131,6 +145,7 @@ class _BirthFormState extends State<BirthForm> {
           'longitude': (_place![7] as num).toDouble(),
           'exactTime': !_unknown,
           'nickname': _nickname.text.trim(),
+          'birthplaceLabel': _place![1] as String,
         });
       } else {
         await widget.session.calculate(

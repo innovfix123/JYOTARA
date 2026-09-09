@@ -58,6 +58,30 @@ void main() {
     expect(disk, isNull);
     expect(second.profileRequestUnconfirmed, false);
   });
+  test('pending deletion uses the original session and preserves recovery on failure', () async {
+    String? disk;
+    var allowDelete = false;
+    String? originalCookie;
+    final session = ProfileSession(
+      vault: LocalProfileVault(read: () async => disk, write: (value) async => disk = value),
+      api: JyotaraApiClient(baseUrl: 'https://example.test', client: MockClient((request) async {
+        if (request.url.path == '/api/profile/discard') {
+          expect(request.headers['cookie'], originalCookie);
+          return http.Response(allowDelete ? '{"deleted":true}' : '{"error":"Unavailable"}', allowDelete ? 200 : 503);
+        }
+        originalCookie = request.headers['cookie'];
+        throw http.ClientException('Lost response');
+      })),
+    );
+    await expectLater(calculate(session), throwsA(isA<JyotaraApiException>()));
+    await expectLater(session.discardUnfinished(), throwsA(isA<JyotaraApiException>()));
+    expect(disk, isNotNull);
+    expect(session.profileRequestUnconfirmed, true);
+    allowDelete = true;
+    await session.discardUnfinished();
+    expect(disk, isNull);
+    expect(session.profileRequestUnconfirmed, false);
+  });
   test('recovery record write failure prevents first provider request', () async {
     var calls = 0;
     final session = ProfileSession(

@@ -624,6 +624,18 @@ class ProfileSession extends ChangeNotifier {
       (_raw?['chartTicket'] is String && (_raw!['chartTicket'] as String).isNotEmpty &&
        _raw?['profileId'] is String && (_raw!['profileId'] as String).isNotEmpty);
 
+  Future<void> discardUnfinished() async {
+    if (calculating || answering || deleting) throw const JyotaraApiException('Please wait for the current request to finish.');
+    if (_facts != null || _raw != null) throw const JyotaraApiException('Use saved chart deletion for a completed Kundli.');
+    deleting = true;
+    try {
+      if (profileRequestUnconfirmed) await _api.discardPendingChart();
+      await clear();
+    } finally {
+      deleting = false;
+    }
+  }
+
   Future<void> clear({bool includeServer = false}) {
     // Repeated confirmations share one operation, including its failure.
     final pending = _deletion;

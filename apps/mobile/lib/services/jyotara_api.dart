@@ -198,6 +198,12 @@ class JyotaraApiClient {
     return ChartResponse.fromJson(response);
   }
 
+  Future<void> discardPendingChart() async {
+    ensureSession();
+    final result = await _post('/api/profile/discard', {});
+    if (result['deleted'] != true) throw const JyotaraApiException('Unfinished Kundli deletion was not confirmed.');
+  }
+
   Future<List<List<dynamic>>> searchLocations(String query) async {
     final value = query.trim();
     if (value.length < 3 || value.length > 80) {

@@ -1,3 +1,4 @@
+import { discardPending } from './discard-pending';
 import { daily, matching } from './discovery';
 import { createServer } from 'node:http';
 import { database } from './env';
@@ -19,6 +20,7 @@ const routes: Record<string, (request: Request) => Promise<Response>> = {
   'DELETE /api/pilot/events': eraseEvents,
   'POST /api/profile/renew': renew,
   'POST /api/profile/delete': deleteProfile,
+  'POST /api/profile/discard': discardPending,
 };
 if (!process.env.JYOTARA_TESTER_CODES_SHA256 || !process.env.JYOTARA_TESTER_EXPIRES_AT) {
   throw new Error('Tester access configuration is required');

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:jyotara/discovery_screens.dart';
+import 'package:jyotara/birth_form.dart';
 
 void main(){
  TestWidgetsFlutterBinding.ensureInitialized();
@@ -14,6 +15,17 @@ void main(){
   await KundliLibrary.remove(restored.first,restored);
   expect((await KundliLibrary.load()).map((r)=>r.id),[b.id]);
   expect(await KundliLibrary.storage.read(key:'nirayana.private-profile.v1'),'personal-record');
+ });
+ testWidgets('cancelled new Kundli leaves no unfinished row and Create works again',(tester)async{
+  FlutterSecureStorage.setMockInitialValues({});
+  await tester.pumpWidget(const MaterialApp(home:KundliLibraryScreen()));await tester.pumpAndSettle();
+  for(var i=0;i<2;i++){
+   await tester.ensureVisible(find.text('Create New Kundli'));await tester.tap(find.text('Create New Kundli'));await tester.pumpAndSettle();
+   expect(find.byType(BirthForm),findsOneWidget);
+   Navigator.of(tester.element(find.byType(BirthForm))).pop();await tester.pumpAndSettle();
+   expect(await KundliLibrary.load(),isEmpty);
+   expect(find.text('Unfinished Kundli'),findsNothing);
+  }
  });
  testWidgets('failed library load cannot replace the saved index',(tester)async{
   FlutterSecureStorage.setMockInitialValues({KundliLibrary.indexKey:'unreadable'});

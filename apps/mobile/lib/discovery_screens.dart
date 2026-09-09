@@ -462,12 +462,11 @@ class KundliLibrary {
     if (row.session.storageError != null) {
       throw Exception(row.session.storageError);
     }
-    if (row.session.profileRequestUnconfirmed) {
-      throw Exception(
-        'Reopen this Kundli to recover the pending calculation before deleting it.',
-      );
+    if (row.session.facts == null) {
+      await row.session.discardUnfinished();
+    } else {
+      await row.session.clear(includeServer: row.session.canDeleteServer);
     }
-    await row.session.clear(includeServer: row.session.canDeleteServer);
     if (row.session.storageError != null) {
       throw Exception(row.session.storageError);
     }
@@ -491,6 +490,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   String query = '';
   String? error;
   bool busy = true;
+  bool libraryLoaded = false;
   @override
   void initState() {
     super.initState();
@@ -503,14 +503,16 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
       if (mounted) {
         setState(() {
           rows = value;
+          libraryLoaded = true;
           error = null;
         });
       }
     } catch (_) {
       if (mounted) {
-        setState(
-          () => error = 'Saved Kundlis could not be opened. Please retry.',
-        );
+        setState(() {
+          libraryLoaded = false;
+          error = 'Saved Kundlis could not be opened. Please retry.';
+        });
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -518,7 +520,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   }
 
   Future<void> _edit([SavedKundli? row]) async {
-    if (busy || (row == null && error != null)) return;
+    if (busy || (row == null && !libraryLoaded)) return;
     setState(() => busy = true);
     try {
       final selected = row ?? await KundliLibrary.create(rows);
@@ -530,6 +532,12 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         ),
       );
       await selected.session.flushStorage();
+      if (row == null &&
+          selected.session.facts == null &&
+          !selected.session.profileRequestUnconfirmed &&
+          selected.session.storageError == null) {
+        await KundliLibrary.remove(selected, [...rows, selected]);
+      }
       await _load();
     } catch (e) {
       if (mounted) setState(() => error = e.toString());
@@ -563,9 +571,9 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
     try {
       await KundliLibrary.remove(row, rows);
       await _load();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        setState(() => error = 'Deletion was not completed. Please retry.');
+        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -584,7 +592,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Tester calculation limits apply.',
+          'Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.',
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: 18),
@@ -621,7 +629,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                     : row.session.nickname,
               ),
               subtitle: Text(
-                '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? 'Add birth details'}\n${row.session.birthplaceLabel}',
+                '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? 'Add birth details'}\n${row.session.birthplaceLabel ?? 'Birthplace not saved'}',
               ),
               isThreeLine: true,
               onTap: busy
@@ -669,7 +677,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
           ),
         const SizedBox(height: 18),
         FilledButton.icon(
-          onPressed: busy || error != null ? null : () => _edit(),
+          onPressed: busy || !libraryLoaded ? null : () => _edit(),
           icon: const Icon(Icons.add),
           label: const Text('Create New Kundli'),
         ),
@@ -680,7 +688,8 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 
 class MatchingScreen extends StatefulWidget {
   const MatchingScreen({super.key, this.request = discoveryRequest});
-  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>) request;
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
+  request;
   @override
   State<MatchingScreen> createState() => _MatchingScreenState();
 }
@@ -725,7 +734,22 @@ class _MatchingScreenState extends State<MatchingScreen> {
       'latitude': b.latitude,
       'longitude': b.longitude,
       'exactTime': b.exactTime,
+      'nickname': row.session.nickname,
+      'birthplaceLabel': row.session.birthplaceLabel,
     };
+  }
+
+  String _detailsLabel(bool male) {
+    final selected = male ? boy : girl;
+    final data =
+        (male ? boyDraft : girlDraft) ??
+        (selected?.session.birthInput == null ? null : _input(selected!));
+    if (data == null) return 'No birth details entered yet.';
+    final stamp = DateTime.parse(data['datetime'] as String)
+        .toUtc()
+        .add(const Duration(hours: 5, minutes: 30))
+        .toIso8601String();
+    return '${data['nickname'] ?? 'Selected profile'}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · confirmed birth time' : 'Birth time unknown — enter the confirmed time below'}';
   }
 
   Future<void> _notice(String message) async {
@@ -755,6 +779,11 @@ class _MatchingScreenState extends State<MatchingScreen> {
         builder: (_) => BirthForm(
           session: session,
           initialGender: male ? ProfileGender.male : ProfileGender.female,
+          initialDetails:
+              (male ? boyDraft : girlDraft) ??
+              ((male ? boy : girl)?.session.birthInput == null
+                  ? null
+                  : _input((male ? boy : girl)!)),
           onSubmit: (data) async {
             if (data['exactTime'] != true) {
               throw const JyotaraApiException(
@@ -793,8 +822,12 @@ class _MatchingScreenState extends State<MatchingScreen> {
       await _notice('Confirm that both people agreed to this comparison.');
       return;
     }
-    if ((boyDraft == null && boy?.session.birthInput == null) || (girlDraft == null && girl?.session.birthInput == null)) {
-      await _notice('This saved chart has no usable birth details. Please enter the birth details again.'); return;
+    if ((boyDraft == null && boy?.session.birthInput == null) ||
+        (girlDraft == null && girl?.session.birthInput == null)) {
+      await _notice(
+        'This saved chart has no usable birth details. Please enter the birth details again.',
+      );
+      return;
     }
     final boyInput = boyDraft ?? _input(boy!);
     final girlInput = girlDraft ?? _input(girl!);
@@ -912,6 +945,13 @@ class _MatchingScreenState extends State<MatchingScreen> {
             ),
           ),
         for (final male in [true, false])
+          _ReadingCard(
+            male
+                ? 'Boy: details used for matching'
+                : 'Girl: details used for matching',
+            _detailsLabel(male),
+          ),
+        for (final male in [true, false])
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: OutlinedButton.icon(
@@ -941,8 +981,10 @@ class _MatchingScreenState extends State<MatchingScreen> {
           contentPadding: EdgeInsets.zero,
           value: consent,
           onChanged: busy ? null : (v) => setState(() => consent = v ?? false),
-          title: const Text(
-            'Both people have agreed to use their birth details for this comparison.',
+          title: Text(
+            consent
+                ? 'Permission confirmed for both people.'
+                : 'I confirm both people agree to this comparison.',
           ),
         ),
         if (error != null)
