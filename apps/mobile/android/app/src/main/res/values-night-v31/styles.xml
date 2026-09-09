@@ -7,7 +7,7 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
         <item name="android:windowSplashScreenBackground">#21100F</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_moon</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/jyotara_rasi_logo</item>
         <item name="android:windowSplashScreenIconBackgroundColor">#21100F</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">

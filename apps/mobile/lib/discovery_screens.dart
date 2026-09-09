@@ -1,3 +1,6 @@
+import 'brand_mark.dart';
+import 'services/ui_language.dart';
+
 import 'dart:convert';
 import 'dart:math';
 
@@ -5,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'main.dart' show testerAccess, profileSession, ivory, muted, panel;
+import 'main.dart' show testerAccess, profileSession, ivory, muted;
 import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
@@ -41,20 +44,8 @@ const zodiacIds = [
   'aquarius',
   'pisces',
 ];
-const zodiacSymbols = [
-  '♈',
-  '♉',
-  '♊',
-  '♋',
-  '♌',
-  '♍',
-  '♎',
-  '♏',
-  '♐',
-  '♑',
-  '♒',
-  '♓',
-];
+String zodiacLabel(BuildContext context, int index) =>
+    uiText(context, zodiacNames[index]);
 
 Future<Map<String, dynamic>> discoveryRequest(
   String path,
@@ -259,7 +250,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Daily Horoscope')),
+    appBar: AppBar(title: const UiText('Daily Horoscope')),
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [
@@ -274,7 +265,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
         ),
         const SizedBox(height: 20),
         SizedBox(
-          height: 120,
+          height: 144,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: 12,
@@ -288,20 +279,21 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                 },
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 27,
-                      backgroundColor: sign == i ? ivory : panel,
-                      child: Text(
-                        zodiacSymbols[i],
-                        style: TextStyle(
-                          fontSize: 28,
-                          color: sign == i ? Colors.black : ivory,
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 180),
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: sign == i ? ivory : Colors.transparent,
+                          width: 2,
                         ),
                       ),
+                      child: RasiFigure(index: i),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      zodiacNames[i].replaceFirst(' · ', '\n'),
+                      zodiacLabel(context, i).replaceFirst(' · ', '\n'),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: sign == i ? ivory : muted),
                     ),
@@ -318,7 +310,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(3),
                   child: ChoiceChip(
-                    label: Text(['Yesterday', 'Today', 'Tomorrow'][d + 1]),
+                    label: UiText(['Yesterday', 'Today', 'Tomorrow'][d + 1]),
                     selected: day == d,
                     onSelected: (_) {
                       setState(() => day = d);
@@ -330,8 +322,10 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
           ],
         ),
         const SizedBox(height: 20),
+        Center(child: RasiFigure(index: sign, size: 96)),
+        const SizedBox(height: 12),
         Text(
-          '${zodiacNames[sign]}\n$date · IST',
+          '${zodiacLabel(context, sign)}\n$date · IST',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 18),

@@ -1,4 +1,4 @@
-import 'moon_mark.dart';
+import 'brand_mark.dart';
 
 import 'dart:math' as math;
 
@@ -96,7 +96,7 @@ class _LaunchIntroState extends State<LaunchIntro>
                       ),
                       child: const Padding(
                         padding: EdgeInsets.all(7),
-                        child: MoonMark(size: 86),
+                        child: BrandMark(size: 86),
                       ),
                     ),
                   ),
