@@ -40,13 +40,17 @@ class _ResearchConsentDialogState extends State<ResearchConsentDialog> {
                 : 'Chat works with this turned off. If enabled, future question text may be stored for product research with session and category information. Obvious phone numbers and email addresses are removed, but other personal details may remain. Do not include sensitive details. The retention target is 90 days; deletion runs when the service handles requests, not on a guaranteed daily schedule.',
           ),
           const SizedBox(height: 12),
-          Text(tamil
-              ? 'ஆய்வுக்கு அனுமதிக்காவிட்டாலும், மீண்டும் முயற்சிக்கும்போது அதே பதிலைப் பெற சேவையகம் மறையாக்கப்பட்ட பதிலை இந்த ஜாதக அமர்வு முடியும் வரை (அதிகபட்சம் 24 மணி நேரம்) வைத்திருக்கும். காலாவதியான பிரதிகள் அடுத்த கோரிக்கைகள் வரும்போது நீக்கப்படும்; குறிப்பிட்ட நேரத்தில் நீக்கம் உறுதி செய்யப்படவில்லை. இரட்டைப் பயன்பாட்டைத் தடுக்க கோரிக்கைப் பதிவுகள் வைக்கப்படும்.'
-              : 'Retry recovery is separate from research. An encrypted answer is retained until the chart session expires (up to 24 hours), even with research off. Expired copies are cleared when requests arrive, not on a guaranteed schedule. Request receipts remain to prevent duplicate usage.'),
+          Text(
+            tamil
+                ? 'ஆய்வுக்கு அனுமதிக்காவிட்டாலும், மீண்டும் முயற்சிக்கும்போது அதே பதிலைப் பெற சேவையகம் மறையாக்கப்பட்ட பதிலை இந்த ஜாதக அமர்வு முடியும் வரை (அதிகபட்சம் 24 மணி நேரம்) வைத்திருக்கும். காலாவதியான பிரதிகள் அடுத்த கோரிக்கைகள் வரும்போது நீக்கப்படும்; குறிப்பிட்ட நேரத்தில் நீக்கம் உறுதி செய்யப்படவில்லை. இரட்டைப் பயன்பாட்டைத் தடுக்க கோரிக்கைப் பதிவுகள் வைக்கப்படும்.'
+                : 'Retry recovery is separate from research. An encrypted answer is retained until the chart session expires (up to 24 hours), even with research off. Expired copies are cleared when requests arrive, not on a guaranteed schedule. Request receipts remain to prevent duplicate usage.',
+          ),
           const SizedBox(height: 12),
-          Text(tamil
-              ? 'அதே நாளில் மீண்டும் முயற்சிக்கும்போது ஜாதகத்தை மீட்க, அதன் பதில் சேவையகத்தில் அதிகபட்சம் 23 மணி நேரம் மறையாக்கம் செய்து வைக்கப்படும். இது ஆய்வுச் சம்மதத்திலிருந்து தனியானது. காலாவதியான பிரதிகள் அடுத்த ஜாதகக் கோரிக்கைகள் வரும்போது நீக்கப்படும்; குறிப்பிட்ட நேரத்தில் தானாக நீக்கும் வசதி இன்னும் இல்லை.'
-              : 'For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.'),
+          Text(
+            tamil
+                ? 'அதே நாளில் மீண்டும் முயற்சிக்கும்போது ஜாதகத்தை மீட்க, அதன் பதில் சேவையகத்தில் அதிகபட்சம் 23 மணி நேரம் மறையாக்கம் செய்து வைக்கப்படும். இது ஆய்வுச் சம்மதத்திலிருந்து தனியானது. காலாவதியான பிரதிகள் அடுத்த ஜாதகக் கோரிக்கைகள் வரும்போது நீக்கப்படும்; குறிப்பிட்ட நேரத்தில் தானாக நீக்கும் வசதி இன்னும் இல்லை.'
+                : 'For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.',
+          ),
           SwitchListTile(
             // Operational recovery storage is independent of this consent.
             contentPadding: EdgeInsets.zero,

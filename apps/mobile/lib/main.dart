@@ -69,13 +69,13 @@ const appBuildLabel = String.fromEnvironment(
   defaultValue: 'Development',
 );
 
-const ink = Color(0xFF090612);
-const panel = Color(0xFF171022);
-const line = Color(0xFF322643);
-const violet = Color(0xFF9B79FF);
-const lavender = Color(0xFFD8CBFF);
-const muted = Color(0xFFA89FB8);
-const gold = Color(0xFFF2C778);
+const ink = Color(0xFF21100F);
+const panel = Color(0xFF321A17);
+const line = Color(0xFF624132);
+const saffron = Color(0xFFE6B85C);
+const ivory = Color(0xFFF7E8CA);
+const muted = Color(0xFFCBB5A1);
+const gold = Color(0xFFEEC76D);
 
 class JyotaraApp extends StatelessWidget {
   const JyotaraApp({super.key, this.uiPreferences, this.initialization});
@@ -85,11 +85,18 @@ class JyotaraApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final preferences = uiPreferences ?? uiLanguagePreferences;
-    final scheme = ColorScheme.fromSeed(
-      seedColor: violet,
-      brightness: Brightness.dark,
-      surface: panel,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: saffron,
+          brightness: Brightness.dark,
+          surface: panel,
+        ).copyWith(
+          primary: saffron,
+          onPrimary: ink,
+          secondary: gold,
+          onSurface: ivory,
+          outline: line,
+        );
     return AnimatedBuilder(
       animation: preferences,
       builder: (context, _) => MaterialApp(
@@ -105,6 +112,11 @@ class JyotaraApp extends StatelessWidget {
           brightness: Brightness.dark,
           colorScheme: scheme,
           scaffoldBackgroundColor: ink,
+          pageTransitionsTheme: const PageTransitionsTheme(
+            builders: {
+              TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+            },
+          ),
           fontFamily: 'sans-serif',
           textTheme: const TextTheme(
             displaySmall: TextStyle(
@@ -141,7 +153,7 @@ class JyotaraApp extends StatelessWidget {
           ),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
-            fillColor: const Color(0xFF120D1D),
+            fillColor: const Color(0xFF291411),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: const BorderSide(color: line),
@@ -152,12 +164,12 @@ class JyotaraApp extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
-              borderSide: const BorderSide(color: violet, width: 1.4),
+              borderSide: const BorderSide(color: saffron, width: 1.4),
             ),
           ),
           navigationBarTheme: const NavigationBarThemeData(
-            backgroundColor: Color(0xFF100B19),
-            indicatorColor: Color(0xFF332650),
+            backgroundColor: Color(0xFF281310),
+            indicatorColor: Color(0xFF66402C),
             labelTextStyle: WidgetStatePropertyAll(
               TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
             ),
@@ -210,7 +222,7 @@ const guides = <Guide>[
         'Questions about love, communication and relationship decisions.',
     asset: 'assets/images/aadhirai.png',
     icon: Icons.favorite_rounded,
-    colors: [Color(0xFFB04D8A), Color(0xFF4E255E)],
+    colors: [Color(0xFFA84B43), Color(0xFF51271E)],
     prompts: [
       'Will my relationship move forward?',
       'En love life ippo epdi iruku?',
@@ -224,7 +236,7 @@ const guides = <Guide>[
     description: 'Career questions, job changes and practical preparation.',
     asset: 'assets/images/arivan.png',
     icon: Icons.work_rounded,
-    colors: [Color(0xFF5D62C9), Color(0xFF243056)],
+    colors: [Color(0xFF9A7040), Color(0xFF493021)],
     prompts: [
       'Is this a good period to change jobs?',
       'Enaku promotion chance iruka?',
@@ -238,7 +250,7 @@ const guides = <Guide>[
     description: 'Study choices, exam focus and higher-education decisions.',
     asset: 'assets/images/medha.png',
     icon: Icons.school_rounded,
-    colors: [Color(0xFF298A91), Color(0xFF25425A)],
+    colors: [Color(0xFF60734A), Color(0xFF303D29)],
     prompts: [
       'Higher studies or job—which should I focus on?',
       'Exam clear panna nalla period ah?',
@@ -253,7 +265,7 @@ const guides = <Guide>[
         'Marriage questions, family relationships and thoughtful next steps.',
     asset: 'assets/images/tharagai.png',
     icon: Icons.people_alt_rounded,
-    colors: [Color(0xFFA05668), Color(0xFF543045)],
+    colors: [Color(0xFFAD6845), Color(0xFF593423)],
     prompts: [
       'What does my chart show about marriage?',
       'Marriage delay aaguma?',
@@ -267,7 +279,7 @@ const guides = <Guide>[
     description: 'Daily questions, Dasa, transits and Panchangam.',
     asset: 'assets/images/kaalam.png',
     icon: Icons.wb_twilight_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: [
       'What should I focus on today?',
       'Innaiku en focus enna?',
@@ -281,7 +293,7 @@ const guides = <Guide>[
     description: 'Communication, trust and relationship questions.',
     asset: 'assets/images/iniya.png',
     icon: Icons.favorite_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What does my Kundli say about relationships?'],
   ),
   Guide(
@@ -291,7 +303,7 @@ const guides = <Guide>[
     description: 'Family bonds and household questions.',
     asset: 'assets/images/nila.png',
     icon: Icons.people_alt_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What family themes appear in my chart?'],
   ),
   Guide(
@@ -301,7 +313,7 @@ const guides = <Guide>[
     description: 'Job search, interviews and employment questions.',
     asset: 'assets/images/vetri.png',
     icon: Icons.work_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What does my chart show about work?'],
   ),
   Guide(
@@ -311,7 +323,7 @@ const guides = <Guide>[
     description: 'Business direction and partnership questions.',
     asset: 'assets/images/valan.png',
     icon: Icons.storefront_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What business themes appear in my Kundli?'],
   ),
   Guide(
@@ -321,7 +333,7 @@ const guides = <Guide>[
     description: 'Further study and learning direction.',
     asset: 'assets/images/oli.png',
     icon: Icons.school_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What study themes appear in my chart?'],
   ),
   Guide(
@@ -331,7 +343,7 @@ const guides = <Guide>[
     description: 'Home and property questions.',
     asset: 'assets/images/agam.png',
     icon: Icons.home_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['What does my chart show about home life?'],
   ),
   Guide(
@@ -341,7 +353,7 @@ const guides = <Guide>[
     description: 'Traditional Yoga meanings and spiritual reflection.',
     asset: 'assets/images/arul.png',
     icon: Icons.auto_awesome_rounded,
-    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
     prompts: ['Explain the Yogas in my Kundli.'],
   ),
 ];
@@ -445,9 +457,9 @@ class _IntroScreenState extends State<IntroScreen>
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
                 colors: [
-                  Color(0x2A090612),
-                  Color(0x44090612),
-                  Color(0xF2090612),
+                  Color(0x2A21100F),
+                  Color(0x4421100F),
+                  Color(0xF221100F),
                 ],
                 stops: [0, 0.48, 0.84],
               ),
@@ -498,7 +510,7 @@ class _IntroScreenState extends State<IntroScreen>
                     Text(
                       'Personal Vedic guidance, explained clearly for the decisions that matter to you.',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xFFD2CBDD),
+                        color: const Color(0xFFE8D6BD),
                         fontSize: 17,
                       ),
                     ),
@@ -518,8 +530,8 @@ class _IntroScreenState extends State<IntroScreen>
                       onPressed: _enter,
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(58),
-                        backgroundColor: const Color(0xFFE0D5FF),
-                        foregroundColor: const Color(0xFF24153E),
+                        backgroundColor: const Color(0xFFF7E8CA),
+                        foregroundColor: const Color(0xFF442119),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -557,7 +569,29 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _tabReveal = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 320),
+    value: 1,
+  );
+  @override
+  void dispose() {
+    _tabReveal.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(int value) {
+    if (value == _index) return;
+    setState(() => _index = value);
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _tabReveal.value = 1;
+    } else {
+      _tabReveal.forward(from: 0);
+    }
+  }
+
   int _index = 0;
 
   void _openChat(Guide guide) {
@@ -576,10 +610,16 @@ class _MainShellState extends State<MainShell> {
       const AccountScreen(),
     ];
     return Scaffold(
-      body: IndexedStack(index: _index, children: pages),
+      body: FadeTransition(
+        opacity: CurvedAnimation(
+          parent: _tabReveal,
+          curve: Curves.easeOutCubic,
+        ),
+        child: IndexedStack(index: _index, children: pages),
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
-        onDestinationSelected: (value) => setState(() => _index = value),
+        onDestinationSelected: _selectTab,
         destinations: [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
@@ -838,10 +878,7 @@ class QuickAskScreen extends StatelessWidget {
                   guide.speciality,
                   style: const TextStyle(color: muted),
                 ),
-                trailing: const Icon(
-                  Icons.arrow_forward_rounded,
-                  color: lavender,
-                ),
+                trailing: const Icon(Icons.arrow_forward_rounded, color: ivory),
               ),
             ),
           ),
@@ -1309,7 +1346,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   10 + MediaQuery.paddingOf(context).bottom,
                 ),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF100B19),
+                  color: Color(0xFF281310),
                   border: Border(top: BorderSide(color: line)),
                 ),
                 child: Row(
@@ -1344,7 +1381,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       onPressed: _thinking ? null : _send,
                       icon: const Icon(Icons.arrow_upward_rounded),
                       style: IconButton.styleFrom(
-                        backgroundColor: violet,
+                        backgroundColor: saffron,
                         foregroundColor: Colors.white,
                         minimumSize: const Size(50, 50),
                       ),
@@ -1588,7 +1625,7 @@ class AccountScreen extends StatelessWidget {
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: [violet, Color(0xFF5835A0)],
+                        colors: [saffron, Color(0xFF8F452C)],
                       ),
                     ),
                     child: const Icon(Icons.person_rounded),
@@ -1756,10 +1793,10 @@ class AccountScreen extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF21172F),
+                  color: const Color(0xFF48281F),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(item.$1, color: lavender),
+                child: Icon(item.$1, color: ivory),
               ),
               title: Text(
                 uiText(context, item.$2),
@@ -1836,7 +1873,7 @@ class _BrandLockup extends StatelessWidget {
           height: compact ? 34 : 44,
           decoration: const BoxDecoration(
             shape: BoxShape.circle,
-            gradient: LinearGradient(colors: [violet, Color(0xFF5A37A2)]),
+            gradient: LinearGradient(colors: [saffron, Color(0xFF974D2C)]),
           ),
           child: Icon(Icons.nightlight_round, size: compact ? 18 : 24),
         ),
@@ -1881,12 +1918,12 @@ class _ChartHero extends StatelessWidget {
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xFF513581), Color(0xFF21142F)],
+              colors: [Color(0xFF7C352C), Color(0xFF3C2018)],
             ),
-            border: Border.all(color: const Color(0xFF7459A7)),
+            border: Border.all(color: const Color(0xFFB6884C)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x303A1F72),
+                color: Color(0x30642D20),
                 blurRadius: 28,
                 offset: Offset(0, 14),
               ),
@@ -1928,7 +1965,7 @@ class _ChartHero extends StatelessWidget {
                         'Add your date, time and birthplace. Every guide uses this profile.',
                       )
                     : '${facts['nakshatra']} · ${uiText(context, 'Your chart is available. Open it to check details, freshness and storage status.')}',
-                style: const TextStyle(color: Color(0xFFD5CCE2), height: 1.45),
+                style: const TextStyle(color: Color(0xFFEBD8BC), height: 1.45),
               ),
               const SizedBox(height: 18),
               FilledButton.tonalIcon(
@@ -1992,7 +2029,7 @@ class _CompactGuideCard extends StatelessWidget {
                 UiText(
                   guide.speciality,
                   style: const TextStyle(
-                    color: Color(0xFFE6DFF0),
+                    color: Color(0xFFF5E7D1),
                     fontSize: 12,
                     height: 1.25,
                   ),
@@ -2045,7 +2082,7 @@ class _FullGuideCard extends StatelessWidget {
                     UiText(
                       guide.speciality,
                       style: const TextStyle(
-                        color: lavender,
+                        color: ivory,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -2102,7 +2139,7 @@ class _GuideAvatar extends StatelessWidget {
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [Colors.white.withValues(alpha: .8), violet, gold],
+          colors: [Colors.white.withValues(alpha: .8), saffron, gold],
         ),
       ),
       child: ClipOval(
@@ -2158,12 +2195,12 @@ class _MultilingualCard extends StatelessWidget {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: const Color(0xFF121D27),
-        border: Border.all(color: const Color(0xFF29404F)),
+        color: const Color(0xFF273329),
+        border: Border.all(color: const Color(0xFF495D41)),
       ),
       child: const Row(
         children: [
-          Icon(Icons.translate_rounded, color: Color(0xFF80D7E0), size: 30),
+          Icon(Icons.translate_rounded, color: Color(0xFFCBD8A0), size: 30),
           SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -2176,7 +2213,7 @@ class _MultilingualCard extends StatelessWidget {
                 SizedBox(height: 4),
                 UiText(
                   'Choose English or Tamil menus in Account. Chat in English, Tamil or Tanglish; set your reply language separately.',
-                  style: TextStyle(color: Color(0xFFAFC7CF), height: 1.4),
+                  style: TextStyle(color: Color(0xFFCAD3B5), height: 1.4),
                 ),
               ],
             ),
@@ -2203,7 +2240,7 @@ class _MessageBubble extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.all(15),
         decoration: BoxDecoration(
-          color: message.fromUser ? const Color(0xFF7E5BDC) : panel,
+          color: message.fromUser ? const Color(0xFF874035) : panel,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
@@ -2258,14 +2295,14 @@ class _DisclosureCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFF15101E),
+      color: const Color(0xFF301A16),
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: line),
     ),
     child: const Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.shield_outlined, color: lavender, size: 20),
+        Icon(Icons.shield_outlined, color: ivory, size: 20),
         SizedBox(width: 11),
         Expanded(
           child: UiText(
@@ -2293,10 +2330,7 @@ class _SectionHeader extends StatelessWidget {
           onPressed: onAction,
           child: UiText(
             action!,
-            style: const TextStyle(
-              color: lavender,
-              fontWeight: FontWeight.w700,
-            ),
+            style: const TextStyle(color: ivory, fontWeight: FontWeight.w700),
           ),
         ),
     ],
@@ -2310,14 +2344,14 @@ class _StatusPill extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
-      color: const Color(0xFF21172F),
+      color: const Color(0xFF48281F),
       borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: const Color(0xFF4A3860)),
+      border: Border.all(color: const Color(0xFF79533C)),
     ),
     child: Text(
       label,
       style: const TextStyle(
-        color: lavender,
+        color: ivory,
         fontSize: 9,
         fontWeight: FontWeight.w800,
         letterSpacing: .65,
@@ -2359,7 +2393,7 @@ class _AiBadge extends StatelessWidget {
         fontSize: 12,
         fontWeight: FontWeight.w900,
         letterSpacing: .7,
-        color: Color(0xFFE9E1FF),
+        color: Color(0xFFFFF0D7),
       ),
     ),
   );

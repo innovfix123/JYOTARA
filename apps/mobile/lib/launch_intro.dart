@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 /// Restores local state while the first Flutter frame is already visible.
@@ -51,7 +53,7 @@ class _LaunchIntroState extends State<LaunchIntro>
   Widget build(BuildContext context) {
     if (_ready) return widget.child;
     return Scaffold(
-      backgroundColor: const Color(0xFF090612),
+      backgroundColor: const Color(0xFF21100F),
       body: Center(
         child: AnimatedBuilder(
           animation: _animation,
@@ -79,11 +81,11 @@ class _LaunchIntroState extends State<LaunchIntro>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF9B79FF), Color(0xFF5A37A2)],
+                          colors: [Color(0xFFE6B85C), Color(0xFF974D2C)],
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF9B79FF)
+                            color: const Color(0xFFE6B85C)
                                 .withValues(alpha: .22 * logo),
                             blurRadius: 60,
                             spreadRadius: 12,
@@ -109,7 +111,7 @@ class _LaunchIntroState extends State<LaunchIntro>
                         fontSize: 36,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 3,
-                        color: Color(0xFFE0D5FF),
+                        color: Color(0xFFF7E8CA),
                       ),
                     ),
                   ),
@@ -157,9 +159,15 @@ class _WelcomeMotionState extends State<WelcomeMotion>
   Widget build(BuildContext context) => ClipRect(
     child: AnimatedBuilder(
       animation: _motion,
-      child: Image.asset(
-        'assets/images/cosmic-onboarding.png',
-        fit: BoxFit.cover,
+      child: const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF713126), Color(0xFF321A17), Color(0xFF21100F)],
+          ),
+        ),
+        child: CustomPaint(painter: TemplePatternPainter()),
       ),
       builder: (_, child) => Transform.scale(
         scale: 1.02 + .035 * Curves.easeInOut.transform(_motion.value),
@@ -167,4 +175,63 @@ class _WelcomeMotionState extends State<WelcomeMotion>
       ),
     ),
   );
+}
+
+/// Kolam-inspired brass linework, drawn locally at every screen resolution.
+class TemplePatternPainter extends CustomPainter {
+  const TemplePatternPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width * .5, size.height * .43);
+    final radius = size.width * .39;
+    final brass = Paint()
+      ..color = const Color(0xFFE6B85C).withValues(alpha: .3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+    canvas.save();
+    canvas.translate(center.dx, center.dy);
+    for (final scale in [.78, .84, 1.0, 1.08]) {
+      canvas.drawCircle(Offset.zero, radius * scale, brass);
+    }
+    for (var i = 0; i < 12; i++) {
+      canvas.save();
+      canvas.rotate(i * math.pi / 6);
+      final petal = Path()
+        ..moveTo(0, 0)
+        ..cubicTo(
+          -radius * .45,
+          -radius * .4,
+          -radius * .24,
+          -radius * .78,
+          0,
+          -radius,
+        )
+        ..cubicTo(
+          radius * .24,
+          -radius * .78,
+          radius * .45,
+          -radius * .4,
+          0,
+          0,
+        );
+      canvas.drawPath(petal, brass);
+      canvas.drawCircle(
+        Offset(0, -radius * 1.16),
+        3,
+        Paint()..color = const Color(0xFFE6B85C).withValues(alpha: .5),
+      );
+      canvas.restore();
+    }
+    canvas.restore();
+    // A restrained repeating dot border evokes hand-drawn threshold kolams.
+    final dots = Paint()
+      ..color = const Color(0xFFE6B85C).withValues(alpha: .15);
+    for (double y = 32; y < size.height; y += 30) {
+      canvas.drawCircle(Offset(17, y), 1.5, dots);
+      canvas.drawCircle(Offset(size.width - 17, y), 1.5, dots);
+    }
+  }
+
+  @override
+  bool shouldRepaint(TemplePatternPainter oldDelegate) => false;
 }

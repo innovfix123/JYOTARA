@@ -182,7 +182,12 @@ class _BirthFormState extends State<BirthForm> {
         appBar: AppBar(title: const UiText('Your birth profile')),
         body: ListView(
           key: const ValueKey('gender-step-list'),
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             const UiText(
               'Select your gender',
@@ -233,7 +238,12 @@ class _BirthFormState extends State<BirthForm> {
         appBar: AppBar(title: const UiText('Your birth profile')),
         body: ListView(
           key: const ValueKey('birth-details-list'),
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            20 + MediaQuery.viewPaddingOf(context).bottom,
+          ),
           children: [
             const UiText(
               'Personal guidance starts with your chart',

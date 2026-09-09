@@ -73,7 +73,7 @@ class SouthIndianChart extends StatelessWidget {
             return Container(
               padding: const EdgeInsets.all(5),
               decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF66507E)),
+                border: Border.all(color: const Color(0xFF9A744B)),
               ),
               child: SingleChildScrollView(
                 child: Column(
@@ -83,7 +83,7 @@ class SouthIndianChart extends StatelessWidget {
                       signs[sign],
                       style: const TextStyle(
                         fontSize: 14,
-                        color: Color(0xFFF2C778),
+                        color: Color(0xFFEEC76D),
                       ),
                     ),
                     if (signIndex(facts['lagna']) == sign)

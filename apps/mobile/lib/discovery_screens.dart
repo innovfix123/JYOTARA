@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'main.dart' show testerAccess, profileSession, lavender, muted, panel;
+import 'main.dart' show testerAccess, profileSession, ivory, muted, panel;
 import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
@@ -123,8 +123,8 @@ class DiscoveryActions extends StatelessWidget {
                     children: [
                       CircleAvatar(
                         radius: 30,
-                        backgroundColor: const Color(0xFF332650),
-                        child: Icon(item.$1, color: lavender, size: 28),
+                        backgroundColor: const Color(0xFF66402C),
+                        child: Icon(item.$1, color: ivory, size: 28),
                       ),
                       const SizedBox(height: 10),
                       Text(item.$2, textAlign: TextAlign.center),
@@ -159,7 +159,7 @@ class _WalletScreenState extends State<WalletScreen> {
           style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        const Text('Wallet preview', style: TextStyle(color: lavender)),
+        const Text('Wallet preview', style: TextStyle(color: ivory)),
         const Text(
           'Choose a recharge amount to preview. Payments and deductions are not enabled during this test.',
         ),
@@ -182,10 +182,10 @@ class _WalletScreenState extends State<WalletScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 28),
                       backgroundColor: selected == amount
-                          ? const Color(0xFF332650)
+                          ? const Color(0xFF66402C)
                           : null,
                       side: BorderSide(
-                        color: selected == amount ? lavender : muted,
+                        color: selected == amount ? ivory : muted,
                       ),
                     ),
                     child: Text('₹$amount'),
@@ -290,12 +290,12 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                   children: [
                     CircleAvatar(
                       radius: 27,
-                      backgroundColor: sign == i ? lavender : panel,
+                      backgroundColor: sign == i ? ivory : panel,
                       child: Text(
                         zodiacSymbols[i],
                         style: TextStyle(
                           fontSize: 28,
-                          color: sign == i ? Colors.black : lavender,
+                          color: sign == i ? Colors.black : ivory,
                         ),
                       ),
                     ),
@@ -303,7 +303,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                     Text(
                       zodiacNames[i].replaceFirst(' · ', '\n'),
                       textAlign: TextAlign.center,
-                      style: TextStyle(color: sign == i ? lavender : muted),
+                      style: TextStyle(color: sign == i ? ivory : muted),
                     ),
                   ],
                 ),
@@ -388,7 +388,7 @@ class _ReadingCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
-              color: lavender,
+              color: ivory,
             ),
           ),
           const SizedBox(height: 10),
@@ -584,7 +584,12 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Free Kundli')),
     body: ListView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
       children: [
         const Text(
           'Charts for the people you know',
@@ -644,7 +649,14 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                                   title: Text(row.session.nickname),
                                 ),
                                 body: ListView(
-                                  padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+                                  padding: EdgeInsets.fromLTRB(
+                                    20,
+                                    20,
+                                    20,
+                                    20 +
+                                        MediaQuery.viewPaddingOf(context)
+                                            .bottom,
+                                  ),
                                   children: [
                                     SouthIndianChart(facts: row.session.facts!),
                                     const SizedBox(height: 16),
@@ -892,7 +904,12 @@ class _MatchingScreenState extends State<MatchingScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Kundli Matching')),
     body: ListView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        20 + MediaQuery.viewPaddingOf(context).bottom,
+      ),
       children: [
         const Text(
           'Compare two birth charts',
