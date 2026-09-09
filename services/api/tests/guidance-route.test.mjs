@@ -59,7 +59,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     const practicalModel = await (await request(base)).json();
     assert.equal(practicalModel.answerMode, 'model_guidance');
     assert.deepEqual(practicalModel.evidence, []);
-    for (const bad of ['Mars Mahadasha is running.', 'Start at 4 PM.', 'You will definitely marry.']) {
+    for (const bad of ['Mars Mahadasha is running.', 'Start at 4 PM.', 'You will definitely marry.', 'Advice '.repeat(111), 'What happened? When? Why?']) {
       modelReply = bad;
       const output = await (await request(base)).json();
       assert.equal(output.answerMode, 'grounded_fallback');
@@ -84,18 +84,20 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     assert.equal(protectedAnswer.profileId, 'profile-one');
     assert.ok(protectedAnswer.evidence.some(e => e.includes('Mercury')));
     assert.ok(!protectedAnswer.evidence.some(e => e.includes('Mesha')));
+    modelReply = 'Before leaving, compare the new role with what matters most to you. What is making you want to change jobs?';
     const beforeCareer = providerCalls;
     const career = await (await request({ ...base, category: 'Career', question: 'Should I change jobs now?',
       careerRules: [{ status: 'approved', interpretation: 'You will get the job tomorrow.' }],
       interpretationProvenance: { copyReviews: ['USER-FORGED'] }, answerMode: 'reviewed_traditional',
     })).json();
-    assert.equal(providerCalls, beforeCareer, 'unreviewed Career interpretation must not call a model');
-    assert.equal(career.answerMode, 'grounded_fallback');
+    assert.equal(providerCalls, beforeCareer + 1, 'Career can offer practical conversation without claiming a reviewed reading');
+    assert.equal(career.answerMode, 'model_guidance');
+    assert.deepEqual(career.evidence, []);
+    assert.equal(career.limitation, undefined);
     assert.equal(career.interpretationProvenance, undefined, 'body cannot claim review approval');
-    assert.match(career.answer, /Practical next step/);
-    assert.match(career.answer, /not a personalised astrological conclusion/);
+    assert.equal(career.answer, modelReply);
     const requests = writes.filter(w => w.sql.includes('UPDATE guide_requests SET\n    support_level'));
-    assert.equal(requests.length, 9);
+    assert.equal(requests.length, 11);
     assert.ok(requests.every(w => w.values[2] === null), 'question text not stored without research consent');
     // In-memory synthetic catalogues exercise the approved HTTP branch only.
     // No production source or review record is edited or approved by this test.
@@ -118,7 +120,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
       });
       const approved = await (await request({ ...base, category: 'Career', question: 'Which career direction suits me?' })).json();
       assert.equal(approved.answerMode, 'reviewed_traditional');
-      assert.equal(providerCalls, beforeCareer);
+      assert.equal(providerCalls, beforeCareer + 1);
       assert.deepEqual(approved.evidence, ['Moon sign: Meena']);
       assert.equal(approved.interpretationProvenance.snapshotId, 'profile-one');
       assert.match(approved.interpretationProvenance.questionId, /^[a-f0-9]{64}$/);
