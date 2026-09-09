@@ -1,5 +1,15 @@
 import { prokeralaToken } from '../lib/prokerala-client';
 
+
+export function readablePrediction(value: string) {
+  return value.replace(/&#0*39;|&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim();
+}
+export function readingSummary(prediction: string, insight?: unknown) {
+  if (typeof insight === 'string' && insight.trim()) return readablePrediction(insight.replace(/^Insight:\s*/i, ''));
+  const sentences = readablePrediction(prediction).match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [prediction];
+  return sentences.slice(-2).join('').trim();
+}
+
 export const signs = ['aries','taurus','gemini','cancer','leo','virgo','libra','scorpio','sagittarius','capricorn','aquarius','pisces'];
 const cache = new Map<string, { expires: number; value: unknown }>();
 const pending = new Map<string, Promise<unknown>>();
@@ -33,10 +43,10 @@ export async function daily(request: Request) {
         const row = data.daily_predictions?.find((r: any) => r.sign?.name?.toLowerCase() === sign);
         if (!row || !Array.isArray(row.predictions)) throw Error('Missing prediction');
         const sections = ['General','Love','Career'].map(title => {
-          const text = row.predictions.find((r: any) => r.type?.toLowerCase() === title.toLowerCase())?.prediction;
+          const item = row.predictions.find((r: any) => r.type?.toLowerCase() === title.toLowerCase());
+          const text = item?.prediction;
           if (typeof text !== 'string' || !text.trim() || text.length > 10000) throw Error('Missing section');
-          const brief = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.slice(0,2).join('').trim() ?? text;
-          return {title,text:brief};
+          return {title,text:readingSummary(text, item.insight),details:readablePrediction(text)};
         });
         const value = {date,sign,source:'Prokerala',basis:'General zodiac reading; not a personal birth-chart forecast.',sections};
         if (cache.size >= 72) cache.delete(cache.keys().next().value!);

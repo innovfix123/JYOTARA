@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import 'services/adult_birth_date.dart';
 
 import 'services/profile_session.dart';
@@ -7,7 +8,14 @@ import 'services/ui_language.dart';
 import 'services/profile_gender.dart';
 
 class BirthForm extends StatefulWidget {
-  const BirthForm({super.key, required this.session});
+  const BirthForm({
+    super.key,
+    required this.session,
+    this.onSubmit,
+    this.initialGender,
+  });
+  final Future<void> Function(Map<String, dynamic>)? onSubmit;
+  final ProfileGender? initialGender;
   final ProfileSession session;
   @override
   State<BirthForm> createState() => _BirthFormState();
@@ -30,7 +38,7 @@ class _BirthFormState extends State<BirthForm> {
   void initState() {
     super.initState();
     _nickname.text = widget.session.nickname;
-    _gender = widget.session.gender;
+    _gender = widget.initialGender ?? widget.session.gender;
     _showGender = _gender == null && widget.session.birthInput == null;
     final saved = widget.session.birthInput;
     if (saved == null) return;
@@ -116,17 +124,27 @@ class _BirthFormState extends State<BirthForm> {
     final stamp =
         '${_date!.toIso8601String().substring(0, 10)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+05:30';
     try {
-      await widget.session.calculate(
-        dateTime: stamp,
-        latitude: (_place![6] as num).toDouble(),
-        longitude: (_place![7] as num).toDouble(),
-        exactTime: !_unknown,
-        nickname: _nickname.text,
-        gender: _gender,
-        birthplaceLabel: _place![0] == 'saved'
-            ? widget.session.birthplaceLabel
-            : '${_place![1]}, ${_place![2]}',
-      );
+      if (widget.onSubmit != null) {
+        await widget.onSubmit!({
+          'datetime': stamp,
+          'latitude': (_place![6] as num).toDouble(),
+          'longitude': (_place![7] as num).toDouble(),
+          'exactTime': !_unknown,
+          'nickname': _nickname.text.trim(),
+        });
+      } else {
+        await widget.session.calculate(
+          dateTime: stamp,
+          latitude: (_place![6] as num).toDouble(),
+          longitude: (_place![7] as num).toDouble(),
+          exactTime: !_unknown,
+          nickname: _nickname.text,
+          gender: _gender,
+          birthplaceLabel: _place![0] == 'saved'
+              ? widget.session.birthplaceLabel
+              : '${_place![1]}, ${_place![2]}',
+        );
+      }
       if (mounted) Navigator.of(context).pop();
     } on JyotaraApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -151,10 +169,14 @@ class _BirthFormState extends State<BirthForm> {
           key: const ValueKey('gender-step-list'),
           padding: const EdgeInsets.all(20),
           children: [
-            const UiText('Select your gender',
-                style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
+            const UiText(
+              'Select your gender',
+              style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 12),
-            const UiText('Choose what you want to share. You can change this later.'),
+            const UiText(
+              'Choose what you want to share. You can change this later.',
+            ),
             const SizedBox(height: 20),
             for (final option in ProfileGender.values)
               Padding(
@@ -165,9 +187,11 @@ class _BirthFormState extends State<BirthForm> {
                     key: ValueKey('gender-${option.value}'),
                     title: UiText(option.label),
                     selected: _gender == option,
-                    trailing: Icon(_gender == option
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked),
+                    trailing: Icon(
+                      _gender == option
+                          ? Icons.radio_button_checked
+                          : Icons.radio_button_unchecked,
+                    ),
                     onTap: () => setState(() => _gender = option),
                   ),
                 ),
@@ -181,7 +205,9 @@ class _BirthFormState extends State<BirthForm> {
               child: const UiText('Continue'),
             ),
             const SizedBox(height: 16),
-            const UiText('Saved with your profile on this device. Not sent for chart calculations.'),
+            const UiText(
+              'Saved with your profile on this device. Not sent for chart calculations.',
+            ),
           ],
         ),
       );
@@ -244,7 +270,9 @@ class _BirthFormState extends State<BirthForm> {
                         context: context,
                         initialDate: _date == null || _date!.isAfter(latest)
                             ? latest
-                            : _date!.isBefore(DateTime(1900)) ? DateTime(1900) : _date,
+                            : _date!.isBefore(DateTime(1900))
+                            ? DateTime(1900)
+                            : _date,
                         firstDate: DateTime(1900),
                         lastDate: latest,
                       );
@@ -337,7 +365,9 @@ class _BirthFormState extends State<BirthForm> {
             const UiText(
               'Retry recovery is separate from research: the server keeps an encrypted answer until this chart session expires (up to 24 hours). Expired copies are cleared when requests arrive, not on a guaranteed schedule. Request receipts remain to prevent duplicate usage.',
             ),
-            const UiText('For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.'),
+            const UiText(
+              'For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.',
+            ),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -349,7 +379,11 @@ class _BirthFormState extends State<BirthForm> {
             FilledButton(
               onPressed: _busy ? null : _calculate,
               child: UiText(
-                _busy ? 'Calculating your chart…' : 'Calculate my chart',
+                widget.onSubmit != null
+                    ? (_busy ? 'Saving details…' : 'Use these birth details')
+                    : (_busy
+                          ? 'Calculating your chart…'
+                          : 'Calculate my chart'),
               ),
             ),
             if (_busy)

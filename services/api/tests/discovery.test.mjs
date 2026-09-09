@@ -23,3 +23,11 @@ test('invalid signs never trigger provider calls',async()=>{
  const res=await daily(new Request('https://test',{method:'POST',body:JSON.stringify({sign:'unknown',date:'2026-09-09'})}));
  assert.equal(res.status,400);
 });
+test('daily summary preserves provider differences after shared openings and decodes entities',async()=>{
+ const {readingSummary,readablePrediction}=await import(encode(source));
+ const prefix='The Sun is in Virgo. The Moon is in Leo. ';
+ assert.equal(readingSummary(prefix+'Aries detail. Aries action.'),'Aries detail. Aries action.');
+ assert.equal(readingSummary(prefix+'Pisces detail. Pisces action.'),'Pisces detail. Pisces action.');
+ assert.equal(readingSummary(prefix,'Insight: Focus on your selected task.'),'Focus on your selected task.');
+ assert.equal(readablePrediction('You&#039;ll find clarity &amp; focus.'),"You'll find clarity & focus.");
+});

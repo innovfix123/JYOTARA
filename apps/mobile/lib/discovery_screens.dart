@@ -10,6 +10,7 @@ import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
 import 'services/profile_session.dart';
+import 'services/profile_gender.dart';
 import 'services/local_profile_vault.dart';
 
 const zodiacNames = [
@@ -347,7 +348,11 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
         ],
         if (reading != null) ...[
           for (final section in reading!['sections'] as List)
-            _ReadingCard(section['title'] as String, section['text'] as String),
+            _ReadingCard(
+              section['title'] as String,
+              section['text'] as String,
+              details: section['details'] as String?,
+            ),
           const _ReadingCard(
             'Money · everyday reminder',
             'Check your available budget before spending. Give yourself time to compare options before a purchase.',
@@ -367,7 +372,8 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
 }
 
 class _ReadingCard extends StatelessWidget {
-  const _ReadingCard(this.title, this.text);
+  const _ReadingCard(this.title, this.text, {this.details});
+  final String? details;
   final String title, text;
   @override
   Widget build(BuildContext context) => Card(
@@ -387,6 +393,12 @@ class _ReadingCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           Text(text),
+          if (details != null && details != text)
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: const Text('Full reading'),
+              children: [Text(details!)],
+            ),
         ],
       ),
     ),
@@ -585,7 +597,13 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         ),
         const SizedBox(height: 20),
         if (busy) const LinearProgressIndicator(),
-        if (error != null) ...[Text(error!), TextButton(onPressed: busy ? null : _load, child: const Text('Retry loading Kundlis'))],
+        if (error != null) ...[
+          Text(error!),
+          TextButton(
+            onPressed: busy ? null : _load,
+            child: const Text('Retry loading Kundlis'),
+          ),
+        ],
         if (!busy && rows.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
@@ -661,7 +679,8 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 }
 
 class MatchingScreen extends StatefulWidget {
-  const MatchingScreen({super.key});
+  const MatchingScreen({super.key, this.request = discoveryRequest});
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>) request;
   @override
   State<MatchingScreen> createState() => _MatchingScreenState();
 }
@@ -669,6 +688,7 @@ class MatchingScreen extends StatefulWidget {
 class _MatchingScreenState extends State<MatchingScreen> {
   List<SavedKundli> rows = [];
   SavedKundli? boy, girl;
+  Map<String, dynamic>? boyDraft, girlDraft;
   bool consent = false, busy = false;
   String? error;
   Map<String, dynamic>? result;
@@ -701,23 +721,86 @@ class _MatchingScreenState extends State<MatchingScreen> {
   Map<String, dynamic> _input(SavedKundli row) {
     final b = row.session.birthInput!;
     return {
-      'datetime': b.dateTime,
+      'datetime': '${b.indiaDateTime.toIso8601String().substring(0, 19)}+05:30',
       'latitude': b.latitude,
       'longitude': b.longitude,
       'exactTime': b.exactTime,
     };
   }
 
+  Future<void> _notice(String message) async {
+    setState(() => error = message);
+    await showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Check matching details'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _enterBirth(bool male) async {
+    final session = ProfileSession(
+      api: JyotaraApiClient(testerCode: () => testerAccess.code),
+    );
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => BirthForm(
+          session: session,
+          initialGender: male ? ProfileGender.male : ProfileGender.female,
+          onSubmit: (data) async {
+            if (data['exactTime'] != true) {
+              throw const JyotaraApiException(
+                'Matching needs a confirmed birth time. Please enter the known time.',
+              );
+            }
+            if (!mounted) return;
+            setState(() {
+              if (male) {
+                boyDraft = data;
+                boy = null;
+              } else {
+                girlDraft = data;
+                girl = null;
+              }
+              error = null;
+              result = null;
+            });
+          },
+        ),
+      ),
+    );
+    session.dispose();
+  }
+
   Future<void> _match() async {
-    if (boy == null || girl == null || boy!.id == girl!.id || !consent) {
-      setState(
-        () => error = 'Select two different profiles and confirm permission.',
+    if (busy) return;
+    if ((boy == null && boyDraft == null) ||
+        (girl == null && girlDraft == null)) {
+      await _notice(
+        'Enter birth details for both people, or choose their saved Kundlis.',
       );
       return;
     }
-    if (!boy!.session.birthTimeKnown || !girl!.session.birthTimeKnown) {
-      setState(
-        () => error = 'This matching calculation needs confirmed birth times for both people. Update the Kundlis first.',
+    if (!consent) {
+      await _notice('Confirm that both people agreed to this comparison.');
+      return;
+    }
+    if ((boyDraft == null && boy?.session.birthInput == null) || (girlDraft == null && girl?.session.birthInput == null)) {
+      await _notice('This saved chart has no usable birth details. Please enter the birth details again.'); return;
+    }
+    final boyInput = boyDraft ?? _input(boy!);
+    final girlInput = girlDraft ?? _input(girl!);
+    if (boyInput['exactTime'] != true || girlInput['exactTime'] != true) {
+      await _notice(
+        'Both people need confirmed birth times. Use Enter birth details to provide them.',
       );
       return;
     }
@@ -727,15 +810,45 @@ class _MatchingScreenState extends State<MatchingScreen> {
       result = null;
     });
     try {
-      final value = await discoveryRequest('/api/kundli/matching', {
-        'boy': _input(boy!),
-        'girl': _input(girl!),
+      final value = await widget.request('/api/kundli/matching', {
+        'boy': boyInput,
+        'girl': girlInput,
         'consent': true,
       });
-      if (mounted) setState(() => result = value);
+      if (mounted) {
+        setState(() => result = value);
+        await showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (context) => SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Matching result: ${value['score']} / ${value['maximum']}',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(value['interpretation'] as String),
+                  const SizedBox(height: 16),
+                  Text(value['note'] as String),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+        await _notice(e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -762,7 +875,9 @@ class _MatchingScreenState extends State<MatchingScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: DropdownButtonFormField<String>(
-                key: ValueKey('${male ? "boy" : "girl"}:${male ? boy?.id : girl?.id}'),
+              key: ValueKey(
+                '${male ? "boy" : "girl"}:${male ? boy?.id : girl?.id}',
+              ),
               initialValue: male ? boy?.id : girl?.id,
               decoration: InputDecoration(
                 labelText: male ? "Boy’s Kundli" : "Girl’s Kundli",
@@ -787,11 +902,24 @@ class _MatchingScreenState extends State<MatchingScreen> {
                   : (id) => setState(() {
                       if (male) {
                         boy = rows.firstWhere((r) => r.id == id);
+                        boyDraft = null;
                       } else {
                         girl = rows.firstWhere((r) => r.id == id);
+                        girlDraft = null;
                       }
                       result = null;
                     }),
+            ),
+          ),
+        for (final male in [true, false])
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: OutlinedButton.icon(
+              onPressed: busy ? null : () => _enterBirth(male),
+              icon: const Icon(Icons.person_add_alt),
+              label: Text(
+                '${male ? "Boy" : "Girl"}: ${(male ? boyDraft : girlDraft)?['nickname'] ?? "Enter birth details"}',
+              ),
             ),
           ),
         OutlinedButton.icon(
