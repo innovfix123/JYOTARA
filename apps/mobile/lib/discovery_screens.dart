@@ -584,7 +584,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Free Kundli')),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
       children: [
         const Text(
           'Charts for the people you know',
@@ -644,7 +644,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                                   title: Text(row.session.nickname),
                                 ),
                                 body: ListView(
-                                  padding: const EdgeInsets.all(20),
+                                  padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
                                   children: [
                                     SouthIndianChart(facts: row.session.facts!),
                                     const SizedBox(height: 16),
@@ -892,7 +892,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Kundli Matching')),
     body: ListView(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.fromLTRB(20, 20, 20, 20 + MediaQuery.viewPaddingOf(context).bottom),
       children: [
         const Text(
           'Compare two birth charts',
