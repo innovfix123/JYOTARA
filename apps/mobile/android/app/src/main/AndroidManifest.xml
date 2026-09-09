@@ -4,7 +4,7 @@
         android:allowBackup="false"
         android:label="Jyotara"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@drawable/launch_moon">
         <activity
             android:name=".MainActivity"
             android:exported="true"

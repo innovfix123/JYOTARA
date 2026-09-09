@@ -1,3 +1,5 @@
+import 'moon_mark.dart';
+
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -499,7 +501,7 @@ class _IntroScreenState extends State<IntroScreen>
                           color: Colors.white.withValues(alpha: .18),
                         ),
                       ),
-                      child: const Icon(Icons.nightlight_round, size: 28),
+                      child: const MoonMark(size: 44),
                     ),
                     const SizedBox(height: 22),
                     Text(
@@ -1893,7 +1895,7 @@ class _BrandLockup extends StatelessWidget {
             shape: BoxShape.circle,
             gradient: LinearGradient(colors: [saffron, Color(0xFF974D2C)]),
           ),
-          child: Icon(Icons.nightlight_round, size: compact ? 18 : 24),
+          child: MoonMark(size: compact ? 34 : 44),
         ),
         const SizedBox(width: 10),
         const Flexible(

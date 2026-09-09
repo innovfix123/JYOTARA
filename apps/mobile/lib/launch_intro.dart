@@ -1,3 +1,5 @@
+import 'moon_mark.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -92,10 +94,9 @@ class _LaunchIntroState extends State<LaunchIntro>
                           ),
                         ],
                       ),
-                      child: const Icon(
-                        Icons.nightlight_round,
-                        size: 54,
-                        color: Color(0xFFFFF8DE),
+                      child: const Padding(
+                        padding: EdgeInsets.all(7),
+                        child: MoonMark(size: 86),
                       ),
                     ),
                   ),
