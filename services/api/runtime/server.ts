@@ -1,3 +1,4 @@
+import { daily, matching } from './discovery';
 import { createServer } from 'node:http';
 import { database } from './env';
 import { testerIdentity, admitTesterRequest } from './tester-access';
@@ -10,6 +11,8 @@ import { POST as deleteProfile } from '../app/api/profile/delete/route';
 
 const routes: Record<string, (request: Request) => Promise<Response>> = {
   'POST /api/astrology/kundli': kundli,
+  'POST /api/horoscope/daily': daily,
+  'POST /api/kundli/matching': matching,
   'POST /api/guidance': guidance,
   'POST /api/locations': locations,
   'POST /api/pilot/events': events,

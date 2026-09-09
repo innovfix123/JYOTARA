@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'launch_intro.dart';
+import 'discovery_screens.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -513,6 +514,8 @@ class HomeScreen extends StatelessWidget {
             sliver: SliverList.list(
               children: [
                 const _TopBar(),
+                const SizedBox(height: 16),
+                const DiscoveryActions(),
                 const SizedBox(height: 28),
                 Text(
                   uiText(context, 'Welcome'),
