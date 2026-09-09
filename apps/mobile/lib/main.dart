@@ -630,7 +630,7 @@ class _GuidesScreenState extends State<GuidesScreen> {
                 ),
                 const SizedBox(height: 8),
                 const UiText(
-                  'One shared chart. Five focused guides for your questions.',
+                  'Choose a profile. Five focused guides for your questions.',
                   style: TextStyle(color: muted),
                 ),
                 const SizedBox(height: 18),
@@ -1087,7 +1087,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         ? ListTile(
                             title: const UiText('Create your chart to start'),
                             subtitle: const UiText(
-                              'Your details are shared across all guides.',
+                              'Create the selected profile’s chart to ask a guide.',
                             ),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () => Navigator.of(context).push(
