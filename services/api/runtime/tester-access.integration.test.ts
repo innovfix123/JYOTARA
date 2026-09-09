@@ -29,8 +29,8 @@ test('tester isolation and parallel quotas hold across database connections', as
     assert.equal(await chartSessionDeleted(a as unknown as D1Database, pendingSession, now), true);
     const results = await Promise.all(Array.from({length: 45}, (_, i) =>
       admitTesterRequest(i % 2 ? a : b, tester, '/api/guidance', cookie, now)));
-    assert.equal(results.filter(r => r === 200).length, 30);
-    assert.equal(results.filter(r => r === 429).length, 15);
+    assert.equal(results.filter(r => r === 200).length, 45);
+    assert.equal(results.filter(r => r === 429).length, 0);
     assert.equal(await admitTesterRequest(a, tester, '/api/profile/delete', cookie, now), 200);
     assert.equal(await admitTesterRequest(a, tester, '/api/guidance', cookie, now + 86_400_000), 200);
     const charts = await Promise.all(Array.from({length: 15}, (_, i) => admitTesterRequest(

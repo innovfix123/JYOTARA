@@ -30,7 +30,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/lib/astrology-evidence', evidence)
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
 
-test('actual route reserves before model work, replays encrypted result, enforces quota and isolates identities', async () => {
+test('actual route reserves before model work, replays encrypted result, allows continued chat and isolates identities', async () => {
   const db = new DatabaseSync(':memory:');
   for (const name of ['0000_perpetual_giant_man', '0001_chilly_purple_man', '0002_broad_spacker_dave', '0003_reflective_betty_ross', '0004_powerful_juggernaut', '0007_cold_inhumans', '0009_salty_skrulls']) {
     db.exec(source(`../drizzle/${name}.sql`));
@@ -103,10 +103,11 @@ test('actual route reserves before model work, replays encrypted result, enforce
     const other = await post({ ...base, chartTicket: await ticket('other', 'one') }, 'other');
     assert.equal(other.status, 200, 'same ID does not expose another session reply');
     const burst = await Promise.all(['2', '3', '4', '5'].map(n => post({ ...base, requestId: `request-000000000${n}` })));
-    assert.deepEqual(burst.map(r => r.status).sort(), [200, 200, 429, 429]);
-    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM guide_requests WHERE session_id = 'owner'").get().n, 3);
+    assert.deepEqual(burst.map(r => r.status).sort(), [200, 200, 200, 200]);
+    assert.equal(db.prepare("SELECT COUNT(*) AS n FROM guide_requests WHERE session_id = 'owner'").get().n, 5);
+    for(let n=6;n<=35;n++)assert.equal((await post({...base,requestId:`continued-chat-${String(n).padStart(6,'0')}`})).status,200, 'chat continues past both old limits');
     const after = calls;
-    assert.equal((await post()).status, 200, 'replay works even after quota reached');
+    assert.equal((await post()).status, 200, 'replay works without new provider work');
     db.prepare('UPDATE guide_requests SET response_expires_at = 0 WHERE id = ?').run(stored.id);
     assert.equal((await post()).status, 409, 'expired receipt is not a new billable attempt');
     assert.equal(calls, after);
@@ -117,10 +118,10 @@ test('actual route reserves before model work, replays encrypted result, enforce
     }));
     assert.equal((await remove('owner')).status, 204);
     assert.equal((await post()).status, 410, 'deleted receipt never replays or resubmits');
-    assert.equal((await post({ ...base, requestId: 'request-new-after-delete' })).status, 429, 'erasure must not reset consumed slots');
+    // Deleted receipts remain protected; a fresh question is tested separately below.
     assert.equal(calls, after, 'erasure and deleted retries make no new provider calls');
     const erased = db.prepare("SELECT * FROM guide_requests WHERE session_id = 'owner'").all();
-    assert.equal(erased.length, 3);
+    assert.equal(erased.length, 35);
     for (const row of erased) {
       assert.equal(row.answer_mode, 'deleted');
       for (const field of ['question_text', 'intent', 'research_consent_version', 'age_band', 'request_hash', 'response_ciphertext', 'response_expires_at']) assert.equal(row[field], null, field);

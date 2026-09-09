@@ -19,7 +19,7 @@ export async function admitTesterRequest(db: PostgresDatabase, tester: string, p
   const session = cookie.split(';').map(p => p.trim()).find(p => p.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
   const needsOwner = !['/api/locations', '/api/tester/check', '/api/horoscope/daily', '/api/kundli/matching'].includes(path);
   if (needsOwner && (!session || !/^[A-Za-z0-9_-]{1,128}$/.test(session))) return 400;
-  const limit = path === '/api/horoscope/daily' ? 60 : path === '/api/kundli/matching' ? 5 : path === '/api/astrology/kundli' ? 10 : path === '/api/guidance' ? 30 : path === '/api/locations' ? 100 : null;
+  const limit = path === '/api/horoscope/daily' ? 60 : path === '/api/kundli/matching' ? 5 : path === '/api/astrology/kundli' ? 10 : path === '/api/locations' ? 100 : null;
   const day = new Date(now + 19_800_000).toISOString().slice(0, 10);
   return db.transaction(async client => {
     let newChartSession = false;

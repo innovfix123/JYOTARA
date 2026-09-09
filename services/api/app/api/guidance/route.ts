@@ -191,7 +191,8 @@ export async function DELETE(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const questionLimit = env.JYOTARA_QUESTION_LIMIT === '15' ? 15 : 3;
+  // Chat has no fixed question allowance; receipts still prevent duplicate work.
+  const questionLimit = null;
   const body = (await request.json().catch(() => null)) as null | {
     category?: GuidanceCategory;
     question?: string;
@@ -245,7 +246,7 @@ export async function POST(request: Request) {
     ...identity, session: session.id, category: body.category, language, now: Date.now(), limit: questionLimit,
   });
   if (reservation.kind === 'limit') {
-    return Response.json({ error: `The ${questionLimit}-question tester limit has been reached.` }, { status: 429 });
+    return Response.json({ error: 'This chart session is no longer available. Please reopen your profile.', code: 'profile_unavailable' }, { status: 410 });
   }
   if (reservation.kind === 'existing') {
     const receipt = reservation.receipt;

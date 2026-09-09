@@ -61,16 +61,16 @@ export async function completeQuestion(db: D1Database, input: {
 }
 
 export async function reserveQuestion(db: D1Database, input: {
-  id: string; hash: string; session: string; category: string; language: string; now: number; limit: number;
+  id: string; hash: string; session: string; category: string; language: string; now: number; limit: number | null;
 }): Promise<{ kind: 'claimed' } | { kind: 'existing'; receipt: Receipt } | { kind: 'limit' }> {
   // Predicate and insertion are one SQLite write. Pending/uncertain attempts
   // occupy their slots before model work; they are never automatically rerun.
   const result = await db.prepare(`INSERT OR IGNORE INTO guide_requests
     (id, session_id, category, language, support_level, answer_mode, request_hash, created_at)
     SELECT ?, ?, ?, ?, 'pending', 'pending', ?, ?
-    WHERE (SELECT COUNT(*) FROM guide_requests WHERE session_id = ?) < ?
+    WHERE (? = 1 OR (SELECT COUNT(*) FROM guide_requests WHERE session_id = ?) < ?)
       AND NOT EXISTS (SELECT 1 FROM deleted_chart_sessions WHERE session_id = ? AND expires_at > ?)`)
-    .bind(input.id, input.session, input.category, input.language, input.hash, input.now, input.session, input.limit, input.session, input.now).run();
+    .bind(input.id, input.session, input.category, input.language, input.hash, input.now, input.limit === null ? 1 : 0, input.session, input.limit, input.session, input.now).run();
   if (result.meta.changes === 1) return { kind: 'claimed' };
   const receipt = await db.prepare(`SELECT request_hash, answer_mode, response_ciphertext, response_expires_at
     FROM guide_requests WHERE id = ? AND session_id = ?`).bind(input.id, input.session).first<Receipt>();
