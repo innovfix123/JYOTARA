@@ -292,7 +292,8 @@ export async function POST(request: Request) {
   });
 
   const providerSources = packet.intent === 'high_stakes' || packet.intent === 'additional_profile_required' ? [] : providerReadingSources(chart, packet.category);
-  const requestsReading = /chart|kundli|astrolog|jathag|jathak|jothid|panchang|nakshatra|lagna|dasha|dasa|planet|ஜாதக|ஜோதிட|பஞ்சாங்க|நட்சத்திர|லக்ன|தசை|கிரக|when.*(?:marry|marriage|job|business)|(?:eppo|எப்போது).*(?:kalyanam|velai|திருமண|வேலை)/iu.test(question);
+  const readingWords = (value:string) => /chart|kundli|astrolog|jathag|jathak|jothid|panchang|nakshatra|lagna|dasha|dasa|planet|ஜாதக|ஜோதிட|பஞ்சாங்க|நட்சத்திர|லக்ன|தசை|கிரக|when.*(?:marry|marriage|job|business)|(?:eppo|எப்போது).*(?:kalyanam|velai|திருமண|வேலை)/iu.test(value);
+  const requestsReading = readingWords(question) || (/tell me more|what does (?:that|this).*suggest|அதை.*விளக்|innum.*soll/iu.test(question) && history.some(readingWords));
   const chartContext = requestsReading && env.PROKERALA_ENVIRONMENT === 'production' && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required' ? buildTopicContext(chart, packet.category, trusted.birthTimeKnown) : undefined;
   let generated: string | null = null;
   const career = packet.category === 'Career' && !practicalAdviceScope(packet) ? reviewedCareerResponse({

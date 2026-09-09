@@ -28,6 +28,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
   const originalFetch = globalThis.fetch;
   let providerCalls = 0;
   let modelReply = '';
+  let modelInput;
   const writes = [];
   const secret = 'ab'.repeat(32);
   globalThis.__jyotaraRouteTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, OPENROUTER_API_KEY: 'TEST-NOT-A-REAL-KEY', DB: {
@@ -37,7 +38,8 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
       async run() { writes.push({ sql, values }); return { meta: { changes: 1 } }; },
     }; }, async batch() { return []; },
   } };
-  globalThis.fetch = async (address) => {
+  globalThis.fetch = async (address, options) => {
+    modelInput = JSON.parse(JSON.parse(options.body).input);
     assert.equal(address, 'https://openrouter.ai/api/v1/responses');
     providerCalls++;
     return Response.json({ output_text: modelReply });
@@ -143,6 +145,14 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     assert.equal(reading.answerMode,'chart_guidance');
     assert.ok(reading.evidence.some(item=>item.includes('Prokerala')));
     assert.equal(reading.interpretationProvenance,undefined,'Provider explanation must not claim independent review');
+    const followup=await (await request({...base,guide:'Aadhirai',question:'What does that suggest?',previousUserMessages:['What does my chart show about my career?'],chartTicket:providerTicket})).json();
+    assert.equal(followup.answerMode,'chart_guidance');
+    assert.equal(modelInput.category,'Career');
+    assert.equal(modelInput.chartContext.focus,'work, income and goals');
+    const beforeInvalidGuide=providerCalls;
+    assert.equal((await request({...base,guide:'invented guide'})).status,400);
+    assert.equal(providerCalls,beforeInvalidGuide);
+
   } finally {
     globalThis.fetch = originalFetch;
     delete globalThis.__jyotaraRouteTestEnv;
