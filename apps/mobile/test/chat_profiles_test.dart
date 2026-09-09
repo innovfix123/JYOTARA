@@ -111,6 +111,14 @@ void main() {
       expect(requests.single['chartTicket'], 'ticket-Profile B');
       expect(requests.single['guide'], 'Aadhirai');
       expect(a.conversation('Aadhirai').messages.length, 1);
+      final suggestion = find.text('What does my chart suggest about love?');
+      expect(suggestion, findsOneWidget, reason: 'Suggestions stay after a typed reply');
+      await tester.tap(suggestion);
+      await tester.pumpAndSettle();
+      expect(requests.last['question'], 'What does my chart suggest about love?');
+      expect(requests.last['chartTicket'], 'ticket-Profile B');
+      expect(find.widgetWithText(ActionChip, 'What does my chart suggest about love?'), findsNothing);
+
       await tester.tap(find.text('End'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('End chat'));

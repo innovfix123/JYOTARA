@@ -324,10 +324,12 @@ test('guidance refresh uses ticket-bound location and shared context, never call
     assert.ok(providerRequests.every(target => Math.abs(Date.parse(target.searchParams.get('datetime')) - Date.now()) < 10000));
     assert.ok(providerRequests.every(target => target.searchParams.get('datetime').endsWith('+05:30')), 'provider Panchang day must use Indian civil time');
     assert.equal((await post({ ...body, requestId: 'context-question-0002' })).status, 200);
-    assert.equal(providerRequests.length, 2, 'new question shares provider cache instead of natal recalculation');
+    assert.equal(providerRequests.length, 4, 'each new question refreshes current context without recalculating natal chart');
+    await post({ ...body, requestId: 'context-question-0002' });
+    assert.equal(providerRequests.length, 4, 'retry must not charge provider again');
     const unsupported = await post({ ...body, requestId: 'context-question-0003', category: 'Family', question: 'How is my parents health?' });
     assert.equal((await unsupported.json()).support, 'unsupported');
-    assert.equal(providerRequests.length, 2, 'unsupported intents must not trigger context work');
+    assert.equal(providerRequests.length, 4, 'unsupported intents must not trigger context work');
   } finally { globalThis.fetch = originalFetch; delete globalThis.__receiptTestEnv; db.close(); }
 });
 

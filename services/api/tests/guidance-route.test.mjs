@@ -149,6 +149,11 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     assert.equal(followup.answerMode,'chart_guidance');
     assert.equal(modelInput.category,'Career');
     assert.equal(modelInput.chartContext.focus,'work, income and goals');
+    for (const question of ['When will I get married?', 'I am worried about the delay', 'En kalyanam pathi sollunga']) {
+      const typed=await (await request({...base,category:'Marriage',guide:'Tharagai',question,chartTicket:providerTicket})).json();
+      assert.equal(typed.answerMode,'chart_guidance',question);
+      assert.ok(modelInput.chartContext, 'Typed messages must receive authenticated chart context');
+    }
     const beforeInvalidGuide=providerCalls;
     assert.equal((await request({...base,guide:'invented guide'})).status,400);
     assert.equal(providerCalls,beforeInvalidGuide);

@@ -14,8 +14,9 @@ type Row = { status: string; payload_json: string | null; calculated_at: number;
 export type CurrentContext = { transitPosition: unknown; panchang: unknown; contextCalculatedAt: string; status: 'complete' | 'partial' | 'unavailable' };
 
 export async function currentContext(db: D1Database, location: ContextLocation,
-  fetchModule: (module: Module, at: string, location: ContextLocation) => Promise<unknown>, now = Date.now()): Promise<CurrentContext> {
+  fetchModule: (module: Module, at: string, location: ContextLocation) => Promise<unknown>, now = Date.now(), questionId?: string): Promise<CurrentContext> {
   if (!validContextLocation(location) || !Number.isSafeInteger(now) || now < 0) throw new Error('Invalid current context request');
+  if (questionId && !/^[a-zA-Z0-9_-]{1,128}$/.test(questionId)) throw new Error('Invalid question context identifier');
   const day = indiaDay(now);
   const midnight = Date.parse(`${day}T00:00:00+05:30`) + 86_400_000;
   // Coordinates remain exact and server-bound. No global planet cache until
@@ -24,7 +25,7 @@ export async function currentContext(db: D1Database, location: ContextLocation,
   const hour = Math.floor(now / 3_600_000);
   await db.prepare('DELETE FROM current_context_cache WHERE expires_at < ?').bind(now - 30 * 86_400_000).run();
   const get = async (module: Module): Promise<{ payload: unknown; at: number } | null> => {
-    const key = `drik-lahiri-en-v1:${module}:${place}:${day}:${module === 'transit' ? hour : 'day'}`;
+    const key = `drik-lahiri-en-v1:${module}:${place}:${day}:${questionId ?? (module === 'transit' ? hour : 'day')}`;
     const expiry = module === 'transit' ? Math.min((hour + 1) * 3_600_000, midnight) : midnight;
     const select = () => db.prepare('SELECT status, payload_json, calculated_at, expires_at FROM current_context_cache WHERE id = ?').bind(key).first<Row>();
     const decode = (row: Row | null) => {

@@ -12,6 +12,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'services/profile_session.dart';
 import 'services/jyotara_api.dart';
 import 'services/conversation.dart';
+import 'services/chat_suggestions.dart';
 import 'services/ui_language.dart';
 import 'services/language_preferences.dart';
 import 'services/reply_language.dart';
@@ -952,6 +953,15 @@ class _ChatScreenState extends State<ChatScreen> {
     return ChatLanguage.values.byName(detected);
   }
 
+  List<String> get _suggestions => chatSuggestions(
+    widget.guide.category,
+    detectReplyLanguage(
+      _messages.where((m) => m.fromUser).lastOrNull?.text ?? '',
+      preference: _language.name,
+    ),
+    _messages.where((m) => m.fromUser).map((m) => m.text).toList(),
+  );
+
   Future<void> _send([String? suggestion]) async {
     final text = (suggestion ?? _controller.text).trim();
     if (text.isEmpty || _thinking || _conversation.ended) return;
@@ -1249,7 +1259,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
-            if (_messages.length == 1 && !_conversation.ended)
+            if (!_conversation.ended)
               SizedBox(
                 height: 46,
                 child: ListView.separated(
@@ -1258,11 +1268,13 @@ class _ChatScreenState extends State<ChatScreen> {
                     horizontal: 16,
                     vertical: 3,
                   ),
-                  itemCount: widget.guide.prompts.length,
+                  itemCount: _suggestions.length,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (_, index) => ActionChip(
-                    label: Text(widget.guide.prompts[index]),
-                    onPressed: () => _send(widget.guide.prompts[index]),
+                    label: Text(_suggestions[index]),
+                    onPressed: _thinking
+                        ? null
+                        : () => _send(_suggestions[index]),
                   ),
                 ),
               ),
