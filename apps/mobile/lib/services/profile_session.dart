@@ -713,10 +713,10 @@ class ProfileSession extends ChangeNotifier {
             .skip(max(0, messages.length - 6))
             .toList(growable: false);
         final input = birthInput;
-        if (input != null && input.exactTime && ['male', 'female'].contains(gender?.value) && nickname.isNotEmpty && (birthplaceLabel?.isNotEmpty ?? false)) {
+        if (input != null && input.exactTime && ['male', 'female'].contains(gender?.value) && (birthplaceLabel?.isNotEmpty ?? false)) {
           _reportPeople[requestKey] = {
             'datetime': input.dateTime, 'latitude': input.latitude, 'longitude': input.longitude,
-            'name': nickname, 'gender': gender!.value, 'place': birthplaceLabel!,
+            'name': nickname.isEmpty ? 'Jyotara profile' : nickname, 'gender': gender!.value, 'place': birthplaceLabel!,
           };
         }
         final random = Random.secure();
