@@ -1607,7 +1607,7 @@ class AccountScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
         children: [
-          const _TopBar(),
+          const _TopBar(showAccount: false),
           const SizedBox(height: 30),
           Text(
             uiText(context, 'Your account'),
@@ -1836,25 +1836,43 @@ class BirthProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) => BirthForm(session: profileSession);
 }
 
-class _TopBar extends StatelessWidget {
-  const _TopBar();
+class _TopBar extends StatefulWidget {
+  const _TopBar({this.showAccount = true});
+  final bool showAccount;
+  @override
+  State<_TopBar> createState() => _TopBarState();
+}
+
+class _TopBarState extends State<_TopBar> {
+  bool _opening = false;
+  Future<void> _openAccount() async {
+    if (_opening) return;
+    _opening = true;
+    try {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            appBar: AppBar(title: Text(uiText(context, 'Account'))),
+            body: const AccountScreen(),
+          ),
+        ),
+      );
+    } finally {
+      _opening = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Row(
       children: [
         const Expanded(child: _BrandLockup(compact: true)),
-        IconButton(
-          tooltip: uiText(context, 'Account'),
-          onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => Scaffold(
-                appBar: AppBar(title: Text(uiText(context, 'Account'))),
-                body: const AccountScreen(),
-              ),
-            ),
+        if (widget.showAccount)
+          IconButton(
+            tooltip: uiText(context, 'Account'),
+            onPressed: _openAccount,
+            icon: const Icon(Icons.person_outline_rounded),
           ),
-          icon: const Icon(Icons.person_outline_rounded),
-        ),
       ],
     );
   }
@@ -1911,76 +1929,88 @@ class _ChartHero extends StatelessWidget {
       animation: profileSession,
       builder: (context, _) {
         final facts = profileSession.facts;
-        return Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(28),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF7C352C), Color(0xFF3C2018)],
-            ),
-            border: Border.all(color: const Color(0xFFB6884C)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x30642D20),
-                blurRadius: 28,
-                offset: Offset(0, 14),
+        return EntranceReveal(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(28),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF7C352C), Color(0xFF3C2018)],
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Row(
+              border: Border.all(color: const Color(0xFFB6884C)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x30642D20),
+                  blurRadius: 28,
+                  offset: Offset(0, 14),
+                ),
+              ],
+            ),
+            child: CustomPaint(
+              painter: const TemplePatternPainter(intensity: .22),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.auto_awesome_rounded, color: gold, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: UiText(
-                      'YOUR PERSONAL CONTEXT',
-                      style: TextStyle(
-                        color: gold,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
+                  const Row(
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, color: gold, size: 18),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: UiText(
+                          'YOUR PERSONAL CONTEXT',
+                          style: TextStyle(
+                            color: gold,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    facts == null
+                        ? uiText(context, 'Start with your\nVedic birth chart.')
+                        : '${facts['rashi']} ${uiText(context, 'Rasi')}',
+                    style: Theme.of(context).textTheme.headlineSmall
+                        ?.copyWith(fontSize: 26),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    facts == null
+                        ? uiText(
+                            context,
+                            'Add your date, time and birthplace. Every guide uses this profile.',
+                          )
+                        : '${facts['nakshatra']} · ${uiText(context, 'Your chart is available. Open it to check details, freshness and storage status.')}',
+                    style: const TextStyle(
+                      color: Color(0xFFEBD8BC),
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  FilledButton.tonalIcon(
+                    onPressed: onPressed,
+                    icon: Icon(
+                      facts == null
+                          ? Icons.add_rounded
+                          : Icons.grid_view_rounded,
+                    ),
+                    label: Text(
+                      uiText(
+                        context,
+                        facts == null
+                            ? 'Create birth profile'
+                            : 'View my chart',
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                facts == null
-                    ? uiText(context, 'Start with your\nVedic birth chart.')
-                    : '${facts['rashi']} ${uiText(context, 'Rasi')}',
-                style: Theme.of(context).textTheme.headlineSmall
-                    ?.copyWith(fontSize: 26),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                facts == null
-                    ? uiText(
-                        context,
-                        'Add your date, time and birthplace. Every guide uses this profile.',
-                      )
-                    : '${facts['nakshatra']} · ${uiText(context, 'Your chart is available. Open it to check details, freshness and storage status.')}',
-                style: const TextStyle(color: Color(0xFFEBD8BC), height: 1.45),
-              ),
-              const SizedBox(height: 18),
-              FilledButton.tonalIcon(
-                onPressed: onPressed,
-                icon: Icon(
-                  facts == null ? Icons.add_rounded : Icons.grid_view_rounded,
-                ),
-                label: Text(
-                  uiText(
-                    context,
-                    facts == null ? 'Create birth profile' : 'View my chart',
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         );
       },
@@ -1994,47 +2024,49 @@ class _CompactGuideCard extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 176,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: guide.colors,
+    return PressFeedback(
+      child: SizedBox(
+        width: 176,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Ink(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: guide.colors,
+              ),
+              border: Border.all(color: Colors.white.withValues(alpha: .12)),
             ),
-            border: Border.all(color: Colors.white.withValues(alpha: .12)),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _GuideAvatar(guide: guide, radius: 35),
-                const Spacer(),
-                const _AiBadge(),
-                const SizedBox(height: 8),
-                UiText(
-                  guide.name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _GuideAvatar(guide: guide, radius: 35),
+                  const Spacer(),
+                  const _AiBadge(),
+                  const SizedBox(height: 8),
+                  UiText(
+                    guide.name,
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                UiText(
-                  guide.speciality,
-                  style: const TextStyle(
-                    color: Color(0xFFF5E7D1),
-                    fontSize: 12,
-                    height: 1.25,
+                  const SizedBox(height: 2),
+                  UiText(
+                    guide.speciality,
+                    style: const TextStyle(
+                      color: Color(0xFFF5E7D1),
+                      fontSize: 12,
+                      height: 1.25,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -2049,76 +2081,78 @@ class _FullGuideCard extends StatelessWidget {
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _GuideAvatar(guide: guide, radius: 34),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        UiText(
-                          guide.name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        ),
-                        const _AiBadge(),
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    UiText(
-                      guide.speciality,
-                      style: const TextStyle(
-                        color: ivory,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    UiText(
-                      guide.description,
-                      style: const TextStyle(color: muted),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Free tester chat · Pricing later',
-                      style: TextStyle(color: gold),
-                    ),
-                    const SizedBox(height: 12),
-                    const Row(
-                      children: [
-                        Icon(Icons.translate_rounded, color: gold, size: 16),
-                        SizedBox(width: 6),
-                        Expanded(
-                          child: UiText(
-                            'English · Tamil · Tanglish',
-                            style: TextStyle(
-                              color: gold,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+    return PressFeedback(
+      child: Card(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _GuideAvatar(guide: guide, radius: 34),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          UiText(
+                            guide.name,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
                             ),
                           ),
+                          const _AiBadge(),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      UiText(
+                        guide.speciality,
+                        style: const TextStyle(
+                          color: ivory,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 8),
+                      UiText(
+                        guide.description,
+                        style: const TextStyle(color: muted),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        'Free tester chat · Pricing later',
+                        style: TextStyle(color: gold),
+                      ),
+                      const SizedBox(height: 12),
+                      const Row(
+                        children: [
+                          Icon(Icons.translate_rounded, color: gold, size: 16),
+                          SizedBox(width: 6),
+                          Expanded(
+                            child: UiText(
+                              'English · Tamil · Tanglish',
+                              style: TextStyle(
+                                color: gold,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.arrow_forward_rounded, color: muted),
-            ],
+                const SizedBox(width: 8),
+                const Icon(Icons.arrow_forward_rounded, color: muted),
+              ],
+            ),
           ),
         ),
       ),
