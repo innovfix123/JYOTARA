@@ -356,7 +356,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
             'Make room for rest, regular meals and comfortable movement today. A horoscope cannot assess your health.',
           ),
           const Text(
-            'General, Love and Career readings: Prokerala. Money and Health are everyday reminders, not date-specific forecasts.',
+            'General, Love and Career are daily readings. Money and Health are everyday reminders, not date-specific forecasts.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
         ],

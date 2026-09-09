@@ -1,3 +1,4 @@
+import { profileOverviewQuestion, profileOverview, saturnQuestion, saturnStatus } from '@/lib/profile-overview';
 import { env } from 'cloudflare:workers';
 import { chartSessionDeleted } from '@/db/profile-deletion';
 import { chartTicketConfigured, openChartTicket } from '@/lib/chart-ticket';
@@ -138,6 +139,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
           'For chart interpretation, use ONLY the supplied house topic and linkedTheme or explicit provider interpretation; do not expand these into job fields, personality traits, planet-based abilities, future success or auspicious timing. At most ONE chart indicator per reply. Practical suggestions must follow the user situation and must not be attributed to a planet.',
           'Use the authenticated chartContext and any supplied provider interpretations to explain the traditional theme relevant to the actual question. ChartContext is calculated data, not a provider-written prediction. Be clear in your language that an interpretation is traditional and tentative, not proof of real events.',
           'Do not infer personality, skills, preferred occupations or relationship behaviour from a Moon sign, nakshatra or planet name. A report about recognition does not establish skill in communication, analysis, teaching or advisory work. Connect at most one relevant calculated indicator to the question. The focus describes house-topic conventions; never invent missing planets, house positions, aspects, strength, dignity, dates or a complete synthesis. Do not conclude an event will occur just because a related house or planet exists.',
+          'Never mention provider names, Prokerala, API calls or credits in user-facing replies. Refer to the selected chart or birth chart. You remain an AI guide; do not claim to be human.',
           'For a greeting welcome the user warmly and ask what is on their mind. For a broad concern give one relevant supplied chart connection, then ask one focused question. For a follow-up use the actual user history and answer directly. Do not dump chart facts or repeat disclaimers. No headings, bold text or lists.',
           'The chartContext focus is only the question category, not a calculated finding. Never describe focus as what the chart or current period shows. Empty houses and planets provide NO placement-based interpretation. If birthTimeKnown is false, do not attribute advice to a chart theme; ask about the situation and keep practical advice explicitly conversational.',
           'If birth time is unknown, do NOT bring it up for ordinary concerns like will I get a job or can I study. Acknowledge it briefly only for an explicit chart-timing or houses question, then continue the conversation using what the user has shared and the limited available data. Do not pretend practical advice is a calculated prediction. Do not repeatedly request birth time.',
@@ -332,12 +334,14 @@ export async function POST(request: Request) {
   // Typed messages and suggestion taps share the same authenticated evidence path.
   const requestsReading = packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required';
   const chartContext = requestsReading && env.PROKERALA_ENVIRONMENT === 'production' && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required' ? buildTopicContext(chart, packet.category, trusted.birthTimeKnown) : undefined;
+  const overview = question === profileOverviewQuestion || (saturnQuestion(question) && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required');
+  if (chartContext) Object.assign(chartContext, {saturnStatus:saturnStatus(chart,trusted.birthTimeKnown)});
   let generated: string | null = null;
   const career = packet.category === 'Career' && !practicalAdviceScope(packet) ? reviewedCareerResponse({
     snapshotId: trusted.profileId, questionId: identity.id, packet, style,
   }) : null;
   try {
-    if (!wantsMarriageTiming && !practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history, requestsReading ? providerSources : [], chartContext, body.guide);
+    if (!overview && !wantsMarriageTiming && !practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history, requestsReading ? providerSources : [], chartContext, body.guide);
   } catch {
     generated = null;
   }
@@ -356,11 +360,11 @@ export async function POST(request: Request) {
     ? missingBirth?'Kalyana kaalam paarka confirmed birth time thevai. Unga pirandha neram theriyuma?':refreshNeeded?'Saved birth details-a thirandhu jathagathai refresh pannunga. Appuram kalyana kaala report-a paarkalaam.':'Kalyana kaala report ippo kidaikkala. Pudhu report request thirumba anuppala; unga jathagam save aagirukku.'
     :missingBirth?'A marriage-period reading needs a confirmed birth time. Do you know your birth time?':refreshNeeded?'Please open your saved birth details and refresh the chart so I can check its marriage-period report.':'The marriage-period report is unavailable right now. No repeat report request was sent; your saved chart is still available.';
   const noPeriod=style==='tamil'?'நீங்கள் கேட்ட காலத்துக்குப் பொருந்தும் திருமணக் காலம் இந்த அறிக்கையில் இல்லை. அதனால் திருமணம் நடக்காது என்று பொருள் இல்லை.':style==='tanglish'?'Neenga ketta kaalathukku porundhum kalyana kaalam indha report-la illa. Adhanaala kalyanam nadakkaadhunu artham illa.':'This report does not list a marriage period matching the time you asked about. That does not mean marriage will not happen.';
-  const answer = reportReply?.answer ?? (wantsMarriageTiming ? reportStatus==='no_matching_period'?noPeriod:timingLimit : providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
+  const answer = overview ? profileOverview(chart,trusted.birthTimeKnown,style) : reportReply?.answer ?? (wantsMarriageTiming ? reportStatus==='no_matching_period'?noPeriod:timingLimit : providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
   const providerReading = !!generated && requestsReading && providerSources.length > 0 && !chartContext;
   const chartReading = !!generated && !!chartContext && (chartContext.birthTimeKnown || !!chartContext.currentPanchang);
   const modelPracticalAdvice = !!generated && !providerReading && !chartReading;
-  const answerMode = reportReply ? 'provider_reading' : wantsMarriageTiming ? 'reading_unavailable' : providerGap ? 'reading_unavailable' : practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (chartReading ? 'chart_guidance' : providerReading ? 'provider_reading' : 'model_guidance') : 'grounded_fallback';
+  const answerMode = overview ? 'chart_guidance' : reportReply ? 'provider_reading' : wantsMarriageTiming ? 'reading_unavailable' : providerGap ? 'reading_unavailable' : practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (chartReading ? 'chart_guidance' : providerReading ? 'provider_reading' : 'model_guidance') : 'grounded_fallback';
   const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
 
   const reply = {
@@ -369,10 +373,10 @@ export async function POST(request: Request) {
     ...(reportStatus ? {reportStatus} : {}),
     ...(reportReply ? {reportEvidence:reportReply.source} : {}),
     answeredAt: new Date().toISOString(),
-    answer,
-    evidence: reportReply ? reportReply.evidence : chartReading ? [`Prokerala calculations · ${chartContext?.birthTimeKnown ? 'confirmed birth time' : 'birth time unknown'}`] : providerReading ? providerSources.map(source => `Prokerala Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
+    answer: answer.replace(/prokerala/gi, 'astrology').replace(/புரோகேரளா/g, 'ஜாதக'),
+    evidence: overview ? [] : reportReply ? reportReply.evidence : chartReading ? [`Chart calculations · ${chartContext?.birthTimeKnown ? 'confirmed birth time' : 'birth time unknown'}`] : providerReading ? providerSources.map(source => `Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
     // Reviewed copy already includes its reviewed limitation in the answer.
-    limitation: chartReading || providerGap || providerReading || practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
+    limitation: overview || chartReading || providerGap || providerReading || practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
     support: reportReply ? 'partially_supported' : practical ? 'partially_supported' : packet.support,
     answerMode,
     profileId: trusted.profileId,

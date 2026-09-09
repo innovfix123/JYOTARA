@@ -40,11 +40,11 @@ export function marriageReportReply(report:MarriageReport,style:string,question:
   const active=window.start<=day;
   const date=(d:string)=>new Intl.DateTimeFormat(style==='tamil'?'ta-IN':'en-GB',{day:'numeric',month:'short',year:'numeric',timeZone:'UTC'}).format(new Date(d+'T12:00:00Z'));
   const range=active?`${style==='tamil'?'இப்போது முதல்':style==='tanglish'?'Ippo irundhu':'now through'} ${date(window.end)}`:`${date(window.start)} – ${date(window.end)}`;
-  const answer=style==='tamil'?`உங்கள் புரோகேரளா அறிக்கை ${range} திருமணப் பேச்சு, நிச்சயதார்த்தம் போன்றவற்றுக்குச் சாதகமான காலமாகக் குறிப்பிடுகிறது. இது பாரம்பரிய வழிகாட்டல்; இந்தக் காலத்தில் திருமணம் உறுதியாக நடக்கும் என்று பொருள் இல்லை. வீட்டில் வரன் பார்க்கத் தொடங்கிவிட்டார்களா?`
-    :style==='tanglish'?`Unga Prokerala report-la ${range} kalyana pechu, nichayathartham pondravatrukku saadhagamaana kaalamnu irukku. Idhu paarambariya kurippu; indha kaalathula kalyanam kandippa nadakkumnu artham illa. Veetla varan paarka aarambichutaangala?`
-    :`Your Prokerala report lists ${range} as a traditionally favourable window for marriage discussions or engagement. This does not guarantee a wedding in that period. Has your family started looking, or are you already considering someone?`;
+  const answer=style==='tamil'?`உங்கள் ஜாதக அறிக்கை ${range} திருமணப் பேச்சு, நிச்சயதார்த்தம் போன்றவற்றுக்குச் சாதகமான காலமாகக் குறிப்பிடுகிறது. இது பாரம்பரிய வழிகாட்டல்; இந்தக் காலத்தில் திருமணம் உறுதியாக நடக்கும் என்று பொருள் இல்லை. வீட்டில் வரன் பார்க்கத் தொடங்கிவிட்டார்களா?`
+    :style==='tanglish'?`Unga birth-chart report-la ${range} kalyana pechu, nichayathartham pondravatrukku saadhagamaana kaalamnu irukku. Idhu paarambariya kurippu; indha kaalathula kalyanam kandippa nadakkumnu artham illa. Veetla varan paarka aarambichutaangala?`
+    :`Your birth-chart report lists ${range} as a traditionally favourable window for marriage discussions or engagement. This does not guarantee a wedding in that period. Has your family started looking, or are you already considering someone?`;
   const concise=history.length?answer.replace(/[^.!?।]*[?]$/, '').trim():answer;
-  return {answer:concise,window,evidence:[`Prokerala · Favourable Marriage Periods · page ${report.page}`,`${window.dasha} / ${window.subDasha}: ${window.start} to ${window.end}`],source:{module:report.module,page:report.page,pdfSha256:report.pdfSha256,calculatedAt:report.calculatedAt,window}};
+  return {answer:concise,window,evidence:[`Birth chart · Favourable Marriage Periods · page ${report.page}`,`${window.dasha} / ${window.subDasha}: ${window.start} to ${window.end}`],source:{module:report.module,page:report.page,pdfSha256:report.pdfSha256,calculatedAt:report.calculatedAt,window}};
 }
 export async function verifiedReportPerson(db:D1Database,person:ReportPerson,session:string,profileId:string,location:{latitude:number;longitude:number}|undefined,deps:{hash:(values:unknown[])=>Promise<string>;open:(id:string,ciphertext:string)=>Promise<unknown>}) {
   if(!location||person.latitude!==location.latitude||person.longitude!==location.longitude)return false;

@@ -358,7 +358,7 @@ class _BirthFormState extends State<BirthForm> {
               label: UiText(_searching ? 'Searching…' : 'Search birthplace'),
             ),
             const UiText(
-              'Location data: Prokerala',
+              'Location data: astrology calculation service',
               style: TextStyle(fontSize: 12),
             ),
             ..._places.map(
@@ -384,7 +384,7 @@ class _BirthFormState extends State<BirthForm> {
                 'I am 18+ and agree to process my birth details for automated Vedic guidance.',
               ),
               subtitle: const UiText(
-                'Name or alias, selected gender and birth details go to Prokerala when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
+                'Name or alias, selected gender and birth details go to astrology calculation service when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
               ),
             ),
             const UiText(

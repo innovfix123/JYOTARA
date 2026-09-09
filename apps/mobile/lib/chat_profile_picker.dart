@@ -15,6 +15,11 @@ String chatProfileDetails(ProfileSession session) {
     if (stamp != null)
       'Birth time: ${birth!.exactTime ? '${stamp.substring(11, 16)} IST' : 'Unknown'}',
     'Birthplace: ${session.birthplaceLabel ?? 'Saved coordinates'}',
+    if (session.facts?['rashi'] != null) 'Rasi: ${session.facts!['rashi']}',
+    if (session.facts?['nakshatra'] != null)
+      'Nakshatra: ${session.facts!['nakshatra']}',
+    if (session.facts != null && !session.birthTimeKnown)
+      'Birth time unknown: chart details are provisional.',
   ].join('\n');
 }
 

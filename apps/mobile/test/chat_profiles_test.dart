@@ -27,7 +27,21 @@ void main() {
             baseUrl: 'https://example.test',
             client: MockClient((r) async {
               if (r.url.path.endsWith('kundli')) return chartReply(id);
-              requests.add(jsonDecode(r.body));
+              final body = jsonDecode(r.body);
+              if (body['question'] ==
+                  'Show the selected profile rasi, nakshatra and current Saturn status.') {
+                expect(body['chartTicket'], 'ticket-Profile B');
+                return http.Response(
+                  jsonEncode({
+                    'profileId': id,
+                    'answer': 'Selected Profile B chart overview',
+                    'answerMode': 'chart_guidance',
+                    'evidence': [],
+                  }),
+                  200,
+                );
+              }
+              requests.add(body);
               return http.Response(
                 jsonEncode({
                   'profileId': id,
@@ -68,6 +82,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(find.text('Open chat with Aadhirai'), 150);
       expect(
         tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull,
@@ -112,12 +127,25 @@ void main() {
       expect(requests.single['guide'], 'Aadhirai');
       expect(a.conversation('Aadhirai').messages.length, 1);
       final suggestion = find.text('What does my chart suggest about love?');
-      expect(suggestion, findsOneWidget, reason: 'Suggestions stay after a typed reply');
+      expect(
+        suggestion,
+        findsOneWidget,
+        reason: 'Suggestions stay after a typed reply',
+      );
       await tester.tap(suggestion);
       await tester.pumpAndSettle();
-      expect(requests.last['question'], 'What does my chart suggest about love?');
+      expect(
+        requests.last['question'],
+        'What does my chart suggest about love?',
+      );
       expect(requests.last['chartTicket'], 'ticket-Profile B');
-      expect(find.widgetWithText(ActionChip, 'What does my chart suggest about love?'), findsNothing);
+      expect(
+        find.widgetWithText(
+          ActionChip,
+          'What does my chart suggest about love?',
+        ),
+        findsNothing,
+      );
 
       await tester.tap(find.text('End'));
       await tester.pumpAndSettle();

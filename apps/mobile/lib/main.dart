@@ -1,3 +1,4 @@
+import 'services/public_reading_text.dart';
 import 'brand_mark.dart';
 
 import 'dart:async';
@@ -922,6 +923,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _bindConversation();
     _session.addListener(_profileChanged);
     if (_messages.length > 1) _scrollToLatest();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverview());
   }
 
   void _bindConversation() {
@@ -947,6 +949,45 @@ class _ChatScreenState extends State<ChatScreen> {
           label: 'AI VEDIC GUIDE',
         ),
       );
+    }
+  }
+
+  Future<void> _loadOverview() async {
+    if (!mounted ||
+        _session.facts == null ||
+        _conversation.ended ||
+        _thinking ||
+        _messages.any((m) => m.fromUser || m.label == 'PROFILE OVERVIEW')) {
+      return;
+    }
+    final target = _conversation;
+    final revision = _session.revision;
+    final language = _language == ChatLanguage.auto
+        ? (uiText(context, 'Rasi') == 'ராசி' ? 'tamil' : 'english')
+        : _language.name;
+    target.pending = true;
+    target.changed();
+    try {
+      final result = await _session.ask(
+        category: 'Daily',
+        question: 'Show the selected profile rasi, nakshatra and current Saturn status.',
+        responseStyle: language,
+        guide: widget.guide.name,
+      );
+      if (revision != _session.revision) return;
+      target.messages.add(
+        ChatMessage(
+          fromUser: false,
+          text: '${_session.nickname}: ${result.answer}',
+          label: 'PROFILE OVERVIEW',
+        ),
+      );
+    } catch (_) {
+      // Leave the overview retryable on the next open; ordinary chat stays usable.
+    } finally {
+      target.pending = false;
+      target.changed();
+      await _session.flushStorage();
     }
   }
 
@@ -976,6 +1017,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _bindConversation();
       _controller.clear();
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverview());
   }
 
   @override
@@ -2290,7 +2332,7 @@ class _MessageBubble extends StatelessWidget {
           children: [
             if (message.label != null) ...[
               Text(
-                message.label!,
+                publicReadingText(message.label!),
                 style: const TextStyle(
                   color: gold,
                   fontSize: 14,
@@ -2302,7 +2344,7 @@ class _MessageBubble extends StatelessWidget {
             ],
             SelectionArea(
               child: Text(
-                message.text,
+                publicReadingText(message.text),
                 style: const TextStyle(fontSize: 16, height: 1.45),
               ),
             ),

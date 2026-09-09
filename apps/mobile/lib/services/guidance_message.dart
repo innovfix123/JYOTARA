@@ -56,7 +56,7 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
         : result.answerMode == 'model_guidance'
         ? copy('GUIDANCE', 'வழிகாட்டல்', 'GUIDANCE')
         : provider
-        ? copy('PROKERALA READING', 'புரோகேரளா பலன்', 'PROKERALA READING')
+        ? copy('CHART READING', 'ஜாதகப் பலன்', 'CHART READING')
         : result.answerMode == 'practical_guidance'
         ? copy(
             'PRACTICAL GUIDANCE',

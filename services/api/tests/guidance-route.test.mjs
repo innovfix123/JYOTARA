@@ -15,6 +15,7 @@ const source = readFileSync(new URL('../app/api/guidance/route.ts', import.meta.
 const routeCode = compile(source)
   .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__jyotaraRouteTestEnv;')
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts'))
+  .replace('@/lib/profile-overview', moduleUrl('../lib/profile-overview.ts'))
   .replace('@/lib/astrology-evidence', evidenceUrl)
   .replace('@/lib/chart-ticket', ticketUrl);
 const protectedRouteCode = routeCode.replace('@/db/guidance-requests', moduleUrl('../db/guidance-requests.ts'))
@@ -138,13 +139,13 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     const gap = await (await request({...base, category:'Career', question:'What does my chart show about work?'})).json();
     assert.equal(gap.answerMode,'chart_guidance');
     assert.equal(providerCalls,beforeProviderOnly+1,'Calculated chart context works without matching Yoga prose');
-    assert.ok(gap.evidence.some(item=>item.includes('Prokerala')));
+    assert.ok(gap.evidence.some(item=>item.includes('Chart calculations')));
     const providerChart = {...chart,yogas:[{name:'Raja Yoga',description:'Traditional recognition at work.'}]};
     const providerTicket = await issueChartTicket(secret,{sessionId:'test-session',profileId:'profile-one',birthTimeKnown:true,chart:providerChart});
     modelReply = 'Raja Yoga traditionally suggests recognition for your work.';
     const reading = await (await request({...base,category:'Career',question:'What does my chart show about work?',chartTicket:providerTicket})).json();
     assert.equal(reading.answerMode,'chart_guidance');
-    assert.ok(reading.evidence.some(item=>item.includes('Prokerala')));
+    assert.ok(reading.evidence.some(item=>item.includes('Chart calculations')));
     assert.equal(reading.interpretationProvenance,undefined,'Provider explanation must not claim independent review');
     const followup=await (await request({...base,guide:'Aadhirai',question:'What does that suggest?',previousUserMessages:['What does my chart show about my career?'],chartTicket:providerTicket})).json();
     assert.equal(followup.answerMode,'chart_guidance');

@@ -106,7 +106,7 @@ List<Map<String, dynamic>>? normalizeNavamsa(dynamic payload, bool known) {
   return result.length == 9 ? result : null;
 }
 
-/// Converts the protected backend's Prokerala payload into guidance facts.
+/// Converts the protected backend's astrology calculation service payload into guidance facts.
 /// Missing values stay absent; mock calculations never become personal facts.
 Map<String, dynamic> normalizeChartFacts(
   Map<String, dynamic> payload, {

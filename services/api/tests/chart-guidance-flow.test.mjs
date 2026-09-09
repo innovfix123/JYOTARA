@@ -19,7 +19,7 @@ const deletion = url(compile(read('../db/profile-deletion.ts')).replace('./guida
 const route = file => url(compile(read(file))
   .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__chartFlowEnv;')
   .replace('@/lib/chart-ticket', ticket).replace('@/lib/provider-chart', provider)
-  .replace('@/lib/astrology-evidence', evidence).replace('@/lib/guidance-language', language)
+  .replace('@/lib/profile-overview', url(compile(read('../lib/profile-overview.ts')))).replace('@/lib/astrology-evidence', evidence).replace('@/lib/guidance-language', language)
   .replace('@/lib/birth-request', moduleUrl('../lib/birth-request.ts'))
   .replace('@/db/profile-reservation', moduleUrl('../db/profile-reservation.ts'))
   .replace('@/db/profile-recovery', recovery)

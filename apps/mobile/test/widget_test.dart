@@ -55,6 +55,9 @@ void main() {
                 200,
               );
             }
+            if (jsonDecode(request.body)['question'] == 'Show the selected profile rasi, nakshatra and current Saturn status.') {
+              return http.Response(jsonEncode({'profileId':'test-profile','answer':'Your rasi is Meena.','answerMode':'chart_guidance','evidence':[]}),200);
+            }
             questionCalls++;
             return response.future;
           }),
@@ -70,6 +73,7 @@ void main() {
         home: ChatScreen(guide: guides[1], session: session),
       );
       await tester.pumpWidget(screen());
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const Key('chatInput')),
         'Career question',
@@ -117,7 +121,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 1400));
     await tester.tap(find.byKey(const Key('enterApp')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Your AI Vedic Guides'),200,scrollable:find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(
+      find.text('Your AI Vedic Guides'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Your AI Vedic Guides'), findsOneWidget);
     expect(find.text('Chart'), findsOneWidget);
   });
@@ -152,6 +160,18 @@ void main() {
                   200,
                 );
               }
+              if (jsonDecode(request.body)['question'] ==
+                  'Show the selected profile rasi, nakshatra and current Saturn status.') {
+                return http.Response(
+                  jsonEncode({
+                    'profileId': 'test-profile',
+                    'answer': 'Your rasi is Meena.',
+                    'answerMode': 'chart_guidance',
+                    'evidence': [],
+                  }),
+                  200,
+                );
+              }
               questionCalls++;
               final body = jsonDecode(request.body);
               expect(body['responseStyle'], entry.key);
@@ -182,6 +202,7 @@ void main() {
             home: ChatScreen(guide: guides[1], session: session),
           ),
         );
+        await tester.pumpAndSettle();
         await tester.enterText(find.byKey(const Key('chatInput')), entry.value);
         await tester.tap(find.byKey(const Key('sendMessage')));
         await tester.pumpAndSettle();

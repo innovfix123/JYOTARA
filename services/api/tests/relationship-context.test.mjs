@@ -27,7 +27,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
-  .replace('@/lib/astrology-evidence', evidence)
+  .replace('@/lib/profile-overview', url(compile(source('../lib/profile-overview.ts')))).replace('@/lib/astrology-evidence', evidence)
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
 
 
