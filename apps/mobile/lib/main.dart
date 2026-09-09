@@ -1011,9 +1011,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const UiText(
-                      'AI Vedic Guide',
-                      style: TextStyle(fontSize: 12, color: muted),
+                    Text(
+                      '${_session.nickname.isEmpty ? 'My profile' : _session.nickname} · AI guide',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: muted),
                     ),
                   ],
                 ),
