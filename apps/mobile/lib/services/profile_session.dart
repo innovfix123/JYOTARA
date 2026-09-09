@@ -79,6 +79,7 @@ class ProfileSession extends ChangeNotifier {
         }),
       ),
       'requestIds': Map<String, String>.from(_requestIds),
+      'reportPeople': _reportPeople.map((key, value) => MapEntry(key, Map<String, dynamic>.from(value))),
       'requestContexts': _requestContexts.map(
         (key, value) => MapEntry(key, List<String>.from(value)),
       ),
@@ -238,6 +239,15 @@ class ProfileSession extends ChangeNotifier {
         ..addAll(
           contexts.map((k, v) => MapEntry(k, List<String>.from(v as List))),
         );
+      _reportPeople.clear();
+      final people = saved['reportPeople'];
+      if (people is Map) {
+        for (final entry in people.entries) {
+          if (entry.key is String && entry.value is Map && _requestIds.containsKey(entry.key)) {
+            _reportPeople[entry.key] = Map<String, dynamic>.from(entry.value);
+          }
+        }
+      }
       for (final chat in _conversations.values) {
         chat.addListener(_persist);
       }
@@ -300,6 +310,7 @@ class ProfileSession extends ChangeNotifier {
   int get revision => _revision;
   final _conversations = <String, GuideConversation>{};
   final _requestIds = <String, String>{};
+  final _reportPeople = <String, Map<String, dynamic>>{};
   final _requestContexts = <String, List<String>>{};
   final _responseReceipts = Expando<({String key, String id, int revision})>();
 
@@ -556,6 +567,7 @@ class ProfileSession extends ChangeNotifier {
       if (_profileKey != key) {
         _clearConversations();
         _requestIds.clear();
+        _reportPeople.clear();
         _requestContexts.clear();
         this.nickname = '';
         this.gender = null;
@@ -700,6 +712,13 @@ class ProfileSession extends ChangeNotifier {
         _requestContexts[requestKey] = messages
             .skip(max(0, messages.length - 6))
             .toList(growable: false);
+        final input = birthInput;
+        if (input != null && input.exactTime && ['male', 'female'].contains(gender?.value) && nickname.isNotEmpty && (birthplaceLabel?.isNotEmpty ?? false)) {
+          _reportPeople[requestKey] = {
+            'datetime': input.dateTime, 'latitude': input.latitude, 'longitude': input.longitude,
+            'name': nickname, 'gender': gender!.value, 'place': birthplaceLabel!,
+          };
+        }
         final random = Random.secure();
         _requestIds[requestKey] = List.generate(
           16,
@@ -732,6 +751,7 @@ class ProfileSession extends ChangeNotifier {
         researchConsent: consent,
         requestId: requestId,
         previousUserMessages: _requestContexts[requestKey] ?? const [],
+        reportPerson: _reportPeople[requestKey],
         guide: guide,
       );
       if (revision != _revision) {
@@ -856,6 +876,7 @@ class ProfileSession extends ChangeNotifier {
     _revision++;
     _clearConversations();
     _requestIds.clear();
+        _reportPeople.clear();
     _requestContexts.clear();
     _facts = null;
     _raw = null;

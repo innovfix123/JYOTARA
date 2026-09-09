@@ -16,6 +16,7 @@ export async function deleteChartSession(db: D1Database, session: string, now = 
       ON CONFLICT(session_id) DO UPDATE SET expires_at = MAX(expires_at, excluded.expires_at)`)
       .bind(session, now + 30 * 24 * 60 * 60 * 1000),
     eraseGuidanceContent(db, session),
+    db.prepare('DELETE FROM provider_reports WHERE session_id = ?').bind(session),
     db.prepare(`UPDATE profile_generations SET status = 'deleted', request_hash = NULL,
       response_ciphertext = NULL, response_expires_at = NULL, updated_at = ?
       WHERE session_id = ?`).bind(now, session),

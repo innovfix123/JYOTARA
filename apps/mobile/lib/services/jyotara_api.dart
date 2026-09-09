@@ -265,6 +265,7 @@ class JyotaraApiClient {
     String? ageBand,
     String? requestId,
     List<String> previousUserMessages = const [],
+    Map<String, dynamic>? reportPerson,
     String? guide,
   }) async {
     final language = responseStyle == 'english' ? 'en' : 'ta';
@@ -290,6 +291,7 @@ class JyotaraApiClient {
       'researchConsent': researchConsent,
       'ageBand': ?ageBand,
       'requestId': ?requestId,
+      'reportPerson': ?reportPerson,
       if (previousUserMessages.isNotEmpty)
         'previousUserMessages': List<String>.from(previousUserMessages),
     });

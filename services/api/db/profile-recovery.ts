@@ -1,3 +1,4 @@
+// Legacy credits is no longer populated with a fixed estimate. Actual request usage lives in provider_usage; null there means unknown.
 import type { D1Database } from '@cloudflare/workers-types';
 import { sealReply, openReply } from './guidance-requests';
 
@@ -6,7 +7,7 @@ export async function completeProfile(db: D1Database, secret: string, input: {
 }) {
   const encrypted = await sealReply(secret, `profile:${input.id}`, input.reply, 2_000_000);
   const result = await db.prepare(`UPDATE profile_generations
-    SET status = 'success', credits = 320, updated_at = ?, response_ciphertext = ?, response_expires_at = ?
+    SET status = 'success', credits = 0, updated_at = ?, response_ciphertext = ?, response_expires_at = ?
     WHERE id = ? AND session_id = ? AND status = 'started'`)
     .bind(input.now, encrypted, input.expiresAt, input.id, input.session).run();
   if (result.meta.changes !== 1) throw new Error('Chart recovery record could not be completed');

@@ -21,7 +21,8 @@ const protectedRouteCode = routeCode.replace('@/db/guidance-requests', moduleUrl
   .replace('@/db/profile-deletion', url(compile(readFileSync(new URL('../db/profile-deletion.ts', import.meta.url), 'utf8')).replace('./guidance-requests', moduleUrl('../db/guidance-requests.ts'))))
   .replace('@/lib/career-response', careerUrl)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
-  .replace('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
+  .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
+  .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(readFileSync(new URL('../lib/provider-chart.ts', import.meta.url), 'utf8')).replace('./astrology-evidence', evidenceUrl)));
 
 test('actual guidance route blocks bad model output and avoids calls for unsupported/input failures', async () => {
@@ -151,7 +152,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     assert.equal(modelInput.chartContext.focus,'work, income and goals');
     for (const question of ['When will I get married?', 'I am worried about the delay', 'En kalyanam pathi sollunga']) {
       const typed=await (await request({...base,category:'Marriage',guide:'Tharagai',question,chartTicket:providerTicket})).json();
-      assert.equal(typed.answerMode,'chart_guidance',question);
+      assert.equal(typed.answerMode,question==='En kalyanam pathi sollunga'?'chart_guidance':'reading_unavailable',question);
       assert.ok(modelInput.chartContext, 'Typed messages must receive authenticated chart context');
     }
     const beforeInvalidGuide=providerCalls;

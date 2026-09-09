@@ -11,6 +11,7 @@ function database() {
   sqlite.exec(readFileSync(new URL('../drizzle/0004_powerful_juggernaut.sql', import.meta.url), 'utf8'));
   sqlite.exec(readFileSync(new URL('../drizzle/0009_salty_skrulls.sql', import.meta.url), 'utf8'));
   sqlite.exec(readFileSync(new URL('../drizzle/0010_green_johnny_blaze.sql', import.meta.url), 'utf8'));
+  sqlite.exec(readFileSync(new URL('../drizzle/0011_report_evidence.sql', import.meta.url), 'utf8'));
   const db = {prepare(sql) { let args=[]; return {
     bind(...values) {args=values;return this;},
     async run() {return {meta:{changes:Number(sqlite.prepare(sql).run(...args).changes)}};},

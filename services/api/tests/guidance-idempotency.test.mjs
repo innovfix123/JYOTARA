@@ -24,7 +24,8 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/db/profile-deletion', deletion)
   .replace('@/lib/career-response', career)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
-  .replace('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
+  .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
+  .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
   .replace('@/lib/astrology-evidence', evidence)
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
@@ -35,6 +36,7 @@ test('actual route reserves before model work, replays encrypted result, enforce
     db.exec(source(`../drizzle/${name}.sql`));
   }
   db.exec(source('../drizzle/0010_green_johnny_blaze.sql'));
+  db.exec(source('../drizzle/0011_report_evidence.sql'));
   const secret = 'a3'.repeat(32);
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -86,7 +88,7 @@ test('actual route reserves before model work, replays encrypted result, enforce
     const reply = await first.json();
     const replay = await post();
     assert.equal(replay.status, 200);
-    assert.deepEqual(await replay.json(), { ...reply, replayed: true });
+    assert.deepEqual(await replay.json(), { ...reply, replayed: true, providerUsage:{calls:[],newProviderCalls:0,receiptReused:true} });
     assert.equal(reply.replayed, false);
     assert.ok(Number.isFinite(Date.parse(reply.answeredAt)));
     assert.equal(calls, 1);
@@ -284,6 +286,7 @@ test('encrypted reply is bound to request and key; corruption fails closed', asy
 test('guidance refresh uses ticket-bound location and shared context, never caller time or chart', async () => {
   const db = new DatabaseSync(':memory:');
   db.exec(source('../drizzle/0010_green_johnny_blaze.sql'));
+  db.exec(source('../drizzle/0011_report_evidence.sql'));
   for (const name of ['0000_perpetual_giant_man', '0001_chilly_purple_man', '0002_broad_spacker_dave', '0003_reflective_betty_ross', '0007_cold_inhumans', '0008_damp_marvex']) db.exec(source(`../drizzle/${name}.sql`));
   const secret = 'c4'.repeat(32);
   const originalFetch = globalThis.fetch;
@@ -324,12 +327,12 @@ test('guidance refresh uses ticket-bound location and shared context, never call
     assert.ok(providerRequests.every(target => Math.abs(Date.parse(target.searchParams.get('datetime')) - Date.now()) < 10000));
     assert.ok(providerRequests.every(target => target.searchParams.get('datetime').endsWith('+05:30')), 'provider Panchang day must use Indian civil time');
     assert.equal((await post({ ...body, requestId: 'context-question-0002' })).status, 200);
-    assert.equal(providerRequests.length, 4, 'each new question refreshes current context without recalculating natal chart');
+    assert.equal(providerRequests.length, 2, 'a new question reuses fresh current context without another provider charge');
     await post({ ...body, requestId: 'context-question-0002' });
-    assert.equal(providerRequests.length, 4, 'retry must not charge provider again');
+    assert.equal(providerRequests.length, 2, 'retry must not charge provider again');
     const unsupported = await post({ ...body, requestId: 'context-question-0003', category: 'Family', question: 'How is my parents health?' });
     assert.equal((await unsupported.json()).support, 'unsupported');
-    assert.equal(providerRequests.length, 4, 'unsupported intents must not trigger context work');
+    assert.equal(providerRequests.length, 2, 'unsupported intents must not trigger context work');
   } finally { globalThis.fetch = originalFetch; delete globalThis.__receiptTestEnv; db.close(); }
 });
 

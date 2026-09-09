@@ -7,8 +7,30 @@ import 'package:http/testing.dart';
 import 'package:jyotara/services/jyotara_api.dart';
 import 'package:jyotara/services/profile_session.dart';
 import 'package:jyotara/services/conversation.dart';
+import 'package:jyotara/services/profile_gender.dart';
 
 void main() {
+  test('report birth details are frozen with the question for a safe retry', () async {
+    final sent = <Map<String, dynamic>>[];
+    final session = ProfileSession(api: JyotaraApiClient(baseUrl: 'https://example.test', client: MockClient((request) async {
+      if (request.url.path.endsWith('kundli')) return http.Response(jsonEncode({
+        'sandbox': false, 'chartTicket': 'test-ticket', 'profileId': 'test-profile',
+        'result': {'data': {'nakshatra_details': {'chandra_rasi': {'name': 'Meena'}, 'nakshatra': {'name': 'Revati'}}}},
+      }), 200);
+      sent.add(jsonDecode(request.body) as Map<String, dynamic>);
+      return http.Response('{"profileId":"test-profile","answer":"Test response","evidence":[]}', 200);
+    })));
+    await session.calculate(dateTime: '2000-01-01T05:00:00+05:30', latitude: 11, longitude: 77, exactTime: true, nickname: 'Synthetic', gender: ProfileGender.male, birthplaceLabel: 'Test city');
+    await session.ask(category: 'Marriage', question: 'When will I marry?', responseStyle: 'english');
+    session.nickname = 'Changed';
+    await session.ask(category: 'Marriage', question: 'When will I marry?', responseStyle: 'english');
+    expect(sent.length, 2);
+    expect(sent.first['reportPerson']['name'], 'Synthetic');
+    expect(sent.last['reportPerson'], sent.first['reportPerson']);
+    expect(sent.last['requestId'], sent.first['requestId']);
+    session.dispose();
+  });
+
   test(
     'clock rollback is rejected; 24-hour expiry renews without natal recalculation',
     () async {

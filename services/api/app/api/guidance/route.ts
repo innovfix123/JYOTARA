@@ -4,6 +4,8 @@ import { chartTicketConfigured, openChartTicket } from '@/lib/chart-ticket';
 import { requestIdentity, reserveQuestion, sealReply, openReply, eraseGuidanceContent, completeQuestion } from '@/db/guidance-requests';
 import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
+import { meteredProkeralaFetch, type ProviderCharge } from '@/lib/prokerala-client';
+import { reportPerson, verifiedReportPerson, marriageTimingQuestion, loadMarriageReport, marriageReportReply } from '@/lib/marriage-report';
 import { prokeralaJson } from '@/lib/prokerala-client';
 import { reviewedCareerResponse } from '@/lib/career-response';
 import { conciseReply, conversationTopic, providerReadingSources, previousUserMessages, relationshipFollowup, relationshipResponse, responseStyle, languageInstruction, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
@@ -204,6 +206,7 @@ export async function POST(request: Request) {
     requestId?: string;
     previousUserMessages?: unknown;
     guide?: string;
+    reportPerson?: unknown;
   };
   const question = typeof body?.question === 'string' ? body.question.trim().replace(/\s+/g, ' ') : '';
   if (!body?.category || !allowedCategories.has(body.category) || !question || [...question].length > 240) {
@@ -235,6 +238,7 @@ export async function POST(request: Request) {
   // Preserve legacy hashes for requests without context. Context changes conflict.
   if (history.length) identityPayload.push(history);
   if (body.guide) identityPayload.push({guide:body.guide});
+  if (body.reportPerson !== undefined) identityPayload.push({reportPerson:body.reportPerson});
   const identity = await requestIdentity(chartSecret, session.id,
     body.requestId ?? crypto.randomUUID(), identityPayload);
   const reservation = await reserveQuestion(env.DB, {
@@ -255,7 +259,7 @@ export async function POST(request: Request) {
       try {
         const saved = await openReply(chartSecret, identity.id, receipt.response_ciphertext);
         if (!saved || typeof saved !== 'object' || Array.isArray(saved)) throw new Error('Invalid saved reply');
-        return Response.json({ ...saved, replayed: true }, { headers: { 'Cache-Control': 'no-store' } });
+        return Response.json({ ...saved, replayed: true, providerUsage:{calls:[],newProviderCalls:0,receiptReused:true} }, { headers: { 'Cache-Control': 'no-store' } });
       } catch { /* Fail closed: never rerun a possibly billed attempt. */ }
     }
     return Response.json({ error: 'This question was already received. Its answer is not available yet; it has not been submitted again.', code: 'request_already_received' }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
@@ -270,16 +274,40 @@ export async function POST(request: Request) {
   const scripted = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, history, style);
   // Context-aware wording for ordinary conversation; dedicated sensitive boundaries remain.
   let practical = scripted && !['communication', 'feelings'].includes(scripted.kind) ? scripted : null;
+  const charges:ProviderCharge[]=[];
+  const providerAudit={requestId:identity.id,sessionId:session.id,charges};
+  const wantsMarriageTiming= safetyPacket.intent!=='high_stakes' && safetyPacket.intent!=='additional_profile_required' && marriageTimingQuestion(question,history,body.category);
+  let reportReply:ReturnType<typeof marriageReportReply>=null;
+  let reportStatus:string|undefined;
+  if(wantsMarriageTiming && env.PROKERALA_ENVIRONMENT==='production') {
+    const person=reportPerson(body.reportPerson);
+    const extract=(env as unknown as {JYOTARA_EXTRACT_PDF?:(bytes:Uint8Array)=>Promise<string>}).JYOTARA_EXTRACT_PDF;
+    if(!trusted.birthTimeKnown)reportStatus='birth_time_unknown';
+    else if(!person || !extract)reportStatus='profile_details_required';
+    else if(!(trusted.birthDatetime===person.datetime && trusted.contextLocation?.latitude===person.latitude && trusted.contextLocation?.longitude===person.longitude) && !await verifiedReportPerson(env.DB,person,session.id,trusted.profileId,trusted.contextLocation,{
+      hash:async values=>(await requestIdentity(chartSecret,session.id,'profile-v1',values)).hash,
+      open:(id,cipher)=>openReply(chartSecret,id,cipher,2_000_000),
+    }))reportStatus='profile_details_mismatch';
+    else {
+      const reportId=(await requestIdentity(chartSecret,session.id,'marriage-report-v1',[trusted.profileId,person.datetime,person.latitude,person.longitude,person.gender])).hash;
+      const loaded=await loadMarriageReport(env.DB,person,{id:reportId,session:session.id,profile:trusted.profileId,expiresAt:trusted.expiresAt},{
+        fetch:params=>meteredProkeralaFetch(env,'/report/personal-reading/instant',params,6000,providerAudit),
+        extract,seal:value=>sealReply(chartSecret,reportId,value),open:cipher=>openReply(chartSecret,reportId,cipher),
+      });
+      reportStatus=loaded.status==='ready'?(loaded.cached?'cached':'fetched'):loaded.status;
+      if(loaded.report) reportReply=marriageReportReply(loaded.report,style,question,new Date(),history);
+    }
+  }
   const initialPacket = buildEvidencePacket({ category: body.category, question, language,
     birthTimeKnown: trusted.birthTimeKnown, chart });
-  if (!practical && trusted.contextLocation && safetyPacket.intent !== 'high_stakes' && initialPacket.intent !== 'additional_profile_required') {
+  if (!wantsMarriageTiming && !practical && trusted.contextLocation && safetyPacket.intent !== 'high_stakes' && initialPacket.intent !== 'additional_profile_required') {
     // Location comes only from the authenticated calculation ticket. Raw timed
     // Panchang intervals are re-selected at each question, not cached as names.
     const now = Date.now();
     try {
       if (env.PROKERALA_ENVIRONMENT !== 'production') throw new Error('Live context unavailable');
       const raw = await currentContext(env.DB, trusted.contextLocation,
-        (module, datetime, location) => prokeralaJson(env, module === 'transit' ? '/astrology/planet-position' : '/astrology/panchang', { ...location, datetime, language: 'en' }), now, identity.id);
+        (module, datetime, location) => prokeralaJson(env, module === 'transit' ? '/astrology/planet-position' : '/astrology/panchang', { ...location, datetime, language: 'en' },providerAudit), now);
       chart = { ...chart, transits: undefined, todayPanchang: undefined, contextCalculatedAt: undefined,
         ...normalizeProviderContext(raw, new Date(now)) };
     } catch {
@@ -303,7 +331,7 @@ export async function POST(request: Request) {
     snapshotId: trusted.profileId, questionId: identity.id, packet, style,
   }) : null;
   try {
-    if (!practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history, requestsReading ? providerSources : [], chartContext, body.guide);
+    if (!wantsMarriageTiming && !practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history, requestsReading ? providerSources : [], chartContext, body.guide);
   } catch {
     generated = null;
   }
@@ -314,28 +342,38 @@ export async function POST(request: Request) {
     : style === 'tanglish'
     ? 'Ippo badhil thayaarippadhil oru sikkal. Unga jathagam save aagirukku. Konjam nerathil thirumba ketkalaam.'
     : 'The reading could not be prepared just now. Please try a new question in a moment; your saved chart is still available.';
-  const answer = providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style)));
+  const missingBirth=reportStatus==='birth_time_unknown';
+  const refreshNeeded=reportStatus==='profile_details_required'||reportStatus==='profile_details_mismatch';
+  const timingLimit=style==='tamil'
+    ? missingBirth?'திருமணக் காலத்தைப் பார்க்க உறுதியான பிறந்த நேரம் தேவை. உங்கள் பிறந்த நேரம் தெரியுமா?':refreshNeeded?'சேமித்த பிறந்த விவரங்களைத் திறந்து ஜாதகத்தைப் புதுப்பிக்கவும். அதன் பிறகு திருமணக் கால அறிக்கையைப் பார்க்கலாம்.':'திருமணக் கால அறிக்கையை இப்போது பெற முடியவில்லை. புதிய அறிக்கை கோரிக்கையை மீண்டும் அனுப்பவில்லை; உங்கள் ஜாதகம் சேமிக்கப்பட்டுள்ளது.'
+    :style==='tanglish'
+    ? missingBirth?'Kalyana kaalam paarka confirmed birth time thevai. Unga pirandha neram theriyuma?':refreshNeeded?'Saved birth details-a thirandhu jathagathai refresh pannunga. Appuram kalyana kaala report-a paarkalaam.':'Kalyana kaala report ippo kidaikkala. Pudhu report request thirumba anuppala; unga jathagam save aagirukku.'
+    :missingBirth?'A marriage-period reading needs a confirmed birth time. Do you know your birth time?':refreshNeeded?'Please open your saved birth details and refresh the chart so I can check its marriage-period report.':'The marriage-period report is unavailable right now. No repeat report request was sent; your saved chart is still available.';
+  const answer = reportReply?.answer ?? (wantsMarriageTiming ? timingLimit : providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
   const providerReading = !!generated && requestsReading && providerSources.length > 0 && !chartContext;
   const chartReading = !!generated && !!chartContext && (chartContext.birthTimeKnown || !!chartContext.currentPanchang);
   const modelPracticalAdvice = !!generated && !providerReading && !chartReading;
-  const answerMode = providerGap ? 'reading_unavailable' : practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (chartReading ? 'chart_guidance' : providerReading ? 'provider_reading' : 'model_guidance') : 'grounded_fallback';
+  const answerMode = reportReply ? 'provider_reading' : wantsMarriageTiming ? 'reading_unavailable' : providerGap ? 'reading_unavailable' : practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (chartReading ? 'chart_guidance' : providerReading ? 'provider_reading' : 'model_guidance') : 'grounded_fallback';
   const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
 
   const reply = {
     replayed: false,
+    providerUsage:{calls:charges,newProviderCalls:charges.length,reportCacheReused:reportStatus==='cached'},
+    ...(reportStatus ? {reportStatus} : {}),
+    ...(reportReply ? {reportEvidence:reportReply.source} : {}),
     answeredAt: new Date().toISOString(),
     answer,
-    evidence: chartReading ? [`Prokerala calculations · ${chartContext?.birthTimeKnown ? 'confirmed birth time' : 'birth time unknown'}`] : providerReading ? providerSources.map(source => `Prokerala Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
+    evidence: reportReply ? reportReply.evidence : chartReading ? [`Prokerala calculations · ${chartContext?.birthTimeKnown ? 'confirmed birth time' : 'birth time unknown'}`] : providerReading ? providerSources.map(source => `Prokerala Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
     // Reviewed copy already includes its reviewed limitation in the answer.
     limitation: chartReading || providerGap || providerReading || practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
-    support: practical ? 'partially_supported' : packet.support,
+    support: reportReply ? 'partially_supported' : practical ? 'partially_supported' : packet.support,
     answerMode,
     profileId: trusted.profileId,
     ...(career?.ok ? { interpretationProvenance: career.provenance } : {}),
   };
   const ciphertext = await sealReply(chartSecret, identity.id, reply);
   const completed = await completeQuestion(env.DB, {
-    id: identity.id, session: session.id, support: practical ? 'partially_supported' : packet.support, mode: answerMode,
+    id: identity.id, session: session.id, support: reportReply ? 'partially_supported' : practical ? 'partially_supported' : packet.support, mode: answerMode,
     question: researchQuestion, intent: practical ? `relationship_${practical.kind}` : packet.intent,
     consent: body.researchConsent === true ? researchConsentVersion : null,
     ageBand, ciphertext, expiresAt: trusted.expiresAt,

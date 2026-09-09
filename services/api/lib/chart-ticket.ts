@@ -30,6 +30,7 @@ export type ChartTicket = {
   providerCalculatedAt?: number;
   /** Fixed at the original issuance; renewal must never roll this forward. */
   renewalUntil?: number;
+  birthDatetime?: string;
   contextLocation?: { latitude: number; longitude: number };
 };
 function locationValid(value: unknown) {
@@ -42,13 +43,14 @@ function locationValid(value: unknown) {
  * bearer capability, not verified personal identity, login or account recovery. */
 export async function issueChartTicket(secret: string, input: {
   sessionId: string; profileId: string; birthTimeKnown: boolean; chart: ChartFacts;
+  birthDatetime?: string;
   contextLocation?: { latitude: number; longitude: number };
   renewalUntil?: number;
 }, now = Date.now()): Promise<string> {
   const providerCalculatedAt = input.renewalUntil === undefined ? now : input.renewalUntil - renewalWindow;
   if (!identifier(input.sessionId) || !identifier(input.profileId) ||
       typeof input.birthTimeKnown !== 'boolean' || !isValidChartFacts(input.chart) ||
-      !Number.isSafeInteger(now) || now < 0 || (input.contextLocation !== undefined && !locationValid(input.contextLocation)) ||
+      !Number.isSafeInteger(now) || now < 0 || (input.contextLocation !== undefined && !locationValid(input.contextLocation)) || (input.birthDatetime !== undefined && (typeof input.birthDatetime !== 'string' || !Number.isFinite(Date.parse(input.birthDatetime)))) ||
       (input.renewalUntil !== undefined && (!Number.isSafeInteger(input.renewalUntil) || input.renewalUntil < now || input.renewalUntil > now + renewalWindow)) ||
       !Number.isSafeInteger(providerCalculatedAt) || providerCalculatedAt < 0 || providerCalculatedAt > now || now - providerCalculatedAt >= lifetime) throw new Error('Invalid or stale chart ticket input');
   const payload: ChartTicket = { ...input, providerCalculatedAt, renewalUntil: input.renewalUntil ?? now + renewalWindow, version: 1, issuedAt: now, expiresAt: now + lifetime };
@@ -105,6 +107,7 @@ async function readChartTicket(secret: string, token: unknown, sessionId: string
         (value.renewalUntil !== undefined && (!Number.isSafeInteger(value.renewalUntil) || value.renewalUntil < value.issuedAt || value.renewalUntil > value.issuedAt + renewalWindow)) ||
         typeof value.birthTimeKnown !== 'boolean' || !isValidChartFacts(value.chart) ||
         (value.contextLocation !== undefined && !locationValid(value.contextLocation))) return null;
+    if (value.birthDatetime !== undefined && (typeof value.birthDatetime !== 'string' || !Number.isFinite(Date.parse(value.birthDatetime)))) return null;
     if (value.providerCalculatedAt !== undefined && (!Number.isSafeInteger(value.providerCalculatedAt) || value.providerCalculatedAt < 0 || value.providerCalculatedAt > value.issuedAt)) return null;
     if (!allowExpired && !chartProviderDataFresh(value as ChartTicket, now)) return null;
     return value as ChartTicket;

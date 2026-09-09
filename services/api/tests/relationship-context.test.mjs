@@ -24,7 +24,8 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/db/profile-deletion', deletion)
   .replace('@/lib/career-response', career)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
-  .replace('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
+  .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
+  .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
   .replace('@/lib/astrology-evidence', evidence)
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
@@ -32,7 +33,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
 
 function environment(){
  const db=new DatabaseSync(':memory:');
- for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0009_salty_skrulls','0010_green_johnny_blaze'])db.exec(source(`../drizzle/${name}.sql`));
+ for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence'])db.exec(source(`../drizzle/${name}.sql`));
  globalThis.__receiptTestEnv={NIRAYANA_CHART_TICKET_KEY:'a3'.repeat(32),OPENROUTER_API_KEY:'TEST-ONLY',DB:{
  async batch(statements){const result=[];for(const s of statements)result.push(await s.run());return result;},
  prepare(sql){let args=[];return {bind(...v){args=v;return this;},async run(){const r=db.prepare(sql).run(...args);return {meta:{changes:Number(r.changes)}};},async first(){return db.prepare(sql).get(...args)??null;}};}}};

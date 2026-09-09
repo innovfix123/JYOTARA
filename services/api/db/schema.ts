@@ -109,3 +109,16 @@ export const testerDailyUsage = sqliteTable('tester_daily_usage', {
   dayKey: text('day_key').notNull(),
   requests: integer('requests').notNull(),
 }, table => [index('idx_tester_daily_usage_day').on(table.dayKey)]);
+
+// Actual usage is nullable when the provider did not report X-Api-Credits.
+export const providerUsage = sqliteTable('provider_usage', {
+  id: text('id').primaryKey(), requestId: text('request_id'), sessionId: text('session_id'),
+  module: text('module').notNull(), status: text('status').notNull(),
+  httpStatus: integer('http_status'), expectedCredits: integer('expected_credits').notNull(),
+  actualCredits: integer('actual_credits'), createdAt: integer('created_at').notNull(),
+}, table => [index('provider_usage_request').on(table.requestId)]);
+export const providerReports = sqliteTable('provider_reports', {
+  id: text('id').primaryKey(), sessionId: text('session_id').notNull(), profileId: text('profile_id').notNull(),
+  dayKey: text('day_key').notNull(), status: text('status').notNull(), responseCiphertext: text('response_ciphertext'),
+  expiresAt: integer('expires_at').notNull(),
+}, table => [index('provider_reports_session').on(table.sessionId)]);

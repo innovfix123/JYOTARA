@@ -3,7 +3,7 @@ import { chartSessionDeleted } from '@/db/profile-deletion';
 import { chartTicketConfigured, issueChartTicket } from '@/lib/chart-ticket';
 import { normalizeProviderChart, normalizeProviderNavamsa } from '@/lib/provider-chart';
 import { currentContext } from '@/db/current-context';
-import { prokeralaJson } from '@/lib/prokerala-client';
+import { prokeralaJson, type ProviderCharge } from '@/lib/prokerala-client';
 import { validBirthDatetime, validChartSession, calculationBirthDatetime, isAdultBirthDate } from '@/lib/birth-request';
 import { reserveProfile } from '@/db/profile-reservation';
 import { requestIdentity } from '@/db/guidance-requests';
@@ -103,32 +103,35 @@ export async function POST(request: Request) {
     const currentDatetime = sandbox ? '2026-09-01T12:00:00+05:30' : new Date().toISOString();
     // Canonical structured names keep house/lord calculations consistent across UI languages.
     const language = 'en';
+    const charges:ProviderCharge[]=[];
+    const audit={requestId:generationId,sessionId:session.id,charges};
     const fetchJson = (path: string, requestDatetime = datetime) => prokeralaJson(env, path, {
       datetime: requestDatetime, latitude: body.latitude!, longitude: body.longitude!, language,
-    });
+    },audit);
     // Natal modules and shared current-context modules use the same bounded,
     // non-retrying transport. Cache hits may reduce current-context requests.
-    const kundli = await prokeralaJson(env, '/astrology/kundli/advanced', {datetime, latitude:body.latitude!, longitude:body.longitude!, language:'en'});
+    const kundli = await prokeralaJson(env, '/astrology/kundli/advanced', {datetime, latitude:body.latitude!, longitude:body.longitude!, language:'en'},audit);
     const contextRequest = sandbox
       ? Promise.all([fetchJson('/astrology/planet-position', currentDatetime), fetchJson('/astrology/panchang', currentDatetime)])
           .then(([transitPosition, panchang]) => ({ transitPosition, panchang, contextCalculatedAt: currentDatetime }))
       : currentContext(env.DB, { latitude: body.latitude, longitude: body.longitude },
-          (module, datetime, location) => prokeralaJson(env, module === 'transit' ? '/astrology/planet-position' : '/astrology/panchang', { ...location, datetime, language: 'en' }));
+          (module, datetime, location) => prokeralaJson(env, module === 'transit' ? '/astrology/planet-position' : '/astrology/panchang', { ...location, datetime, language: 'en' },audit));
     const [planets, dasha, context, navamsa] = await Promise.allSettled([
       fetchJson('/astrology/planet-position'),
-      fetchJson('/astrology/dasha-periods'),
+      body.birthTimeKnown ? fetchJson('/astrology/dasha-periods') : Promise.resolve(null),
       contextRequest,
       // English structured data costs 50 credits. It is fetched once with
       // natal data and retained in the same protected recovery snapshot.
       body.birthTimeKnown ? prokeralaJson(env, '/astrology/divisional-planet-position', {
         datetime, latitude: body.latitude!, longitude: body.longitude!, language: 'en',
-      }) : Promise.resolve(null),
+      },audit) : Promise.resolve(null),
     ]);
     const current = context.status === 'fulfilled' ? context.value : null;
     const d9 = navamsa.status === 'fulfilled' && normalizeProviderNavamsa(navamsa.value, body.birthTimeKnown) ? navamsa.value : null;
 
     const payload = {
       sandbox,
+      providerUsage:{calls:charges,newProviderCalls:charges.length},
       chartCalculatedAt: new Date().toISOString(),
       profileRecovered: false,
       contextCalculatedAt: current?.contextCalculatedAt ?? currentDatetime,
@@ -141,7 +144,7 @@ export async function POST(request: Request) {
       moduleStatus: {
         kundli: 'connected',
         planetPosition: planets.status === 'fulfilled' ? 'connected' : 'unavailable',
-        dashaPeriods: dasha.status === 'fulfilled' ? 'connected' : 'unavailable',
+        dashaPeriods: !body.birthTimeKnown ? 'not-requested-unknown-time' : dasha.status === 'fulfilled' ? 'connected' : 'unavailable',
         navamsa: !body.birthTimeKnown ? 'not-requested-unknown-time' : d9 ? 'connected' : 'unavailable',
         birthChart: planets.status === 'fulfilled' ? 'locally-rendered' : 'unavailable',
         currentTransit: current?.transitPosition ? 'connected' : 'unavailable',
@@ -160,7 +163,7 @@ export async function POST(request: Request) {
     const profileId = crypto.randomUUID();
     const chart = normalizeProviderChart(payload, body.birthTimeKnown, new Date(currentDatetime));
     const chartTicket = await issueChartTicket(chartSecret, {
-      sessionId: session.id, profileId, birthTimeKnown: body.birthTimeKnown, chart,
+      sessionId: session.id, profileId, birthTimeKnown: body.birthTimeKnown, chart, birthDatetime,
       contextLocation: { latitude: body.latitude, longitude: body.longitude },
     });
     const reply = { ...payload, profileId, chartTicket };

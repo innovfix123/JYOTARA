@@ -64,3 +64,13 @@ test('authentication redirect cannot reach a paid module',async()=>{
     assert.equal(calls,1);
   }finally{globalThis.fetch=original;}
 });
+test('actual credit header is separate from estimate; missing or malformed usage stays unknown',async()=>{
+ const original=globalThis.fetch;let header=null;
+ globalThis.fetch=async address=>String(address).endsWith('/token')?Response.json({access_token:'synthetic',expires_in:3600}):Response.json({data:{}},{headers:header===null?{}:{'X-Api-Credits':header}});
+ try{
+  for(const [value,expected]of [[null,null],['oops',null],['-1',null],['0',0],['6000',6000]]){
+   header=value;const charges=[];await prokeralaJson(credentials('credits'),'/astrology/kundli/advanced',{...input,language:'en'},{requestId:'test',sessionId:'test',charges});
+   assert.equal(charges[0].expectedCredits,300);assert.equal(charges[0].actualCredits,expected);
+  }
+ }finally{globalThis.fetch=original;}
+});

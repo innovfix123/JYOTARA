@@ -25,7 +25,8 @@ const route = file => url(compile(read(file))
   .replace('@/db/profile-recovery', recovery)
   .replace('@/db/profile-deletion', deletion)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
-  .replace('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
+  .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
+  .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/db/guidance-requests', moduleUrl('../db/guidance-requests.ts'))
   .replace('@/lib/career-response', career));
 
@@ -35,6 +36,7 @@ test('actual calculation-to-guidance routes use provider ticket, never caller ch
   sqlite.exec(read('../drizzle/0004_powerful_juggernaut.sql'));
   sqlite.exec(read('../drizzle/0009_salty_skrulls.sql'));
   sqlite.exec(read('../drizzle/0010_green_johnny_blaze.sql'));
+  sqlite.exec(read('../drizzle/0011_report_evidence.sql'));
   let calls = 0;
   let navamsaCalls = 0;
   let rejectNavamsa = false;
