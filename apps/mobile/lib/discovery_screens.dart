@@ -762,6 +762,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
             child: DropdownButtonFormField<String>(
+                key: ValueKey('${male ? "boy" : "girl"}:${male ? boy?.id : girl?.id}'),
               initialValue: male ? boy?.id : girl?.id,
               decoration: InputDecoration(
                 labelText: male ? "Boy’s Kundli" : "Girl’s Kundli",

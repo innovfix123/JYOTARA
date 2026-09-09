@@ -29,12 +29,14 @@ export async function daily(request: Request) {
     if (!promise) {
       promise = (async () => {
         const data = await provider('/horoscope/daily/advanced',{datetime:`${date}T12:00:00+05:30`,sign,type:'general,love,career'});
+        if (typeof data.datetime !== 'string' || data.datetime.slice(0,10) !== date) throw Error('Wrong prediction date');
         const row = data.daily_predictions?.find((r: any) => r.sign?.name?.toLowerCase() === sign);
         if (!row || !Array.isArray(row.predictions)) throw Error('Missing prediction');
         const sections = ['General','Love','Career'].map(title => {
           const text = row.predictions.find((r: any) => r.type?.toLowerCase() === title.toLowerCase())?.prediction;
           if (typeof text !== 'string' || !text.trim() || text.length > 10000) throw Error('Missing section');
-          return {title,text};
+          const brief = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g)?.slice(0,2).join('').trim() ?? text;
+          return {title,text:brief};
         });
         const value = {date,sign,source:'Prokerala',basis:'General zodiac reading; not a personal birth-chart forecast.',sections};
         if (cache.size >= 72) cache.delete(cache.keys().next().value!);
