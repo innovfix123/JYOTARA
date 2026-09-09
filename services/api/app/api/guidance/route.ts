@@ -6,7 +6,7 @@ import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
 import { prokeralaJson } from '@/lib/prokerala-client';
 import { reviewedCareerResponse } from '@/lib/career-response';
-import { previousUserMessages, relationshipFollowup, relationshipResponse, responseStyle, languageInstruction, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
+import { providerReadingSources, previousUserMessages, relationshipFollowup, relationshipResponse, responseStyle, languageInstruction, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
 import {
   buildEvidencePacket,
   buildFallbackAnswer,
@@ -66,12 +66,13 @@ function practicalAdviceScope(packet: ReturnType<typeof buildEvidencePacket>) {
   return ['Education', 'Daily', 'Family', 'Business'].includes(packet.category);
 }
 
-async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePacket>, sessionId: string, style: ResponseStyle, history: string[] = []) {
+async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePacket>, sessionId: string, style: ResponseStyle, history: string[] = [], providerSources: ReturnType<typeof providerReadingSources> = []) {
   const practicalScope = practicalAdviceScope(packet) || (packet.category === 'Career' && packet.intent !== 'additional_profile_required');
   const openRouterKey = env.OPENROUTER_API_KEY;
   const openAiKey = env.OPENAI_API_KEY;
   const apiKey = openRouterKey || openAiKey;
-  if (!practicalScope) return null;
+  if (env.PROKERALA_ENVIRONMENT === 'production' && !providerSources.length) return null;
+  if (!practicalScope && !providerSources.length) return null;
   // Career uses its separately constrained reviewed catalogue. Do not let a
   // fluent model response bypass that gate or label fact repetition personal.
   if (!apiKey || packet.intent === 'high_stakes') return null;
@@ -113,7 +114,11 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         'Do not infer relationship status, cheating, hidden enemies, family acceptance, lifespan, or exact future events from chart facts. Do not ask unnecessary follow-up questions.',
         'The supplied rules describe the permitted scope. If they contain no interpretation linking a placement to an outcome, do not invent that link from memory.',
         'When data is missing, say what is missing in one calm sentence. Never turn missing data into a prediction.',
-        ...(practicalScope ? [
+        ...(providerSources.length ? [
+          'Use the supplied Prokerala interpretations as your source for traditional astrology. Explain the relevant theme in plain language and relate it cautiously to the question. Name the relevant Yoga once so the user knows the basis. Do not expand a general benefit like recognition into specific jobs, communication skills, study fields or actions unless that exact association is in the supplied interpretation. Do not add associations, strengths, outcomes, dates or remedies absent from this report.',
+          'These descriptions are traditional interpretations, not verified facts about behaviour or guaranteed events. Phrase benefits as tendencies or possibilities. Do not repeat fatalistic, medical, character-judging or fear-inducing statements. A Yoga description is not timing evidence. Never use it to infer cheating or another person’s feelings.',
+          'Stay focused on what this report actually supports. If it does not answer the requested outcome, ask one relevant follow-up rather than supplying a generic advice plan. Keep the answer to 2–4 short sentences.',
+        ] : practicalScope ? [
           'For this practical question, provide useful guidance from the user-described situation only. No chart-to-personality or chart-to-outcome interpretation has been established. Do not use astrological signs, planets, nakshatras, houses or periods as explanations or support.',
           'Give one small concrete action and, where helpful, an example sentence the user can say. Avoid vague motivational language. Do not infer facts or traits the user did not state. Birth time is not needed for this practical advice.',
           'Offer adjustable suggestions rather than mandatory check-ins or fixed waiting periods. Respect both people’s choice. Do not add timed breathing routines. Keep numerical examples internally consistent.',
@@ -122,7 +127,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         ] : []),
         languageInstruction(style),
       ].join('\n'),
-      input: JSON.stringify(practicalScope
+      input: JSON.stringify(providerSources.length ? {question:packet.question,category:packet.category,previousUserMessages:history,prokeralaInterpretations:providerSources} : practicalScope
         ? { question: packet.question, category: packet.category, previousUserMessages: history }
         : { ...packet, previousUserMessages: history }),
     }),
@@ -130,7 +135,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
   if (!response.ok) return null;
   const answer = outputText(await response.json().catch(() => null));
   const tooLong = answer.split(/\s+/u).length > 110 || answer.split(/\n\s*\n/u).length > 2 || (answer.match(/[?？]/gu) ?? []).length > 1;
-  const unsupportedAstrology = practicalScope && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
+  const unsupportedAstrology = !providerSources.length && practicalScope && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
   return !tooLong && !unsupportedAstrology && acceptableAnswer(answer, style) && periodClaimsAgree(answer, packet.facts) ? answer : null;
 }
 
@@ -258,28 +263,36 @@ export async function POST(request: Request) {
     chart,
   });
 
+  const providerSources = packet.intent === 'high_stakes' || packet.intent === 'additional_profile_required' ? [] : providerReadingSources(chart, packet.category);
   let generated: string | null = null;
   const career = packet.category === 'Career' && !practicalAdviceScope(packet) ? reviewedCareerResponse({
     snapshotId: trusted.profileId, questionId: identity.id, packet, style,
   }) : null;
   try {
-    if (!practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history);
+    if (!practical && !career?.ok) generated = await generateNaturalAnswer(packet, session.id, style, history, providerSources);
   } catch {
     generated = null;
   }
   if (!generated && !career?.ok && scripted) practical = scripted;
-  const answer = practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style)));
-  const modelPracticalAdvice = !!generated;
-  const answerMode = practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (modelPracticalAdvice ? 'model_guidance' : 'personalised') : 'grounded_fallback';
+  const providerGap = env.PROKERALA_ENVIRONMENT === 'production' && !practical && !career?.ok && !generated && packet.intent !== 'high_stakes';
+  const gapAnswer = style === 'tamil'
+    ? 'இந்தக் கேள்விக்கான குறிப்பிட்ட பலன் தற்போது கிடைத்த புரோகேரளா அறிக்கையில் இல்லை. தொடர்பில்லாத ஜாதகக் குறிப்பை வைத்து முடிவு சொல்லாமல், தேவையான கூடுதல் அறிக்கை இணைக்கப்பட வேண்டும்.'
+    : style === 'tanglish'
+    ? 'Indha kelvikkaana specific palan ippo kidaitha Prokerala report-la illai. Sambandham illaadha chart kurippai vechu mudivu sollaama, thevaiyaana kooduthal report inaikkappada vendum.'
+    : 'The current Prokerala report does not contain a specific reading for this question. An additional relevant report is needed before giving a chart-based conclusion.';
+  const answer = providerGap ? gapAnswer : practical?.answer ?? (career?.ok ? career.answer : generated || scripted?.answer || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style)));
+  const providerReading = !!generated && providerSources.length > 0;
+  const modelPracticalAdvice = !!generated && !providerReading;
+  const answerMode = providerGap ? 'provider_report_needed' : practical ? 'practical_guidance' : career?.ok ? 'reviewed_traditional' : generated ? (providerReading ? 'provider_reading' : 'model_guidance') : 'grounded_fallback';
   const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
 
   const reply = {
     replayed: false,
     answeredAt: new Date().toISOString(),
     answer,
-    evidence: practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
+    evidence: providerReading ? providerSources.map(source => `Prokerala Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
     // Reviewed copy already includes its reviewed limitation in the answer.
-    limitation: practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
+    limitation: providerGap || providerReading || practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
     support: practical ? 'partially_supported' : packet.support,
     answerMode,
     profileId: trusted.profileId,

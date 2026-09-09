@@ -152,3 +152,26 @@ export function relationshipResponse(category: string, question: string, history
     'Innoru chance kudukkaradhai yosikka enna nadandhuchu? Andha soozhal theriyaama indha mudivai paththi theliva pesa mudiyaadhu.');
   return null;
 }
+
+/** Interpretations come from the authenticated Prokerala Kundli payload, not
+ * client messages or model memory. A keyword match is retrieval, not evidence
+ * that an event will occur. Keep timing and other-person conclusions separate. */
+export function providerReadingSources(chart: {yogas: Array<{name:string;description:string}>; mangalDosha?: {hasDosha:boolean;description:string}}, category: string) {
+  const terms: Record<string, RegExp> = {
+    Love: /love|affection|romance|spouse|marri/iu,
+    Relationships: /love|affection|romance|spouse|marri/iu,
+    Marriage: /marri|spouse|mangal/iu,
+    Family: /family|home|parent|children|domestic/iu,
+    Career: /career|profession|work|status|recognition|success|occupation/iu,
+    Business: /business|wealth|income|trade|finance|prosper/iu,
+    Education: /educat|learn|intelligen|knowledge|study|scholar/iu,
+    Property: /property|land|home|asset|real estate/iu,
+    Daily: /peace|happiness|mind|balance/iu,
+    Spiritual: /spirit|religio|wisdom|devot|knowledge/iu,
+  };
+  const match = terms[category];
+  if (!match) return [];
+  const rows = chart.yogas.filter(row => match.test(row.description)).map(row => ({name:row.name, interpretation:row.description}));
+  if (category === 'Marriage' && chart.mangalDosha?.description) rows.push({name:'Mangal Dosha',interpretation:chart.mangalDosha.description});
+  return rows.slice(0,3).map((row,index) => ({id:`prokerala-${index+1}`, name:row.name, interpretation:row.interpretation.slice(0,4000)}));
+}

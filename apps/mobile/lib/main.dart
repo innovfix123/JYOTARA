@@ -182,6 +182,7 @@ class Guide {
   const Guide({
     required this.name,
     required this.speciality,
+    this.category = 'Daily',
     required this.description,
     required this.asset,
     required this.icon,
@@ -191,6 +192,7 @@ class Guide {
 
   final String name;
   final String speciality;
+  final String category;
   final String description;
   final String asset;
   final IconData icon;
@@ -201,7 +203,8 @@ class Guide {
 const guides = <Guide>[
   Guide(
     name: 'Aadhirai',
-    speciality: 'Love & Relationships',
+    category: 'Love',
+    speciality: 'Love',
     description:
         'Questions about love, communication and relationship decisions.',
     asset: 'assets/images/aadhirai.png',
@@ -215,7 +218,8 @@ const guides = <Guide>[
   ),
   Guide(
     name: 'Arivan',
-    speciality: 'Career, Job & Business',
+    category: 'Career',
+    speciality: 'Career',
     description: 'Career questions, job changes and practical preparation.',
     asset: 'assets/images/arivan.png',
     icon: Icons.work_rounded,
@@ -228,6 +232,7 @@ const guides = <Guide>[
   ),
   Guide(
     name: 'Medha',
+    category: 'Education',
     speciality: 'Education & Direction',
     description: 'Study choices, exam focus and higher-education decisions.',
     asset: 'assets/images/medha.png',
@@ -241,7 +246,8 @@ const guides = <Guide>[
   ),
   Guide(
     name: 'Tharagai',
-    speciality: 'Marriage & Family',
+    category: 'Marriage',
+    speciality: 'Marriage',
     description:
         'Marriage questions, family relationships and thoughtful next steps.',
     asset: 'assets/images/tharagai.png',
@@ -255,6 +261,7 @@ const guides = <Guide>[
   ),
   Guide(
     name: 'Kaalam',
+    category: 'Daily',
     speciality: 'Daily Guidance & Panchangam',
     description: 'Daily questions, Dasa, transits and Panchangam.',
     asset: 'assets/images/kaalam.png',
@@ -265,6 +272,76 @@ const guides = <Guide>[
       'Innaiku en focus enna?',
       'இன்றைய பஞ்சாங்க வழிகாட்டல் என்ன?',
     ],
+  ),
+  Guide(
+    name: 'Iniya',
+    category: 'Relationships',
+    speciality: 'Relationships',
+    description: 'Communication, trust and relationship questions.',
+    asset: 'assets/images/aadhirai.png',
+    icon: Icons.favorite_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What does my Kundli say about relationships?'],
+  ),
+  Guide(
+    name: 'Nila',
+    category: 'Family',
+    speciality: 'Family',
+    description: 'Family bonds and household questions.',
+    asset: 'assets/images/tharagai.png',
+    icon: Icons.people_alt_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What family themes appear in my chart?'],
+  ),
+  Guide(
+    name: 'Vetri',
+    category: 'Career',
+    speciality: 'Jobs',
+    description: 'Job search, interviews and employment questions.',
+    asset: 'assets/images/arivan.png',
+    icon: Icons.work_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What does my chart show about work?'],
+  ),
+  Guide(
+    name: 'Valan',
+    category: 'Business',
+    speciality: 'Business',
+    description: 'Business direction and partnership questions.',
+    asset: 'assets/images/arivan.png',
+    icon: Icons.storefront_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What business themes appear in my Kundli?'],
+  ),
+  Guide(
+    name: 'Oli',
+    category: 'Education',
+    speciality: 'Higher Education',
+    description: 'Further study and learning direction.',
+    asset: 'assets/images/medha.png',
+    icon: Icons.school_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What study themes appear in my chart?'],
+  ),
+  Guide(
+    name: 'Agam',
+    category: 'Property',
+    speciality: 'Property',
+    description: 'Home and property questions.',
+    asset: 'assets/images/tharagai.png',
+    icon: Icons.home_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['What does my chart show about home life?'],
+  ),
+  Guide(
+    name: 'Arul',
+    category: 'Spiritual',
+    speciality: 'Spiritual',
+    description: 'Traditional Yoga meanings and spiritual reflection.',
+    asset: 'assets/images/kaalam.png',
+    icon: Icons.auto_awesome_rounded,
+    colors: [Color(0xFF5A54A8), Color(0xFF263255)],
+    prompts: ['Explain the Yogas in my Kundli.'],
   ),
 ];
 
@@ -447,9 +524,9 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
 
   void _openChat(Guide guide) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute<void>(builder: (_) => ChatProfilePicker(guide: guide)));
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => ChatProfilePicker(guide: guide)),
+    );
   }
 
   @override
@@ -630,7 +707,7 @@ class _GuidesScreenState extends State<GuidesScreen> {
                 ),
                 const SizedBox(height: 8),
                 const UiText(
-                  'Choose a profile. Five focused guides for your questions.',
+                  'Choose a profile. Twelve focused guides for your questions.',
                   style: TextStyle(color: muted),
                 ),
                 const SizedBox(height: 18),
@@ -644,6 +721,12 @@ class _GuidesScreenState extends State<GuidesScreen> {
                       'Education',
                       'Marriage',
                       'Daily',
+                      'Relationships',
+                      'Jobs',
+                      'Business',
+                      'Family',
+                      'Property',
+                      'Spiritual',
                     ])
                       Padding(
                         padding: const EdgeInsets.only(right: 8),
@@ -842,13 +925,7 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     sentConversation.changed();
     try {
-      final category = switch (widget.guide.name) {
-        'Aadhirai' => 'Love',
-        'Arivan' => 'Career',
-        'Medha' => 'Education',
-        'Tharagai' => 'Marriage',
-        _ => 'Daily',
-      };
+      final category = widget.guide.category;
       final result = await _session.ask(
         category: category,
         question: text,
@@ -1910,7 +1987,10 @@ class _FullGuideCard extends StatelessWidget {
                       style: const TextStyle(color: muted),
                     ),
                     const SizedBox(height: 8),
-                    const Text('Free tester chat · Pricing later', style: TextStyle(color: gold)),
+                    const Text(
+                      'Free tester chat · Pricing later',
+                      style: TextStyle(color: gold),
+                    ),
                     const SizedBox(height: 12),
                     const Row(
                       children: [

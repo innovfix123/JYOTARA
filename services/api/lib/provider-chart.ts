@@ -130,10 +130,12 @@ export function normalizeProviderChart(payload: unknown, birthTimeKnown: boolean
   }) : undefined;
   const navamsa = normalizeProviderNavamsa(raw.navamsa, birthTimeKnown);
   const yogaAssessments = normalizeProviderYogaAssessments(kundli.yoga_details, birthTimeKnown);
+  const mangal = object(kundli.mangal_dosha);
   const facts: ChartFacts = {
     rashi: name(moon), rashiLord: name(moon.lord), nakshatra: name(star), nakshatraLord: name(star.lord),
     ...(typeof star.pada === 'number' && Number.isInteger(star.pada) && star.pada >= 1 && star.pada <= 4 ? { pada: star.pada } : {}),
     ...(birthTimeKnown ? { lagna: name(ascendant), lagnaLord: name(ascendant.lord) } : {}),
+    ...(birthTimeKnown && typeof mangal.has_dosha === 'boolean' && typeof mangal.description === 'string' && mangal.description.length <= 8000 ? {mangalDosha:{hasDosha:mangal.has_dosha,description:mangal.description}} : {}),
     planets: planets('planetPosition'),
     ...(navamsa ? { navamsa } : {}),
     ...normalizeProviderContext(raw, at),

@@ -130,6 +130,19 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
       careerRules.splice(0, careerRules.length, ...originalRules);
       careerCopyBundles.splice(0, careerCopyBundles.length, ...originalBundles);
     }
+    globalThis.__jyotaraRouteTestEnv.PROKERALA_ENVIRONMENT = 'production';
+    const beforeProviderOnly = providerCalls;
+    const gap = await (await request({...base, category:'Career', question:'What does my chart show about work?'})).json();
+    assert.equal(gap.answerMode,'provider_report_needed');
+    assert.equal(providerCalls,beforeProviderOnly,'Do not substitute a generic model answer for an absent provider report');
+    assert.ok(gap.evidence.some(item=>item.includes('Meena')));
+    const providerChart = {...chart,yogas:[{name:'Raja Yoga',description:'Traditional recognition at work.'}]};
+    const providerTicket = await issueChartTicket(secret,{sessionId:'test-session',profileId:'profile-one',birthTimeKnown:true,chart:providerChart});
+    modelReply = 'Raja Yoga traditionally suggests recognition for your work.';
+    const reading = await (await request({...base,category:'Career',question:'What does my chart show about work?',chartTicket:providerTicket})).json();
+    assert.equal(reading.answerMode,'provider_reading');
+    assert.deepEqual(reading.evidence,['Prokerala Kundli: Raja Yoga']);
+    assert.equal(reading.interpretationProvenance,undefined,'Provider explanation must not claim independent review');
   } finally {
     globalThis.fetch = originalFetch;
     delete globalThis.__jyotaraRouteTestEnv;
