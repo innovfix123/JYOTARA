@@ -506,7 +506,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   }
 
   Future<void> _edit([SavedKundli? row]) async {
-    if (busy) return;
+    if (busy || (row == null && error != null)) return;
     setState(() => busy = true);
     try {
       final selected = row ?? await KundliLibrary.create(rows);
@@ -585,7 +585,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         ),
         const SizedBox(height: 20),
         if (busy) const LinearProgressIndicator(),
-        if (error != null) Text(error!),
+        if (error != null) ...[Text(error!), TextButton(onPressed: busy ? null : _load, child: const Text('Retry loading Kundlis'))],
         if (!busy && rows.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
@@ -651,7 +651,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
           ),
         const SizedBox(height: 18),
         FilledButton.icon(
-          onPressed: busy ? null : () => _edit(),
+          onPressed: busy || error != null ? null : () => _edit(),
           icon: const Icon(Icons.add),
           label: const Text('Create New Kundli'),
         ),

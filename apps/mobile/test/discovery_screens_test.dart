@@ -15,6 +15,14 @@ void main(){
   expect((await KundliLibrary.load()).map((r)=>r.id),[b.id]);
   expect(await KundliLibrary.storage.read(key:'nirayana.private-profile.v1'),'personal-record');
  });
+ testWidgets('failed library load cannot replace the saved index',(tester)async{
+  FlutterSecureStorage.setMockInitialValues({KundliLibrary.indexKey:'unreadable'});
+  await tester.pumpWidget(const MaterialApp(home:KundliLibraryScreen()));
+  await tester.pumpAndSettle();
+  expect(find.text('Retry loading Kundlis'),findsOneWidget);
+  expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton,'Create New Kundli')).onPressed,isNull);
+  expect(await KundliLibrary.storage.read(key:KundliLibrary.indexKey),'unreadable');
+ });
  testWidgets('wallet preview cannot collect money and caps choices at 4000',(tester)async{
    await tester.pumpWidget(const MaterialApp(home:WalletScreen()));
    await tester.scrollUntilVisible(find.text('₹4000'),200);
