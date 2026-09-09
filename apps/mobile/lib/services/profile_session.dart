@@ -79,7 +79,9 @@ class ProfileSession extends ChangeNotifier {
         }),
       ),
       'requestIds': Map<String, String>.from(_requestIds),
-      'reportPeople': _reportPeople.map((key, value) => MapEntry(key, Map<String, dynamic>.from(value))),
+      'reportPeople': _reportPeople.map(
+        (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
+      ),
       'requestContexts': _requestContexts.map(
         (key, value) => MapEntry(key, List<String>.from(value)),
       ),
@@ -243,7 +245,9 @@ class ProfileSession extends ChangeNotifier {
       final people = saved['reportPeople'];
       if (people is Map) {
         for (final entry in people.entries) {
-          if (entry.key is String && entry.value is Map && _requestIds.containsKey(entry.key)) {
+          if (entry.key is String &&
+              entry.value is Map &&
+              _requestIds.containsKey(entry.key)) {
             _reportPeople[entry.key] = Map<String, dynamic>.from(entry.value);
           }
         }
@@ -504,20 +508,29 @@ class ProfileSession extends ChangeNotifier {
     }
     if (_profileKey == key && _facts != null) {
       final savedRevision = _revision;
-      await renewChatAccess();
+      var requiresCalculation = false;
+      try {
+        await renewChatAccess();
+      } on JyotaraApiException catch (error) {
+        if (error.code != 'provider_refresh_required') rethrow;
+        // Explicit Calculate action authorizes a new chart only for this status.
+        requiresCalculation = true;
+      }
       if (savedRevision != _revision) {
         throw const JyotaraApiException(
           'Your profile changed while chat access was being renewed.',
         );
       }
-      if (nickname != null) this.nickname = nickname.trim();
-      if (gender != null) this.gender = gender;
-      if (birthplaceLabel != null) {
-        this.birthplaceLabel = birthplaceLabel.trim();
+      if (!requiresCalculation) {
+        if (nickname != null) this.nickname = nickname.trim();
+        if (gender != null) this.gender = gender;
+        if (birthplaceLabel != null) {
+          this.birthplaceLabel = birthplaceLabel.trim();
+        }
+        _persist();
+        notifyListeners();
+        return;
       }
-      _persist();
-      notifyListeners();
-      return;
     }
     final revision = ++_revision;
     final previousSession = _api.ensureSession();
@@ -713,10 +726,17 @@ class ProfileSession extends ChangeNotifier {
             .skip(max(0, messages.length - 6))
             .toList(growable: false);
         final input = birthInput;
-        if (input != null && input.exactTime && ['male', 'female'].contains(gender?.value) && (birthplaceLabel?.isNotEmpty ?? false)) {
+        if (input != null &&
+            input.exactTime &&
+            ['male', 'female'].contains(gender?.value) &&
+            (birthplaceLabel?.isNotEmpty ?? false)) {
           _reportPeople[requestKey] = {
-            'datetime': input.dateTime, 'latitude': input.latitude, 'longitude': input.longitude,
-            'name': nickname.isEmpty ? 'Jyotara profile' : nickname, 'gender': gender!.value, 'place': birthplaceLabel!,
+            'datetime': input.dateTime,
+            'latitude': input.latitude,
+            'longitude': input.longitude,
+            'name': nickname.isEmpty ? 'Jyotara profile' : nickname,
+            'gender': gender!.value,
+            'place': birthplaceLabel!,
           };
         }
         final random = Random.secure();
@@ -876,7 +896,7 @@ class ProfileSession extends ChangeNotifier {
     _revision++;
     _clearConversations();
     _requestIds.clear();
-        _reportPeople.clear();
+    _reportPeople.clear();
     _requestContexts.clear();
     _facts = null;
     _raw = null;

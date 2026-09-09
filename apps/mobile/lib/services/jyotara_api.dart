@@ -19,11 +19,13 @@ class JyotaraApiException implements Exception {
   const JyotaraApiException(
     this.message, {
     this.statusCode,
+    this.code,
     this.deliveryUncertain = false,
   });
 
   final String message;
   final int? statusCode;
+  final String? code;
   final bool deliveryUncertain;
   String get chatLabel =>
       deliveryUncertain ? 'ANSWER NOT CONFIRMED' : 'REQUEST NOT COMPLETED';
@@ -426,6 +428,7 @@ class JyotaraApiClient {
             ? payload['error'] as String
             : 'Jyotara service is unavailable.',
         statusCode: response.statusCode,
+        code: payload['code'] is String ? payload['code'] as String : null,
         deliveryUncertain:
             response.statusCode >= 500 ||
             payload['code'] == 'request_already_received',
