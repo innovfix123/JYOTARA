@@ -6,7 +6,9 @@
         <item name="android:navigationBarColor">#090612</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-
+        <item name="android:windowSplashScreenBackground">#090612</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_moon</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#090612</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>

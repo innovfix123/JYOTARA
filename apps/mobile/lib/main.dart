@@ -1,5 +1,9 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
+
+import 'launch_intro.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -29,6 +33,18 @@ final profileSession = ProfileSession(
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: ink,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: ink,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ),
+  );
+  runApp(JyotaraApp(initialization: _restoreApp()));
+}
+
+Future<void> _restoreApp() async {
   try {
     await languagePreferences.load();
   } catch (_) {
@@ -39,12 +55,16 @@ Future<void> main() async {
   } catch (_) {
     /* UI preference failure must not erase the independent chat preference. */
   }
-  if (const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')) await testerAccess.restore();
+  if (const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')) {
+    await testerAccess.restore();
+  }
   await profileSession.restore();
-  runApp(const JyotaraApp());
 }
 
-const appBuildLabel = String.fromEnvironment('JYOTARA_BUILD_LABEL', defaultValue: 'Development');
+const appBuildLabel = String.fromEnvironment(
+  'JYOTARA_BUILD_LABEL',
+  defaultValue: 'Development',
+);
 
 const ink = Color(0xFF090612);
 const panel = Color(0xFF171022);
@@ -55,8 +75,9 @@ const muted = Color(0xFFA89FB8);
 const gold = Color(0xFFF2C778);
 
 class JyotaraApp extends StatelessWidget {
-  const JyotaraApp({super.key, this.uiPreferences});
+  const JyotaraApp({super.key, this.uiPreferences, this.initialization});
   final UiLanguagePreferences? uiPreferences;
+  final Future<void>? initialization;
 
   @override
   Widget build(BuildContext context) {
@@ -139,9 +160,15 @@ class JyotaraApp extends StatelessWidget {
             ),
           ),
         ),
-        home: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
-            ? TesterAccessScreen(access: testerAccess, child: const IntroScreen())
-            : const IntroScreen(),
+        home: LaunchIntro(
+          initialization: initialization,
+          child: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
+              ? TesterAccessScreen(
+                  access: testerAccess,
+                  child: const IntroScreen(),
+                )
+              : const IntroScreen(),
+        ),
       ),
     );
   }
@@ -295,7 +322,7 @@ class _IntroScreenState extends State<IntroScreen>
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Image.asset('assets/images/cosmic-onboarding.png', fit: BoxFit.cover),
+          const WelcomeMotion(),
           const DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -394,16 +421,6 @@ class _IntroScreenState extends State<IntroScreen>
                           SizedBox(width: 10),
                           Icon(Icons.arrow_forward_rounded),
                         ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Automated AI Vedic guidance · Not a human consultation or guaranteed prediction',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: muted,
-                        fontSize: 11,
-                        height: 1.35,
                       ),
                     ),
                   ],
@@ -819,7 +836,11 @@ class _ChatScreenState extends State<ChatScreen> {
         guide: widget.guide.name,
       );
       if (sentRevision != _session.revision) return;
-      await _session.recordGuidanceResponse(result, sentConversation, detected.name);
+      await _session.recordGuidanceResponse(
+        result,
+        sentConversation,
+        detected.name,
+      );
     } on JyotaraApiException catch (error) {
       if (sentRevision != _session.revision) return;
       if (!mounted) {
@@ -1096,7 +1117,10 @@ class ChartScreen extends StatelessWidget {
                 ),
               if (facts != null) ...[
                 SouthIndianChart(facts: facts),
-                NavamsaSection(facts: facts, birthTimeKnown: active.birthTimeKnown),
+                NavamsaSection(
+                  facts: facts,
+                  birthTimeKnown: active.birthTimeKnown,
+                ),
                 if (!active.birthTimeKnown)
                   const UiText(
                     'Approximate noon chart: Rasi and Nakshatra are provisional. Lagnam and Dasa are withheld.',
@@ -1131,7 +1155,9 @@ class ChartScreen extends StatelessWidget {
                   'Dasa–Bhukti at calculation',
                   style: TextStyle(fontSize: 20),
                 ),
-                const UiText('These periods belong to the saved calculation date. New chat answers check the current period separately.'),
+                const UiText(
+                  'These periods belong to the saved calculation date. New chat answers check the current period separately.',
+                ),
                 UiText(
                   '${uiText(context, 'Mahadasha')}: ${uiText(context, facts['currentDasha']?['name'] ?? 'Unavailable')}',
                 ),
@@ -1179,8 +1205,8 @@ class ChartScreen extends StatelessWidget {
                               scrollable: true,
                               content: UiText(
                                 active.canDeleteServer
-                                  ? 'Delete this session’s server chart cache, research questions and answer copies, then clear this device’s profile and history. Minimal usage and revocation records remain. Internet is required; if deletion fails, keep this app installed and retry.'
-                                  : 'This deletes the saved chart and chat history from this device. It does not delete server usage records.',
+                                    ? 'Delete this session’s server chart cache, research questions and answer copies, then clear this device’s profile and history. Minimal usage and revocation records remain. Internet is required; if deletion fails, keep this app installed and retry.'
+                                    : 'This deletes the saved chart and chat history from this device. It does not delete server usage records.',
                               ),
                               actions: [
                                 TextButton(
@@ -1197,7 +1223,9 @@ class ChartScreen extends StatelessWidget {
                           );
                           if (confirmed == true) {
                             try {
-                              await active.clear(includeServer: active.canDeleteServer);
+                              await active.clear(
+                                includeServer: active.canDeleteServer,
+                              );
                             } catch (_) {
                               if (context.mounted) {
                                 ScaffoldMessenger.of(context).showSnackBar(
@@ -1214,7 +1242,9 @@ class ChartScreen extends StatelessWidget {
                   child: UiText(
                     active.deleting
                         ? 'Deleting data…'
-                        : active.canDeleteServer ? 'Delete server and device data' : 'Delete device profile and history',
+                        : active.canDeleteServer
+                        ? 'Delete server and device data'
+                        : 'Delete device profile and history',
                   ),
                 ),
             ],
@@ -1420,13 +1450,19 @@ class AccountScreen extends StatelessWidget {
                   context: context,
                   builder: (context) => AlertDialog(
                     title: UiText(item.$2),
-                    content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      UiText(detail),
-                      if (item.$2 == 'About this build') ...[
-                        const SizedBox(height: 12),
-                        SelectableText('Jyotara $appBuildLabel'),
-                      ],
-                    ])),
+                    content: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          UiText(detail),
+                          if (item.$2 == 'About this build') ...[
+                            const SizedBox(height: 12),
+                            SelectableText('Jyotara $appBuildLabel'),
+                          ],
+                        ],
+                      ),
+                    ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.pop(context),
@@ -1911,7 +1947,10 @@ class _MessageBubble extends StatelessWidget {
               const SizedBox(height: 7),
             ],
             SelectionArea(
-              child: Text(message.text, style: const TextStyle(fontSize: 16, height: 1.45)),
+              child: Text(
+                message.text,
+                style: const TextStyle(fontSize: 16, height: 1.45),
+              ),
             ),
           ],
         ),
