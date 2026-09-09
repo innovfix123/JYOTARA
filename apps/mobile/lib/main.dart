@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import 'launch_intro.dart';
 import 'discovery_screens.dart';
+import 'chat_profile_picker.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -448,7 +449,7 @@ class _MainShellState extends State<MainShell> {
   void _openChat(Guide guide) {
     Navigator.of(
       context,
-    ).push(MaterialPageRoute<void>(builder: (_) => ChatScreen(guide: guide)));
+    ).push(MaterialPageRoute<void>(builder: (_) => ChatProfilePicker(guide: guide)));
   }
 
   @override
@@ -731,10 +732,16 @@ class QuickAskScreen extends StatelessWidget {
 }
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({required this.guide, this.session, super.key});
+  const ChatScreen({
+    required this.guide,
+    this.session,
+    this.allowProfileSwitch = false,
+    super.key,
+  });
 
   final Guide guide;
   final ProfileSession? session;
+  final bool allowProfileSwitch;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -755,6 +762,7 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _bindConversation();
     _session.addListener(_profileChanged);
+    if (_messages.length > 1) _scrollToLatest();
   }
 
   void _bindConversation() {
@@ -787,7 +795,16 @@ class _ChatScreenState extends State<ChatScreen> {
           orElse: () => ChatLanguage.auto,
         );
       });
+      _scrollToLatest();
     }
+  }
+
+  void _scrollToLatest() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
   }
 
   void _profileChanged() {
@@ -814,7 +831,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send([String? suggestion]) async {
     final text = (suggestion ?? _controller.text).trim();
-    if (text.isEmpty || _thinking) return;
+    if (text.isEmpty || _thinking || _conversation.ended) return;
     final detected = _detect(text);
     final sentRevision = _session.revision;
     final sentConversation = _conversation;
@@ -905,182 +922,291 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 28 + MediaQuery.textScalerOf(context).scale(44),
-        titleSpacing: 0,
-        title: Row(
+  Future<void> _endChat() async {
+    if (_thinking) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('End chat?'),
+        content: const Text(
+          'Your conversation stays saved for this profile and guide. You can read or continue it later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep chatting'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('End chat'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _conversation.ended = true;
+    _conversation.changed();
+    await _session.flushStorage();
+    if (!mounted) return;
+    if (_session.storageError != null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(_session.storageError!)));
+      return;
+    }
+    final rating = await showDialog<int>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Rate ${widget.guide.name}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _GuideAvatar(guide: widget.guide, radius: 20),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  UiText(
-                    widget.guide.name,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const UiText(
-                    'AI Vedic Guide',
-                    style: TextStyle(fontSize: 12, color: muted),
-                  ),
-                ],
+            const Text('Optional feedback saved privately on this device.'),
+            Wrap(
+              children: List.generate(
+                5,
+                (i) => IconButton(
+                  tooltip: '${i + 1} stars',
+                  onPressed: () => Navigator.pop(context, i + 1),
+                  icon: const Icon(Icons.star_outline),
+                ),
               ),
             ),
           ],
         ),
-        actions: const [
-          Padding(
-            padding: EdgeInsets.only(right: 14),
-            child: Icon(Icons.shield_outlined, color: lavender),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Skip'),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 24 + MediaQuery.textScalerOf(context).scale(24),
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-              children: ChatLanguage.values.map((language) {
-                final labels = {
-                  ChatLanguage.auto: 'Auto',
-                  ChatLanguage.english: 'English',
-                  ChatLanguage.tamil: 'Tamil',
-                  ChatLanguage.tanglish: 'Tanglish',
-                };
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: UiText(labels[language]!),
-                    selected: _language == language,
-                    onSelected: (_) async {
-                      try {
-                        await _session.setChatLanguage(language.name);
-                      } catch (_) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: UiText(
-                                'Language could not be saved. Please try again.',
-                              ),
-                            ),
-                          );
-                        }
-                      }
-                    },
-                  ),
-                );
-              }).toList(),
-            ),
+    );
+    if (rating != null) {
+      _conversation.rating = rating;
+      _conversation.changed();
+      await _session.flushStorage();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_thinking,
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 28 + MediaQuery.textScalerOf(context).scale(44),
+          titleSpacing: 0,
+          title: Row(
+            children: [
+              _GuideAvatar(guide: widget.guide, radius: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      widget.guide.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const UiText(
+                      'AI Vedic Guide',
+                      style: TextStyle(fontSize: 12, color: muted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              key: const Key('chatHistoryList'),
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-              itemCount: 1 + _messages.length + (_thinking ? 1 : 0),
-              itemBuilder: (_, index) {
-                if (index == 0) {
-                  return _session.facts == null
-                      ? ListTile(
-                          title: const UiText('Create your chart to start'),
-                          subtitle: const UiText(
-                            'Your details are shared across all guides.',
-                          ),
-                          trailing: const Icon(Icons.chevron_right),
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const BirthProfileScreen(),
-                            ),
-                          ),
-                        )
-                      : const SizedBox.shrink();
-                }
-                index -= 1;
-                if (_thinking && index == _messages.length) {
-                  return const _TypingBubble();
-                }
-                return _MessageBubble(message: _messages[index]);
-              },
+          actions: [
+            if (widget.allowProfileSwitch)
+              IconButton(
+                tooltip: 'Change profile',
+                onPressed: _thinking ? null : () => Navigator.pop(context),
+                icon: const Icon(Icons.switch_account_outlined),
+              ),
+            TextButton(
+              onPressed: _thinking || _conversation.ended ? null : _endChat,
+              child: Text(_conversation.ended ? 'Ended' : 'End'),
             ),
-          ),
-          if (_messages.length == 1)
+          ],
+        ),
+        body: Column(
+          children: [
             SizedBox(
-              height: 46,
-              child: ListView.separated(
+              height: 24 + MediaQuery.textScalerOf(context).scale(24),
+              child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
-                  vertical: 3,
+                  vertical: 5,
                 ),
-                itemCount: widget.guide.prompts.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 8),
-                itemBuilder: (_, index) => ActionChip(
-                  label: Text(widget.guide.prompts[index]),
-                  onPressed: () => _send(widget.guide.prompts[index]),
-                ),
+                children: ChatLanguage.values.map((language) {
+                  final labels = {
+                    ChatLanguage.auto: 'Auto',
+                    ChatLanguage.english: 'English',
+                    ChatLanguage.tamil: 'Tamil',
+                    ChatLanguage.tanglish: 'Tanglish',
+                  };
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: UiText(labels[language]!),
+                      selected: _language == language,
+                      onSelected: (_) async {
+                        try {
+                          await _session.setChatLanguage(language.name);
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: UiText(
+                                  'Language could not be saved. Please try again.',
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  );
+                }).toList(),
               ),
             ),
-          Container(
-            padding: EdgeInsets.fromLTRB(
-              14,
-              10,
-              14,
-              10 + MediaQuery.paddingOf(context).bottom,
+            Expanded(
+              child: ListView.builder(
+                controller: _scrollController,
+                key: const Key('chatHistoryList'),
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                itemCount: 1 + _messages.length + (_thinking ? 1 : 0),
+                itemBuilder: (_, index) {
+                  if (index == 0) {
+                    return _session.facts == null
+                        ? ListTile(
+                            title: const UiText('Create your chart to start'),
+                            subtitle: const UiText(
+                              'Your details are shared across all guides.',
+                            ),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => BirthForm(session: _session),
+                              ),
+                            ),
+                          )
+                        : Card(
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'PROFILE FOR THIS CHAT\n${chatProfileDetails(_session)}',
+                                key: const Key('chatProfileDetails'),
+                              ),
+                            ),
+                          );
+                  }
+                  index -= 1;
+                  if (_thinking && index == _messages.length) {
+                    return const _TypingBubble();
+                  }
+                  return _MessageBubble(message: _messages[index]);
+                },
+              ),
             ),
-            decoration: const BoxDecoration(
-              color: Color(0xFF100B19),
-              border: Border(top: BorderSide(color: line)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('chatInput'),
-                    controller: _controller,
-                    maxLength: 240,
-                    minLines: 1,
-                    maxLines: 4,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: InputDecoration(
-                      hintText: uiText(
-                        context,
-                        'Ask in English, Tamil or Tanglish…',
+            if (_messages.length == 1 && !_conversation.ended)
+              SizedBox(
+                height: 46,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 3,
+                  ),
+                  itemCount: widget.guide.prompts.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (_, index) => ActionChip(
+                    label: Text(widget.guide.prompts[index]),
+                    onPressed: () => _send(widget.guide.prompts[index]),
+                  ),
+                ),
+              ),
+            if (_conversation.ended)
+              SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      const Text('Chat ended · History saved for this profile'),
+                      if (_conversation.rating != null)
+                        Text('Your private rating: ${_conversation.rating}/5'),
+                      FilledButton(
+                        onPressed: () async {
+                          _conversation.ended = false;
+                          _conversation.changed();
+                          await _session.flushStorage();
+                        },
+                        child: const Text('Continue this chat'),
                       ),
-                      hintMaxLines: 1,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 13,
+                    ],
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: EdgeInsets.fromLTRB(
+                  14,
+                  10,
+                  14,
+                  10 + MediaQuery.paddingOf(context).bottom,
+                ),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF100B19),
+                  border: Border(top: BorderSide(color: line)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const Key('chatInput'),
+                        controller: _controller,
+                        maxLength: 240,
+                        minLines: 1,
+                        maxLines: 4,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _send(),
+                        decoration: InputDecoration(
+                          hintText: uiText(
+                            context,
+                            'Ask in English, Tamil or Tanglish…',
+                          ),
+                          hintMaxLines: 1,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 13,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 10),
+                    IconButton.filled(
+                      key: const Key('sendMessage'),
+                      tooltip: uiText(context, 'Send question'),
+                      onPressed: _thinking ? null : _send,
+                      icon: const Icon(Icons.arrow_upward_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: violet,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size(50, 50),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                IconButton.filled(
-                  key: const Key('sendMessage'),
-                  tooltip: uiText(context, 'Send question'),
-                  onPressed: _thinking ? null : _send,
-                  icon: const Icon(Icons.arrow_upward_rounded),
-                  style: IconButton.styleFrom(
-                    backgroundColor: violet,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size(50, 50),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -1781,6 +1907,8 @@ class _FullGuideCard extends StatelessWidget {
                       guide.description,
                       style: const TextStyle(color: muted),
                     ),
+                    const SizedBox(height: 8),
+                    const Text('Free tester chat · Pricing later', style: TextStyle(color: gold)),
                     const SizedBox(height: 12),
                     const Row(
                       children: [

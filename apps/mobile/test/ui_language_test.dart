@@ -10,7 +10,8 @@ void main() {
     (tester) async {
       final ui = UiLanguagePreferences(write: (_) async {});
       await tester.pumpWidget(JyotaraApp(uiPreferences: ui));
-      await tester.pump(const Duration(milliseconds: 1400));
+      await tester.pump(const Duration(milliseconds: 1900));
+    await tester.pump(const Duration(milliseconds: 1400));
       await tester.tap(find.byKey(const Key('enterApp')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Account'));

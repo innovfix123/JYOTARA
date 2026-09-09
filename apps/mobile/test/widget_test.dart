@@ -113,9 +113,11 @@ void main() {
   }
   testWidgets('English navigation opens', (tester) async {
     await tester.pumpWidget(const JyotaraApp());
+    await tester.pump(const Duration(milliseconds: 1900));
     await tester.pump(const Duration(milliseconds: 1400));
     await tester.tap(find.byKey(const Key('enterApp')));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Your AI Vedic Guides'),200,scrollable:find.byType(Scrollable).first);
     expect(find.text('Your AI Vedic Guides'), findsOneWidget);
     expect(find.text('Chart'), findsOneWidget);
   });

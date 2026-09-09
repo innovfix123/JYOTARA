@@ -60,6 +60,8 @@ class ProfileSession extends ChangeNotifier {
         (guide, conversation) => MapEntry(guide, {
           'language': conversation.language,
           'interruptedRequest': conversation.pending,
+          'ended': conversation.ended,
+          'rating': conversation.rating,
           'messages': conversation.messages
               .map(
                 (m) => {
@@ -156,7 +158,9 @@ class ProfileSession extends ChangeNotifier {
           throw const FormatException('Invalid saved conversation');
         }
         final conversation = GuideConversation()
-          ..language = chat['language'] as String;
+          ..language = chat['language'] as String
+          ..ended = chat['ended'] == true
+          ..rating = chat['rating'] is int && chat['rating'] >= 1 && chat['rating'] <= 5 ? chat['rating'] as int : null;
         for (final message in chat['messages']) {
           if (message is! Map ||
               message['fromUser'] is! bool ||

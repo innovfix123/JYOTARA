@@ -6,6 +6,8 @@ class GuideConversation extends ChangeNotifier {
   final messages = <ChatMessage>[];
   String language = 'auto';
   bool pending = false;
+  bool ended = false;
+  int? rating;
   void changed() => notifyListeners();
 }
 
