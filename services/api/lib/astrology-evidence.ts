@@ -230,7 +230,10 @@ function inferIntent(category: GuidanceCategory, question: string) {
   const pluralPeople = includesAny(normalized, ['we', 'us', 'nanga', 'naanga', 'எங்களுக்கு', 'நாங்கள்', 'நாங்க'], true);
   if (((relationshipCategory || pluralPeople) && asksCompatibility) ||
       includesAny(normalized, ['rendu per', 'rendu perum', 'இருவர'], true)) return 'additional_profile_required';
-  if (includesAny(normalized, [
+  // Asking how I approach a conversation is about this profile, even when
+  // a partner or parent is mentioned. It is not a reading of their chart.
+  const ownConversation = /\bhow (?:can|should|do) i (?:speak|talk|communicate|discuss|explain|approach)\b|\b(?:epdi|eppadi) (?:pes|paes)|நான்.*எப்படி.*பேச|எப்படி.*பேச(?:லாம்|ுவது)/u.test(normalized);
+  if (!ownConversation && includesAny(normalized, [
     'my child', 'my son', 'my daughter', 'my grandchild', 'my partner', 'my wife', 'my husband',
     'my boyfriend', 'my girlfriend', 'my parents', 'my mother', 'my father', 'future partner',
     'en child', 'en paiyan', 'en ponnu', 'en partner', 'en wife', 'en husband',

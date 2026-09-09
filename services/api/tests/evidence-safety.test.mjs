@@ -258,3 +258,12 @@ test('own-person questions retain evidence and high-stakes intent takes preceden
   }
   assert.equal(packet('Will my child recover from illness?', 'Family').intent, 'high_stakes');
 });
+
+ test('own relationship conversations retain the user chart while other-person readings stay separate', () => {
+  for (const q of ['How can I speak to my partner about our future?', 'How should I talk to my parents about marriage?', 'En partner kitta epdi pesalaam?', 'என் துணையிடம் நான் எப்படி பேசலாம்?']) {
+    assert.notEqual(packet(q, 'Love').intent, 'additional_profile_required', q);
+  }
+  for (const q of ['Will my partner get a job?', 'Are we compatible?', 'How can I speak to my partner about our compatibility?']) {
+    assert.equal(packet(q, 'Love').intent, 'additional_profile_required', q);
+  }
+});

@@ -13,6 +13,8 @@ test('response style is allowlisted, not injected', () => {
 test('rejects wrong script and obvious guaranteed claims', () => {
   assert.equal(acceptableAnswer('உங்கள் கேள்வி', 'tanglish'), false);
   assert.equal(acceptableAnswer('You will definitely marry.', 'english'), false);
+  assert.equal(acceptableAnswer('This is a traditional theme rather than a guaranteed result.', 'english'), true);
+  assert.equal(acceptableAnswer('This is a guaranteed result.', 'english'), false);
   assert.equal(acceptableAnswer('A hidden enemy is working against you.', 'english'), false);
   assert.equal(acceptableAnswer('Unga chart facts idhai urudhippaduthala.', 'tanglish'), true);
 });

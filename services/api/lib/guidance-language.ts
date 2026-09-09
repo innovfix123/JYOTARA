@@ -33,7 +33,7 @@ export function acceptableAnswer(answer: string, style: ResponseStyle): boolean 
     || /\b[0-9]{4}-[0-9]{2}-[0-9]{2}\b|\b[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}\b/.test(timingText)
     || /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+[0-9]{1,2}\b/i.test(timingText)
     || /\b[0-9]{1,2}(?:st|nd|rd|th)?\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(timingText)) return false;
-  const claimsText = answer.replace(/\bwithout expecting fixed dates or guaranteed results\b/gi, '').replace(/\b(?:not a guaranteed (?:result|outcome|prediction|date)|not guaranteed|cannot be guaranteed|can't be guaranteed|isn't guaranteed|no guaranteed outcome)\b/gi, '');
+  const claimsText = answer.replace(/\brather than a guaranteed (?:result|outcome|prediction|date)\b/gi, '').replace(/\bwithout expecting fixed dates or guaranteed results\b/gi, '').replace(/\b(?:not a guaranteed (?:result|outcome|prediction|date)|not guaranteed|cannot be guaranteed|can't be guaranteed|isn't guaranteed|no guaranteed outcome)\b/gi, '');
   if (/100\s*%|guaranteed|definitely (?:marry|break|die)|hidden enemy|secret enemy|கண்டிப்பாக.*(?:திருமணம்|பிரிவு|மரணம்)/i.test(claimsText)) return false;
   if (style === 'tanglish' && /[\u0B80-\u0BFF]/.test(answer)) return false;
   if (style === 'tamil' && !/[\u0B80-\u0BFF]/.test(answer)) return false;
