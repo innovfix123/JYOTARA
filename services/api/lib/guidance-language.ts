@@ -205,6 +205,7 @@ export function conciseReply(answer:string): string {
     if(asks && asked)continue;
     const sentence=part.trim().replace(/\uE000(\d+)\uE001(\.)?/gu, (_,index,end)=>quotes[Number(index)]+(end && !/[.!?][”"]$/u.test(quotes[Number(index)])?'.':'')).replace(/\s+/gu,' ');
     if(!sentence)continue;
+    if(selected.length>=2 && !asks)continue;
     if(selected.length>=3 || [...selected,sentence].join(' ').split(/\s+/u).length>85)break;
     selected.push(sentence);
     if(asks)asked=true;
