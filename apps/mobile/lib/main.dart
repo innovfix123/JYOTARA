@@ -1041,6 +1041,7 @@ class _ChatScreenState extends State<ChatScreen> {
       preference: _language.name,
     ),
     _messages.where((m) => m.fromUser).map((m) => m.text).toList(),
+    lastReply: _messages.where((m) => !m.fromUser).lastOrNull?.text,
   );
 
   Future<void> _send([String? suggestion]) async {
@@ -1340,7 +1341,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ),
-            if (!_conversation.ended)
+            if (!_conversation.ended && !_thinking && _suggestions.isNotEmpty)
               SizedBox(
                 height: 46,
                 child: ListView.separated(

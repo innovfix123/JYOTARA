@@ -144,13 +144,13 @@ export function relationshipResponse(category: string, question: string, history
     'இருவருக்கும் வசதியான நேரத்தில் பேச முடிவுசெய்யுங்கள். முடியாத நாளில் ஒரு சிறிய செய்தி அனுப்பிக்கொள்ளலாம். தொடர்ந்து பேசுவதில் உங்களுக்கு என்ன சிரமம் இருக்கிறது?',
     'Rendu perukkum vasadhiyaana nerathil pesa mudivu pannunga. Mudiyadha naalil oru short message anuppalaam. Thodarndhu pesaradhil ungalukku enna siramam irukku?');
   if (/only contacts|only.*needs|genuine|பதில் தருவதில்லை|காதல் இல்லையா|mixed signals|stopped replying/u.test(q)) return copy('feelings',
-    'I cannot know their feelings from your chart. What you describe is worth addressing: look for consistent, mutual care rather than words alone.\n\nAsk once, clearly, what they want from the relationship and explain what you need. Give them room to answer; if the one-sided pattern continues, you can decide what level of contact is healthy for you.',
-    'அவருடைய உணர்வுகளை உங்கள் ஜாதகத்தால் தெரிந்துகொள்ள முடியாது. நீங்கள் சொன்ன மாற்றத்தைப் பற்றி பேசலாம்; வார்த்தைகளைவிட தொடர்ந்து இருவரும் காட்டும் அக்கறையைப் பாருங்கள்.\n\nஇந்த உறவில் அவருக்கு என்ன விருப்பம் என்று ஒருமுறை தெளிவாகக் கேட்டு, உங்களுக்கு என்ன தேவை என்பதையும் சொல்லுங்கள். பதில் சொல்ல இடம் கொடுங்கள். தொடர்ந்து ஒருதலைப்பட்சமாக இருந்தால், எவ்வளவு தொடர்பு உங்களுக்கு ஏற்றது என்று முடிவுசெய்யலாம்.',
-    'Avar unarvugalai unga jathagathaal therinjukka mudiyaadhu. Neenga sonna maatrathai paththi pesalaam; vaarthaiyai vida rendu perum thodarndhu kaattura akkaraiyai paarunga.\n\nIndha uravil avarukku enna viruppam nu oru murai theliva kettu, ungalukku enna thevai nu sollunga. Badhil solla idam kudunga. Thodarndhu oruthar mattum muyarchi panra maadhiri irundhaa, evvalavu contact ungalukku sari nu mudivu pannalaam.');
+    'Look at whether their effort and care are consistent, not just what they promise. What changed recently that made you question the relationship?',
+    'வாக்குறுதியைவிட தொடர்ந்து காட்டும் அக்கறையையும் முயற்சியையும் பாருங்கள். இந்த உறவைப் பற்றி சந்தேகம் வர சமீபத்தில் என்ன மாறியது?',
+    'Vaakurudhiya vida thodarndhu kaattura akkaraiyum muyarchiyum paarunga. Indha uravai pathi sandhegam vara sameebathula enna maaruchu?');
   if (relationshipFollowup(q)) return copy('clarify',
-    'What happened that makes you consider another chance? I do not have enough relationship context to weigh that decision with you.',
-    'மீண்டும் வாய்ப்பு கொடுப்பதைப் பற்றி யோசிக்க என்ன நடந்தது? அந்தச் சூழல் தெரியாமல் இந்த முடிவைப் பற்றி தெளிவாகப் பேச முடியாது.',
-    'Innoru chance kudukkaradhai yosikka enna nadandhuchu? Andha soozhal theriyaama indha mudivai paththi theliva pesa mudiyaadhu.');
+    'What happened that makes you consider another chance? Tell me what changed, and we can look at what matters for your decision.',
+    'மீண்டும் வாய்ப்பு கொடுப்பதைப் பற்றி யோசிக்க என்ன நடந்தது? என்ன மாறியது என்று சொல்லுங்கள்; உங்கள் முடிவுக்கு முக்கியமானதைப் பார்க்கலாம்.',
+    'Innoru chance kudukkaradhai yosikka enna nadandhuchu? Enna maaruchunu sollunga; unga mudivukku mukkiyamaanadhai paarkalaam.');
   return null;
 }
 

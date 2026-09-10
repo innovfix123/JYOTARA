@@ -168,3 +168,12 @@ test('relationship coaching covers distinct concerns in the requested language o
  }
  assert.deepEqual(relationshipCoaching('english','Career'),[]);
 });
+
+test('ordinary uncertainty starts with relevant help, not a stock inability message', async () => {
+ const {relationshipResponse}=await import(moduleUrl('../lib/guidance-language.ts'));
+ for(const style of ['english','tamil','tanglish']) {
+  const result=relationshipResponse('Love','They give mixed signals',[],style);
+  assert.equal(result.kind,'feelings');
+  assert.doesNotMatch(result.answer,/cannot|முடியா|mudiyaadhu/i);
+ }
+});
