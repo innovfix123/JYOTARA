@@ -97,6 +97,18 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
   const safetyIdentifier = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sessionId))
     .then((value) => Array.from(new Uint8Array(value)).map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 48));
 
+  // Give the writer only the relevant association, not a full chart from which
+  // it can invent additional interpretations. Calculations remain server-side.
+  const readingContext = chartContext ? {
+    birthTimeKnown: chartContext.birthTimeKnown,
+    focus: chartContext.focus,
+    interpretationScope: chartContext.interpretationScope,
+    constraint: chartContext.constraint,
+    houses: chartContext.houses.slice(0, 1).map(({house, lord, lordHouse, topic, linkedTheme}) =>
+      ({house, lord, lordHouse, topic, linkedTheme})),
+    ...(chartContext.currentPanchang ? {currentPanchang:chartContext.currentPanchang} : {}),
+  } : undefined;
+
   const response = await fetch(
     openRouterKey ? 'https://openrouter.ai/api/v1/responses' : 'https://api.openai.com/v1/responses',
     {
@@ -132,6 +144,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         ...(guide ? [`Your guide name is ${guide}. Style: ${guideVoices[guide]}. Respond to other topics too.`] : []),
         ...relationshipCoaching(style, packet.category),
         languageInstruction(style),
+        'Do not say a chart supports what the user wants or validates their preference. For example, goals and gains does not establish family approval or a desire for commitment. Do not mention timing or certainty limitations unless the user actually asks about timing or certainty.',
         'FINAL RESPONSE CONTRACT: Use at most ONE chart placement per reply and at most ONE question mark, including quoted questions. The direct answer must fit before the question within 70 words. Supplied house topics and linkedTheme ONLY permit describing that association; they do NOT imply distance, delay, confusion, ups and downs, commitment, success or a person avoiding conversations. Do not add these predictions from your own astrology knowledge. Do not turn what the user told you into a chart finding.',
         'Good chart-reading example ONLY IF those exact facts are supplied: Your fifth-house lord Venus is in the eleventh house. Traditionally, this connects romance with shared hopes. For your question about commitment, discuss whether your future plans match; this placement does not determine their intentions. Have you both talked about the future? Bad example: Venus in the eleventh means on-and-off communication, or Jupiter in the twelfth means your partner avoids commitment. Those conclusions are NOT supported by the supplied house associations.',
         'For a practical follow-up such as what should I ask or say, give ONE short suggested message and at most ONE relevant question. Do not insert a new house placement to explain a partner’s behaviour. For example: Ask, “Do you want us to build a future together?” Their response and follow-through matter here. Do not supply a checklist of questions. Never repeat an unsupported prediction from the preceding assistant reply.',
@@ -139,7 +152,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
           'THIS IS A FOLLOW-UP, not a new consultation. Apply the four-part reading to a new astrology question when relevant evidence exists; otherwise directly answer the user’s NEW information. Do NOT restate a house/planet/theme already in conversationHistory. If they request an explanation of it, explain the meaning simply rather than quoting the same chart wording. Your reply must add something relevant that the preceding reply did not say.',
         ] : []),
       ].join('\n'),
-      input: [...dialogue, {role:'user', content: JSON.stringify(chartContext ? {responseLanguage:style,question:packet.question,category:packet.category,previousUserMessages:history,conversationHistory:dialogue,chartContext,prokeralaInterpretations:providerSources} : providerSources.length ? {responseLanguage:style,question:packet.question,category:packet.category,previousUserMessages:history,conversationHistory:dialogue,prokeralaInterpretations:providerSources} : practicalScope
+      input: [...dialogue, {role:'user', content: JSON.stringify(chartContext ? {responseLanguage:style,question:packet.question,category:packet.category,previousUserMessages:history,conversationHistory:dialogue,chartContext:readingContext} : providerSources.length ? {responseLanguage:style,question:packet.question,category:packet.category,previousUserMessages:history,conversationHistory:dialogue,prokeralaInterpretations:providerSources} : practicalScope
         ? { responseLanguage:style, question: packet.question, category: packet.category, previousUserMessages: history, conversationHistory: dialogue }
         : { ...packet, previousUserMessages: history, conversationHistory: dialogue })}],
     }; return {...payload, input:[{role:'system',content:payload.instructions}, ...payload.input]}; })()),
