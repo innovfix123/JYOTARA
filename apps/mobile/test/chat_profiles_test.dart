@@ -126,23 +126,23 @@ void main() {
       expect(requests.single['chartTicket'], 'ticket-Profile B');
       expect(requests.single['guide'], 'Aadhirai');
       expect(a.conversation('Aadhirai').messages.length, 1);
-      final suggestion = find.text('What does my chart suggest about love?');
+      final suggestion = find.text('How can I understand whether our effort is mutual?');
       expect(
         suggestion,
         findsOneWidget,
-        reason: 'Suggestions stay after a typed reply',
+        reason: 'A relevant follow-up replaces the initial chart question',
       );
       await tester.tap(suggestion);
       await tester.pumpAndSettle();
       expect(
         requests.last['question'],
-        'What does my chart suggest about love?',
+        'How can I understand whether our effort is mutual?',
       );
       expect(requests.last['chartTicket'], 'ticket-Profile B');
       expect(
         find.widgetWithText(
           ActionChip,
-          'What does my chart suggest about love?',
+          'How can I understand whether our effort is mutual?',
         ),
         findsNothing,
       );
