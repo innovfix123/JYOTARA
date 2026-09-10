@@ -13,7 +13,9 @@ class PhoneAccess extends ChangeNotifier {
     String? baseUrl,
     Future<String?> Function()? read,
     Future<void> Function(String)? write,
-  }) : _client = client ?? http.Client(),
+    DateTime Function()? now,
+  }) : _now = now ?? DateTime.now,
+       _client = client ?? http.Client(),
        _base = Uri.parse(baseUrl ?? defaultApiBaseUrl),
        _read =
            read ??
@@ -27,24 +29,59 @@ class PhoneAccess extends ChangeNotifier {
              value: v,
            ));
   final String? Function() testerCode;
+  final DateTime Function() _now;
   final http.Client _client;
   final Uri _base;
   final Future<String?> Function() _read;
   final Future<void> Function(String) _write;
   String? _token, _account, _challenge, _mobile;
-  int _expires = 0;
+  int _expires = 0, _challengeExpires = 0;
   bool busy = false;
   String? error, notice;
   DateTime? resendAt;
   bool get authorized =>
-      _token != null && DateTime.now().millisecondsSinceEpoch < _expires;
+      _token != null && _now().millisecondsSinceEpoch < _expires;
   String? get token => authorized ? _token : null;
   bool get codeSent => _challenge != null;
+  String? get mobile => _mobile;
+  bool get codeExpired =>
+      codeSent && _now().millisecondsSinceEpoch >= _challengeExpires;
+  int get codeSecondsRemaining =>
+      ((_challengeExpires - _now().millisecondsSinceEpoch) / 1000).ceil().clamp(
+        0,
+        300,
+      );
+  Future<void> _save() => _write(
+    jsonEncode({
+      'token': _token,
+      'accountId': _account,
+      'expiresAt': _expires,
+      'mobile': _mobile,
+      'challengeId': _challenge,
+      'challengeExpiresAt': _challengeExpires,
+      'resendAt': resendAt?.millisecondsSinceEpoch,
+    }),
+  );
   Future<void> restore() async {
     try {
       final saved = await _read();
       if (saved == null) return;
       final data = jsonDecode(saved) as Map;
+      if (data['mobile'] is String &&
+          RegExp(r'^[6-9]\d{9}$').hasMatch(data['mobile'])) {
+        _mobile = data['mobile'];
+      }
+      if (data['resendAt'] is int) {
+        resendAt = DateTime.fromMillisecondsSinceEpoch(data['resendAt']);
+      }
+      if (_mobile != null &&
+          data['challengeId'] is String &&
+          RegExp(r'^[a-f0-9]{48}$').hasMatch(data['challengeId']) &&
+          data['challengeExpiresAt'] is int) {
+        _challenge = data['challengeId'];
+        _challengeExpires = data['challengeExpiresAt'];
+        notice = 'Use the latest SMS code. Reopening the app does not send another SMS.';
+      }
       if (data['accountId'] is String) _account = data['accountId'];
       if (data['token'] is String &&
           RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) &&
@@ -83,6 +120,9 @@ class PhoneAccess extends ChangeNotifier {
     if (response.statusCode != 200) {
       throw _PhoneError(
         data['error'] is String ? data['error'] : 'Please try again later.',
+        retryAfter: data['retryAfterSeconds'] is int
+            ? data['retryAfterSeconds']
+            : null,
       );
     }
     return data;
@@ -96,12 +136,13 @@ class PhoneAccess extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (resendAt != null && DateTime.now().isBefore(resendAt!)) return;
+    if (resendAt != null && _now().isBefore(resendAt!)) return;
     busy = true;
     error = null;
     notice = null;
     notifyListeners();
     try {
+      final requestedAt = _now();
       final data = await _post('send', {'mobile': mobile});
       if (data['challengeId'] is! String ||
           !RegExp(r'^[a-f0-9]{48}$').hasMatch(data['challengeId'])) {
@@ -109,15 +150,28 @@ class PhoneAccess extends ChangeNotifier {
       }
       _challenge = data['challengeId'];
       _mobile = mobile;
-      resendAt = DateTime.now().add(const Duration(seconds: 60));
+      _challengeExpires = requestedAt
+          .add(const Duration(minutes: 5))
+          .millisecondsSinceEpoch;
+      resendAt = _now().add(const Duration(seconds: 60));
       notice = data['deliveryUnconfirmed'] == true
           ? 'Delivery is taking longer. If your SMS arrives, enter the code here.'
-          : 'Code sent. It expires in 5 minutes.';
+          : 'SMS requested. Enter the newest code when it arrives.';
+      await _save();
     } on _PhoneError catch (e) {
       error = e.message;
+      if (e.retryAfter != null && e.retryAfter! > 0) {
+        resendAt = _now().add(Duration(seconds: e.retryAfter!));
+        _mobile ??= mobile;
+        try {
+          await _save();
+        } catch (_) {
+          error = '${e.message} Unable to save the waiting time.';
+        }
+      }
     } catch (_) {
       error = 'Unable to confirm delivery. Please wait before trying again.';
-      resendAt = DateTime.now().add(const Duration(seconds: 60));
+      resendAt = _now().add(const Duration(seconds: 60));
     } finally {
       busy = false;
       notifyListeners();
@@ -126,6 +180,11 @@ class PhoneAccess extends ChangeNotifier {
 
   Future<void> verify(String input) async {
     if (busy || _challenge == null) return;
+    if (codeExpired) {
+      error = 'This code has expired. Request a new OTP when the resend timer ends.';
+      notifyListeners();
+      return;
+    }
     if (!RegExp(r'^\d{6}$').hasMatch(input.trim())) {
       error = 'Enter the 6-digit code.';
       notifyListeners();
@@ -144,7 +203,7 @@ class PhoneAccess extends ChangeNotifier {
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) ||
           data['accountId'] is! String ||
           data['expiresAt'] is! int ||
-          data['expiresAt'] <= DateTime.now().millisecondsSinceEpoch) {
+          data['expiresAt'] <= _now().millisecondsSinceEpoch) {
         throw const FormatException();
       }
       if (_account != null && _account != data['accountId']) {
@@ -174,9 +233,17 @@ class PhoneAccess extends ChangeNotifier {
     }
   }
 
-  void editNumber() {
+  Future<void> editNumber() async {
     if (busy) return;
     _challenge = null;
+    _challengeExpires = 0;
+    try {
+      await _save();
+    } catch (_) {
+      error = 'Unable to save this change.';
+      notifyListeners();
+      return;
+    }
     error = null;
     notice = null;
     notifyListeners();
@@ -184,6 +251,7 @@ class PhoneAccess extends ChangeNotifier {
 }
 
 class _PhoneError implements Exception {
-  _PhoneError(this.message);
+  _PhoneError(this.message, {this.retryAfter});
+  final int? retryAfter;
   final String message;
 }

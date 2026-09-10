@@ -23,6 +23,7 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
   @override
   void initState() {
     super.initState();
+    _phone.text = widget.access.mobile ?? '';
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -42,6 +43,10 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
     builder: (context, _) {
       final access = widget.access;
       if (access.authorized) return widget.child;
+      if (access.codeSent && _phone.text != access.mobile) {
+        _phone.text = access.mobile ?? '';
+      }
+      final remaining = access.codeSecondsRemaining;
       final seconds = access.resendAt == null
           ? 0
           : access.resendAt!.difference(DateTime.now()).inSeconds + 1;
@@ -91,7 +96,7 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                     const SizedBox(height: 20),
                     TextField(
                       controller: _otp,
-                      enabled: !access.busy,
+                      enabled: !access.busy && !access.codeExpired,
                       keyboardType: TextInputType.number,
                       autofillHints: const [AutofillHints.oneTimeCode],
                       inputFormatters: [
@@ -113,6 +118,15 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                       child: const Text('Change number'),
                     ),
                   ],
+                  if (access.codeSent)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        access.codeExpired
+                            ? 'This code has expired. Request a new OTP below.'
+                            : 'Code expires in ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
+                      ),
+                    ),
                   if (access.notice != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -133,7 +147,9 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                     onPressed: access.busy
                         ? null
                         : access.codeSent
-                        ? () => access.verify(_otp.text)
+                        ? access.codeExpired
+                              ? null
+                              : () => access.verify(_otp.text)
                         : seconds > 0
                         ? null
                         : () => access.send(_phone.text),
