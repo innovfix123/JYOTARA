@@ -154,3 +154,17 @@ test('quoted question inside a sentence does not cut off its answer', async () =
  const reply='You have an interview next week. Focus less on “will I get it?” and practise explaining your accounting project.';
  assert.equal(conciseReply(reply),reply);
 });
+
+test('relationship coaching covers distinct concerns in the requested language only', async () => {
+ const {relationshipCoaching}=await import(moduleUrl('../lib/guidance-language.ts'));
+ for (const style of ['english','tamil','tanglish']) {
+  const examples=relationshipCoaching(style,'Love');
+  assert.equal(examples.length,9);
+  assert.match(examples[0],/fictional teaching examples, NOT evidence/);
+  assert.match(examples.join('\n'),/one-sided effort|money pressure|broken promises/);
+  assert.match(examples[0],/never copy.*mechanically/);
+  if(style==='tamil') assert.match(examples[1],/சந்தேகம்/);
+  else assert.doesNotMatch(examples.join('\n'),/[\u0B80-\u0BFF]/u);
+ }
+ assert.deepEqual(relationshipCoaching('english','Career'),[]);
+});

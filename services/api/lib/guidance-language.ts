@@ -220,3 +220,47 @@ export function conversationHistory(value: unknown): {role: 'user' | 'assistant'
   if (value.some(v => !v || !['user','assistant'].includes(v.role) || typeof v.content !== 'string' || !v.content.trim() || [...v.content].length > 1800)) return null;
   return value.map(v => ({role:v.role, content:v.content.trim()}));
 }
+
+/** Authored fictional coaching examples, not chart evidence or real-user records. */
+export function relationshipCoaching(style: ResponseStyle, category: string): string[] {
+  if (!['Love', 'Relationships', 'Marriage', 'Breakup', 'Family'].includes(category)) return [];
+  const examples = [
+    ['unclear concern',
+      'Is this relationship fake? → What happened that made you doubt it—something they said, or a pattern in how they treat you?',
+      'இந்தக் காதல் பொய்யா? → உங்களுக்கு இந்தச் சந்தேகம் வர என்ன நடந்தது? அவர் சொன்ன ஏதாவது விஷயமா, இல்லை தொடர்ந்து நடந்துகொள்ளும் விதமா?',
+      'Indha love fake ah? → Ungalukku indha sandhegam vara enna nadandhuchu? Avar sonna vishayama, illa thodarndhu nadandhukara vidhama?'],
+    ['one-sided effort',
+      'I always call first; they never make plans. → It sounds tiring to carry all the effort. When you explain that you need them to initiate too, how do they respond?',
+      'நான் மட்டும்தான் முதலில் பேசுகிறேன். → நீங்களே எல்லா முயற்சியும் எடுப்பது சோர்வாக இருக்கும். அவரும் முயற்சி எடுக்க வேண்டும் என்று சொன்னபோது என்ன பதில் சொன்னார்?',
+      'Naan mattum dhaan first pesuren. → Neenga mattum ellaa muyarchiyum edukkaradhu kashtama irukkum. Avarum muyarchi edukkanumnu sonnapo enna badhil sonnaar?'],
+    ['money pressure',
+      'They say sending money will prove my love. → You do not need to pay to prove love. Pause the transfer; what happens when you say no?',
+      'பணம் அனுப்பினால்தான் காதல் உண்மை என்கிறார். → காதலை நிரூபிக்கப் பணம் கொடுக்க வேண்டியதில்லை. இப்போது அனுப்பாமல் இருங்கள்; முடியாது என்று சொன்னால் அவர் எப்படி நடந்துகொள்கிறார்?',
+      'Panam anuppina dhaan love unmainu solraanga. → Love-a nirubikka panam kudukka thevai illa. Ippo anuppaama irunga; mudiyaadhunu sonna eppadi nadandhukaraanga?'],
+    ['secrecy versus privacy',
+      'They have not told their family about us. → Family pressure or timing can be part of this; secrecy alone does not prove deception. Have you both discussed when and how to tell them?',
+      'வீட்டில் என்னைப் பற்றிச் சொல்லவில்லை. → வீட்டுச் சூழல் அல்லது தயக்கமும் காரணமாக இருக்கலாம். இதை மட்டும் வைத்து ஏமாற்றம் என்று முடிவுசெய்ய வேண்டாம்; எப்போது, எப்படி சொல்லலாம் என்று இருவரும் பேசினீர்களா?',
+      'Veetla enna pathi sollala. → Veettu soozhal illa thayakkamum kaaranama irukkalaam. Idha mattum vechu emaatharaanganu mudivu panna vendaam; eppo eppadi sollalaamnu rendu perum pesineengala?'],
+    ['broken promises',
+      'They apologise, then repeat the same behaviour. → An apology matters when behaviour changes too. What specific change did you agree on, and has any part of it happened?',
+      'மன்னிப்பு கேட்டுவிட்டு மீண்டும் அதையே செய்கிறார். → மன்னிப்போடு நடத்தையிலும் மாற்றம் இருக்க வேண்டும். என்ன மாற்றம் வேண்டும் என்று பேசினீர்கள்? அதில் ஏதாவது நடந்ததா?',
+      'Sorry sollittu thirumba adhe panraanga. → Sorry-oda nadathaiyilum maatram venum. Enna maatram venumnu pesineenga; adhulayaavadhu nadandhucha?'],
+    ['slow reply and correction',
+      'They replied late; are they cheating? → A late reply alone is not evidence of cheating. Has something else happened that damaged your trust? If the user then explains a work shift, accept that explanation and stop suggesting suspicion.',
+      'தாமதமாகப் பதில் சொன்னார்; ஏமாற்றுகிறாரா? → தாமதமான பதிலை மட்டும் வைத்து அப்படி முடிவுசெய்ய முடியாது. உங்கள் நம்பிக்கையைப் பாதித்த வேறு சம்பவம் நடந்ததா? வேலை நேரம் காரணம் என்று பிறகு சொன்னால் அதை ஏற்று சந்தேகத்தைத் தொடர்ந்து தூண்ட வேண்டாம்.',
+      'Late ah reply panraanga; cheat panraangala? → Late reply mattum adhukku aadharam illa. Unga nambikkaiya paadhicha vera sambavam nadandhucha? Work shift kaaranamnu appuram sonna adha ethukkonga; sandhegathai thodarndhu thoonda vendaam.'],
+    ['reported betrayal and reconciliation',
+      'They admitted cheating; will they change? → You can take time before deciding. Look for responsibility and sustained changes, rather than another promise; you do not owe an immediate second chance.',
+      'ஏமாற்றியதை ஒப்புக்கொண்டார்; இனி மாறுவாரா? → உடனே முடிவெடுக்க வேண்டியதில்லை. இன்னொரு வாக்குறுதியைவிடப் பொறுப்பேற்று தொடர்ந்து மாறுகிறாரா என்பதைப் பாருங்கள்; உடனே மீண்டும் வாய்ப்பு கொடுக்க வேண்டிய கட்டாயமில்லை.',
+      'Emaathinadha othukittaanga; ini maaruvaangala? → Udane mudivedukka vendaam. Innoru vaakurudhiya vida poruppu eduthu thodarndhu maaruraangala nu paarunga; udane innoru chance kudukka kattaayam illa.'],
+    ['chart-based suspicion',
+      'Does my chart show a third person? → A chart cannot establish a secret affair. If a relevant traditional relationship theme is supplied, explain its limited meaning once; ask what actually changed between the couple. Never invent a rival, gender, name or reunion date.',
+      'என் ஜாதகத்தில் மூன்றாவது நபர் இருக்கிறாரா? → ஜாதகத்தை வைத்து ரகசிய உறவை உறுதிசெய்ய முடியாது. பொருத்தமான ஜாதகக் குறிப்பு இருந்தால் அதன் அளவான பொருளை ஒருமுறை சொல்லி, உறவில் உண்மையில் என்ன மாறியது என்று கேளுங்கள். இன்னொருவர், பெயர் அல்லது சேரும் தேதி எனக் கற்பனை செய்ய வேண்டாம்.',
+      'En jathagathula third person irukka? → Jathagathai vechu ragasiya uravai urudhi panna mudiyaadhu. Poruthamaana chart kurippu irundha adhan alavaana arthathai oru murai solli, uravila enna maaruchunu kelunga. Oru person, peru illa serum date-a karpanai panna vendaam.'],
+  ];
+  const index = style === 'tamil' ? 2 : style === 'tanglish' ? 3 : 1;
+  return [
+    'Relationship consultation examples follow. They are fictional teaching examples, NOT evidence about this user. Adapt to the actual conversation; never copy an entire sample mechanically or re-ask a question already answered. A label such as fake, narcissist or cheater is not established by suspicion. Distinguish a one-off misunderstanding from a reported repeated pattern. Do not prescribe a breakup or reunion from a chart. If threats, coercion or danger are reported, prioritize immediate safety over relationship interpretation.',
+    ...examples.map(row => `${row[0]}: ${row[index]}`),
+  ];
+}

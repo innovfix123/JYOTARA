@@ -9,7 +9,7 @@ import { meteredProkeralaFetch, type ProviderCharge } from '@/lib/prokerala-clie
 import { reportPerson, verifiedReportPerson, marriageTimingQuestion, loadMarriageReport, marriageReportReply } from '@/lib/marriage-report';
 import { prokeralaJson } from '@/lib/prokerala-client';
 import { reviewedCareerResponse } from '@/lib/career-response';
-import { conciseReply, conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, relationshipFollowup, relationshipResponse, responseStyle, languageInstruction, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
+import { conciseReply, conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, relationshipCoaching, relationshipFollowup, relationshipResponse, responseStyle, languageInstruction, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
 import {
   buildTopicContext,
   buildEvidencePacket,
@@ -130,6 +130,7 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
         'With unknown birth time, do not invent houses or precise timing. Do not repeatedly ask for birth time or mention missing data during ordinary discussion. If relevant evidence is absent, ask one useful question or offer clearly conversational help; never disguise it as a calculated prediction.',
         'Use natural respectful Tamil; avoid literal English translations and long formal clauses. Tanglish means conversational Tamil written in Latin letters, like unga, ippo, irukku, sollunga. Avoid heavy English counselling jargon and formal transliteration.',
         ...(guide ? [`Your guide name is ${guide}. Style: ${guideVoices[guide]}. Respond to other topics too.`] : []),
+        ...relationshipCoaching(style, packet.category),
         languageInstruction(style),
         ...(dialogue.some(turn => turn.role === 'assistant') ? [
           'THIS IS A FOLLOW-UP, not a new consultation. Start with the user’s NEW information or directly answer their question. Do NOT restate a house/planet/theme already in conversationHistory. If they request an explanation of it, explain the meaning simply rather than quoting the same chart wording. Your reply must add something relevant that the preceding reply did not say.',
