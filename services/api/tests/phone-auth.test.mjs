@@ -36,3 +36,11 @@ for(const mode of ['accepted','rejected','timeout'])test('SMS '+mode+' returns n
  assert.match(inserted[3],/^[a-f0-9]{64}$/);assert.notEqual(inserted[3],otp);
  assert.ok(!JSON.stringify(calls).includes('9000000000'));
 });
+test('rate limit reports the longest remaining blocked window and sends nothing',async()=>{
+ const now=1000000;
+ const query=async(sql,args)=>({rows:sql.startsWith('SELECT hits')?[{hits:99,expires_at:now+(args[0].startsWith('phone:')?900000:60000)}]:[]});
+ const auth=new PhoneAuth({transaction:fn=>fn({query})},config,()=>{throw Error('Unexpected SMS');},()=>now);
+ const result=await auth.handle(request('send',{mobile:'9000000000'}),'tester');
+ assert.equal(result.status,429);
+ const body=await result.json();assert.equal(body.retryAfterSeconds,900);assert.match(body.error,/15 minutes/);
+});

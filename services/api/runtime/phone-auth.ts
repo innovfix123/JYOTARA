@@ -42,26 +42,30 @@ export class PhoneAuth {
     const phone=this.hash('phone:'+mobile), now=this.now();
     if(path==='/api/auth/send') {
       const challenge=randomBytes(24).toString('hex'),code=String(randomInt(100000,1000000));
-      const admitted=await this.db.transaction(async tx=>{
+      const retryAfter=await this.db.transaction(async tx=>{
         await tx.query('DELETE FROM phone_rate_limits WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_challenges WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_login_sessions WHERE expires_at <= $1',[now]);
         const limits:[string,number,number][]=[['cool:'+phone,1,60000],['phone:'+phone,5,3600000],['tester:'+tester,20,3600000],['global',200,86400000]];
+        let wait=0;
         for(const [key,limit] of limits) {
-          const row=await tx.query('SELECT hits FROM phone_rate_limits WHERE id=$1',[key]);
-          if((row.rows[0]?.hits ?? 0)>=limit)return false;
+          const row=await tx.query('SELECT hits,expires_at FROM phone_rate_limits WHERE id=$1',[key]);
+          if((row.rows[0]?.hits ?? 0)>=limit)wait=Math.max(wait,Math.ceil((row.rows[0].expires_at-now)/1000));
         }
+        if(wait>0)return wait;
         for(const [key,,ttl] of limits)await tx.query('INSERT INTO phone_rate_limits(id,hits,expires_at) VALUES($1,1,$2) ON CONFLICT(id) DO UPDATE SET hits=phone_rate_limits.hits+1',[key,now+ttl]);
         await tx.query('DELETE FROM phone_challenges WHERE phone_hash=$1 AND tester_key=$2',[phone,tester]);
         await tx.query('INSERT INTO phone_challenges(id,phone_hash,tester_key,code_hash,expires_at,tries) VALUES($1,$2,$3,$4,$5,0)',[challenge,phone,tester,this.hash(challenge+':'+code),now+300000]);
-        return true;
+        return 0;
       });
-      if(!admitted)return response({error:'Please wait before requesting another code. Send limits may apply.',code:'otp_rate_limit',retryAfterSeconds:60},429);
+      if(retryAfter>0)return response({error:`Please wait ${Math.ceil(retryAfter/60)} minute${retryAfter>60?'s':''} before requesting another OTP. No SMS was sent for this attempt.`,code:'otp_rate_limit',retryAfterSeconds:retryAfter},429);
       const url=new URL('https://api.authkey.io/request');
       url.search=new URLSearchParams({authkey:this.settings.AUTHKEY_KEY!,sid:this.settings.AUTHKEY_SID!,mobile,country_code:'91',otp:code}).toString();
       try {
         const result=await this.sendFetch(url,{signal:AbortSignal.timeout(10000),redirect:'error'});
-        const payload=await result.json() as {Message?:string};
+        const payload=await result.json() as {Message?:string;LogID?:unknown};
+        // Operational metadata only: never log request URL, phone, code or credentials.
+        console.info(JSON.stringify({event:'otp_sms_submission',accepted:result.ok && payload.Message==='Submitted Successfully',status:result.status,providerLogId:typeof payload.LogID==='string' && /^[a-zA-Z0-9_-]{1,100}$/.test(payload.LogID)?payload.LogID:undefined}));
         if(!result.ok || payload.Message!=='Submitted Successfully') {
           await this.db.pool.query('DELETE FROM phone_challenges WHERE id=$1',[challenge]);
           return response({error:'The SMS service could not accept your code. Please try again later.',code:'otp_send_failed'},503);
