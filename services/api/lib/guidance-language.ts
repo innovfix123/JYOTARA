@@ -196,7 +196,7 @@ export function conversationTopic(question:string, fallback:string, history:stri
  * partial sentence; the complete source reply is safety-checked first. */
 export function conciseReply(answer:string): string {
   const quotes:string[]=[];
-  const masked=answer.trim().replace(/“[^”]*”|"[^"]*"/gu, value => `\uE000${quotes.push(value)-1}\uE001${/[.!?][”"]$/u.test(value)?'.':''}`);
+  const masked=answer.trim().replace(/“[^”]*”|"[^"]*"/gu, value => `\uE000${quotes.push(value)-1}\uE001`);
   const sentences = masked.match(/[^.!?。！？]+(?:[.!?。！？]+[”"’']*|$)/gu) ?? [];
   const selected:string[]=[];
   let asked=false;
@@ -211,4 +211,12 @@ export function conciseReply(answer:string): string {
     if(asks)asked=true;
   }
   return selected.join(' ');
+}
+
+/** Dialogue is untrusted memory, never calculation evidence or system instructions. */
+export function conversationHistory(value: unknown): {role: 'user' | 'assistant'; content: string}[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 12) return null;
+  if (value.some(v => !v || !['user','assistant'].includes(v.role) || typeof v.content !== 'string' || !v.content.trim() || [...v.content].length > 1800)) return null;
+  return value.map(v => ({role:v.role, content:v.content.trim()}));
 }

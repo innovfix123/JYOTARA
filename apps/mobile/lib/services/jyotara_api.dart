@@ -267,6 +267,7 @@ class JyotaraApiClient {
     String? ageBand,
     String? requestId,
     List<String> previousUserMessages = const [],
+    List<Map<String, String>> conversationHistory = const [],
     Map<String, dynamic>? reportPerson,
     String? guide,
   }) async {
@@ -294,6 +295,8 @@ class JyotaraApiClient {
       'ageBand': ?ageBand,
       'requestId': ?requestId,
       'reportPerson': ?reportPerson,
+      if (conversationHistory.isNotEmpty)
+        'conversationHistory': conversationHistory,
       if (previousUserMessages.isNotEmpty)
         'previousUserMessages': List<String>.from(previousUserMessages),
     });

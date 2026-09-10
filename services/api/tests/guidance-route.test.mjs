@@ -41,7 +41,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     }; }, async batch() { return []; },
   } };
   globalThis.fetch = async (address, options) => {
-    modelInput = JSON.parse(JSON.parse(options.body).input);
+    modelInput = JSON.parse(JSON.parse(options.body).input.at(-1).content);
     assert.equal(address, 'https://openrouter.ai/api/v1/responses');
     providerCalls++;
     return Response.json({ output_text: modelReply });

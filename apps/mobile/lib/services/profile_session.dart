@@ -79,6 +79,7 @@ class ProfileSession extends ChangeNotifier {
         }),
       ),
       'requestIds': Map<String, String>.from(_requestIds),
+      'conversationContexts': _conversationContexts,
       'reportPeople': _reportPeople.map(
         (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
       ),
@@ -241,6 +242,31 @@ class ProfileSession extends ChangeNotifier {
         ..addAll(
           contexts.map((k, v) => MapEntry(k, List<String>.from(v as List))),
         );
+      _conversationContexts.clear();
+      final turns = saved['conversationContexts'];
+      if (turns is Map) {
+        for (final entry in turns.entries) {
+          if (entry.key is! String ||
+              !_requestIds.containsKey(entry.key) ||
+              entry.value is! List) {
+            throw const FormatException('Invalid saved conversation turns');
+          }
+          final items = entry.value as List;
+          if (items.length > 12 ||
+              items.any(
+                (v) =>
+                    v is! Map ||
+                    !['user', 'assistant'].contains(v['role']) ||
+                    v['content'] is! String ||
+                    (v['content'] as String).runes.length > 1800,
+              )) {
+            throw const FormatException('Invalid saved conversation turns');
+          }
+          _conversationContexts[entry.key] = items
+              .map((v) => Map<String, String>.from(v as Map))
+              .toList();
+        }
+      }
       _reportPeople.clear();
       final people = saved['reportPeople'];
       if (people is Map) {
@@ -316,6 +342,7 @@ class ProfileSession extends ChangeNotifier {
   final _requestIds = <String, String>{};
   final _reportPeople = <String, Map<String, dynamic>>{};
   final _requestContexts = <String, List<String>>{};
+  final _conversationContexts = <String, List<Map<String, String>>>{};
   final _responseReceipts = Expando<({String key, String id, int revision})>();
 
   /// Commit the displayed answer and retire its retry identity in one vault
@@ -337,6 +364,7 @@ class ProfileSession extends ChangeNotifier {
     target.messages.add(guidanceMessage(result, language));
     target.pending = false;
     final originalContext = _requestContexts.remove(receipt.key);
+    final originalTurns = _conversationContexts.remove(receipt.key);
     if (_requestIds[receipt.key] == receipt.id) _requestIds.remove(receipt.key);
     target.changed(); // Persists the answer and identity removal together.
     await flushStorage();
@@ -346,6 +374,9 @@ class ProfileSession extends ChangeNotifier {
       // A failed write must not make another send billable. The original disk
       // generation still contains this identity, and memory must agree.
       _requestIds.putIfAbsent(receipt.key, () => receipt.id);
+      if (originalTurns != null) {
+        _conversationContexts.putIfAbsent(receipt.key, () => originalTurns);
+      }
       if (originalContext != null) {
         _requestContexts.putIfAbsent(receipt.key, () => originalContext);
       }
@@ -582,6 +613,7 @@ class ProfileSession extends ChangeNotifier {
         _requestIds.clear();
         _reportPeople.clear();
         _requestContexts.clear();
+        _conversationContexts.clear();
         this.nickname = '';
         this.gender = null;
         this.birthplaceLabel = null;
@@ -707,7 +739,7 @@ class ProfileSession extends ChangeNotifier {
           );
         }
         // The current question is already visible. Only prior user statements
-        // from this guide are context; assistant claims are never chart facts.
+        // from this guide are retained for legacy topic routing.
         final messages = guide == null
             ? <String>[]
             : (_conversations[guide]?.messages ?? <ChatMessage>[])
@@ -725,6 +757,36 @@ class ProfileSession extends ChangeNotifier {
         _requestContexts[requestKey] = messages
             .skip(max(0, messages.length - 6))
             .toList(growable: false);
+        // Freeze both sides for retries. Conversation is memory, not evidence.
+        final turns =
+            (guide == null
+                    ? <ChatMessage>[]
+                    : (_conversations[guide]?.messages ?? <ChatMessage>[]))
+                .where(
+                  (m) =>
+                      m.text.trim().isNotEmpty &&
+                      ![
+                        'INTERRUPTED REQUEST',
+                        'ERROR',
+                        'REQUEST FAILED',
+                      ].contains(m.label),
+                )
+                .toList();
+        if (turns.isNotEmpty &&
+            turns.last.fromUser &&
+            turns.last.text.trim().replaceAll(RegExp(r'\s+'), ' ') ==
+                normalizedQuestion) {
+          turns.removeLast();
+        }
+        _conversationContexts[requestKey] = turns
+            .skip(max(0, turns.length - 12))
+            .map(
+              (m) => <String, String>{
+                'role': m.fromUser ? 'user' : 'assistant',
+                'content': String.fromCharCodes(m.text.trim().runes.take(1800)),
+              },
+            )
+            .toList();
         final input = birthInput;
         if (input != null &&
             input.exactTime &&
@@ -771,6 +833,7 @@ class ProfileSession extends ChangeNotifier {
         researchConsent: consent,
         requestId: requestId,
         previousUserMessages: _requestContexts[requestKey] ?? const [],
+        conversationHistory: _conversationContexts[requestKey] ?? const [],
         reportPerson: _reportPeople[requestKey],
         guide: guide,
       );
@@ -898,6 +961,7 @@ class ProfileSession extends ChangeNotifier {
     _requestIds.clear();
     _reportPeople.clear();
     _requestContexts.clear();
+    _conversationContexts.clear();
     _facts = null;
     _raw = null;
     _profileKey = null;
