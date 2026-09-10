@@ -134,7 +134,9 @@ class JyotaraApiClient {
     http.Client? client,
     String? baseUrl,
     String? Function()? testerCode,
-  }) : _testerCode = testerCode ?? (() => null),
+    String? Function()? phoneToken,
+  }) : _phoneToken = phoneToken ?? (() => null),
+       _testerCode = testerCode ?? (() => null),
        _client = client ?? http.Client(),
        _baseUri = Uri.parse(baseUrl ?? defaultApiBaseUrl) {
     final localDebug =
@@ -153,6 +155,7 @@ class JyotaraApiClient {
   }
 
   final String? Function() _testerCode;
+  final String? Function() _phoneToken;
   final http.Client _client;
   final Uri _baseUri;
   String? _sessionCookie;
@@ -368,9 +371,13 @@ class JyotaraApiClient {
             _baseUri.resolve(path),
             headers: {
               'Content-Type': 'application/json',
+              if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
+                'X-Jyotara-Phone-Auth': 'required',
               'Accept': 'application/json',
               'Cookie': ?_sessionCookie,
               'X-Jyotara-Tester-Code': ?_testerCode(),
+              if (_phoneToken() != null)
+                'Authorization': 'Bearer ${_phoneToken()}',
             },
             body: jsonEncode(body),
           )

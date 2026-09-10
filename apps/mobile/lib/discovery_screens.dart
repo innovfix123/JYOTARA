@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'main.dart' show testerAccess, profileSession, ivory, muted;
+import 'main.dart' show phoneAccess, testerAccess, profileSession, ivory, muted;
 import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
@@ -56,7 +56,11 @@ Future<Map<String, dynamic>> discoveryRequest(
         Uri.parse(defaultApiBaseUrl).resolve(path),
         headers: {
           'Content-Type': 'application/json',
+          if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
+            'X-Jyotara-Phone-Auth': 'required',
           'X-Jyotara-Tester-Code': testerAccess.code ?? '',
+          if (phoneAccess.token != null)
+            'Authorization': 'Bearer ${phoneAccess.token}',
         },
         body: jsonEncode(body),
       )
@@ -426,7 +430,10 @@ class KundliLibrary {
   }
 
   static ProfileSession _session(String id) => ProfileSession(
-    api: JyotaraApiClient(testerCode: () => testerAccess.code),
+    api: JyotaraApiClient(
+      testerCode: () => testerAccess.code,
+      phoneToken: () => phoneAccess.token,
+    ),
     vault: LocalProfileVault(
       read: () => storage.read(key: 'jyotara.kundli.$id'),
       write: (value) => value == null
@@ -777,7 +784,10 @@ class _MatchingScreenState extends State<MatchingScreen> {
 
   Future<void> _enterBirth(bool male) async {
     final session = ProfileSession(
-      api: JyotaraApiClient(testerCode: () => testerAccess.code),
+      api: JyotaraApiClient(
+        testerCode: () => testerAccess.code,
+        phoneToken: () => phoneAccess.token,
+      ),
     );
     await Navigator.push(
       context,

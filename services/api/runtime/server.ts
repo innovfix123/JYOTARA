@@ -1,3 +1,4 @@
+import { PhoneAuth } from './phone-auth';
 import { discardPending } from './discard-pending';
 import { daily, matching } from './discovery';
 import { createServer } from 'node:http';
@@ -25,6 +26,8 @@ const routes: Record<string, (request: Request) => Promise<Response>> = {
 if (!process.env.JYOTARA_TESTER_CODES_SHA256 || !process.env.JYOTARA_TESTER_EXPIRES_AT) {
   throw new Error('Tester access configuration is required');
 }
+const phoneAuth = new PhoneAuth(database, process.env);
+const authPaths = new Set(['/api/auth/config', '/api/auth/send', '/api/auth/verify', '/api/auth/session', '/api/auth/logout']);
 const server = createServer(async (incoming, outgoing) => {
   outgoing.setHeader('X-Content-Type-Options', 'nosniff');
   outgoing.setHeader('Cache-Control', 'no-store');
@@ -49,9 +52,10 @@ const server = createServer(async (incoming, outgoing) => {
       outgoing.end(JSON.stringify({ access: 'granted', expiresAt: process.env.JYOTARA_TESTER_EXPIRES_AT }));
       return;
     }
-    const handler = routes[`${incoming.method} ${path}`];
+    const isAuth = incoming.method === 'POST' && authPaths.has(path);
+    const handler = isAuth ? (request: Request) => phoneAuth.handle(request, tester) : routes[`${incoming.method} ${path}`];
     if (!handler) { outgoing.writeHead(404); outgoing.end(); return; }
-    const admission = await admitTesterRequest(database, tester, path, incoming.headers.cookie ?? '');
+    const admission = isAuth ? 200 : await admitTesterRequest(database, tester, path, incoming.headers.cookie ?? '');
     if (admission !== 200) {
       outgoing.writeHead(admission, { 'Content-Type': 'application/json' });
       outgoing.end(JSON.stringify({ error: admission === 429
@@ -74,7 +78,15 @@ const server = createServer(async (incoming, outgoing) => {
       method: incoming.method, headers,
       body: length ? Buffer.concat(chunks) : undefined,
     });
-    const response = await handler(request);
+    let response: Response;
+    const account = !isAuth && request.headers.has('authorization') ? await phoneAuth.account(request, tester) : null;
+    if (!isAuth && (request.headers.has('authorization') || request.headers.get('x-jyotara-phone-auth') === 'required') && !account) {
+      response = Response.json({error:'Phone sign-in expired. Please sign in again.',code:'phone_auth_required'},{status:401});
+    } else if (!isAuth && phoneAuth.configured() && !(await phoneAuth.ownProfile(request.headers.get('cookie') ?? '', account, !!account))) {
+      response = Response.json({error:'Sign in with the phone account that owns this profile.',code:'phone_auth_required'},{status:403});
+    } else {
+      response = await handler(request);
+    }
     response.headers.forEach((value, key) => { if (key !== 'set-cookie') outgoing.setHeader(key, value); });
     const cookies = response.headers.getSetCookie();
     if (cookies.length) outgoing.setHeader('Set-Cookie', cookies);

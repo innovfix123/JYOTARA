@@ -1,3 +1,5 @@
+import 'services/phone_access.dart';
+import 'phone_access_screen.dart';
 import 'services/public_reading_text.dart';
 import 'brand_mark.dart';
 
@@ -31,8 +33,12 @@ import 'tester_access_screen.dart';
 final languagePreferences = LanguagePreferences();
 final uiLanguagePreferences = UiLanguagePreferences();
 final testerAccess = TesterAccess();
+final phoneAccess = PhoneAccess(testerCode: () => testerAccess.code);
 final profileSession = ProfileSession(
-  api: JyotaraApiClient(testerCode: () => testerAccess.code),
+  api: JyotaraApiClient(
+    testerCode: () => testerAccess.code,
+    phoneToken: () => phoneAccess.token,
+  ),
   preferences: languagePreferences,
   vault: LocalProfileVault(),
 );
@@ -64,6 +70,7 @@ Future<void> _restoreApp() async {
   if (const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')) {
     await testerAccess.restore();
   }
+  await phoneAccess.restore();
   await profileSession.restore();
 }
 
@@ -183,7 +190,13 @@ class JyotaraApp extends StatelessWidget {
           child: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
               ? TesterAccessScreen(
                   access: testerAccess,
-                  child: const IntroScreen(),
+                  child:
+                      const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH')
+                      ? PhoneAccessScreen(
+                          access: phoneAccess,
+                          child: const IntroScreen(),
+                        )
+                      : const IntroScreen(),
                 )
               : const IntroScreen(),
         ),
