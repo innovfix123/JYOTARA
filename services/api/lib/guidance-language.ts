@@ -205,8 +205,8 @@ export function conciseReply(answer:string): string {
     if(asks && asked)continue;
     const sentence=part.trim().replace(/\uE000(\d+)\uE001(\.)?/gu, (_,index,end)=>quotes[Number(index)]+(end && !/[.!?][”"]$/u.test(quotes[Number(index)])?'.':'')).replace(/\s+/gu,' ');
     if(!sentence)continue;
-    if(selected.length>=2 && !asks)continue;
-    if(selected.length>=3 || [...selected,sentence].join(' ').split(/\s+/u).length>85)break;
+    if(selected.length>=3 && !asks)continue;
+    if(selected.length>=4 || [...selected,sentence].join(' ').split(/\s+/u).length>85)break;
     selected.push(sentence);
     if(asks)asked=true;
   }
@@ -260,7 +260,7 @@ export function relationshipCoaching(style: ResponseStyle, category: string): st
   ];
   const index = style === 'tamil' ? 2 : style === 'tanglish' ? 3 : 1;
   return [
-    'Relationship consultation examples follow. They are fictional teaching examples, NOT evidence about this user. Adapt to the actual conversation; never copy an entire sample mechanically or re-ask a question already answered. A label such as fake, narcissist or cheater is not established by suspicion. Distinguish a one-off misunderstanding from a reported repeated pattern. Do not prescribe a breakup or reunion from a chart. If threats, coercion or danger are reported, prioritize immediate safety over relationship interpretation.',
+    'Relationship consultation examples follow. They are fictional teaching examples, NOT evidence about this user. These examples teach handling of relationship concerns, not the full format of a chart reading. When relevant chart evidence exists, use the requested finding, interpretation, direct answer and useful question structure. Adapt to the actual conversation; never copy an entire sample mechanically or re-ask a question already answered. A label such as fake, narcissist or cheater is not established by suspicion. Distinguish a one-off misunderstanding from a reported repeated pattern. Do not prescribe a breakup or reunion from a chart. If threats, coercion or danger are reported, prioritize immediate safety over relationship interpretation.',
     ...examples.map(row => `${row[0]}: ${row[index]}`),
   ];
 }

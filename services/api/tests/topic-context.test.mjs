@@ -25,10 +25,10 @@ test('explicit topics override guide specialty across supported languages',()=>{
 });
 
 test('brief replies preserve complete quoted examples',()=>{
- const text='Start with an apology. You could say: “I was rude. I am sorry. Take the space you need.” Then listen. Extra advice can wait.';
+ const text='Start with an apology. You could say: “I was rude. I am sorry. Take the space you need.” Then listen. Extra advice can wait. A fourth statement is unnecessary.';
  const brief=conciseReply(text);
  assert.ok(brief.includes('“I was rude. I am sorry. Take the space you need.”'));
- assert.ok(!brief.includes('Extra advice'));
+ assert.ok(!brief.includes('A fourth statement'));
  assert.equal(conciseReply('A clear answer.'),'A clear answer.');
 });
 
@@ -43,3 +43,9 @@ test('one follow-up permits a quoted message question; Tamil duration is not a c
  assert.equal(acceptableAnswer('மாலை 2–3 நிமிடம் அமைதியாக இருக்கலாம்.','tamil'),true);
  assert.equal(acceptableAnswer('மாலை 5 மணி நல்ல நேரம்.','tamil'),false);
 });
+
+ test('four-part reading keeps the direct answer and one useful question',()=>{
+ const reply='Your fifth-house lord Venus is in the eleventh house. Traditionally this connects romance with shared hopes. Discuss whether your plans for this relationship match. Have you talked about your future together?';
+ assert.equal(conciseReply(reply),reply);
+ assert.equal(conciseReply(reply+' What else happened?'),reply);
+ });
