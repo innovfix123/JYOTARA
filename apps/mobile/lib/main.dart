@@ -1,3 +1,4 @@
+import 'first_profile_setup.dart';
 import 'services/phone_access.dart';
 import 'phone_access_screen.dart';
 import 'services/public_reading_text.dart';
@@ -194,7 +195,10 @@ class JyotaraApp extends StatelessWidget {
                       const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH')
                       ? PhoneAccessScreen(
                           access: phoneAccess,
-                          child: const IntroScreen(),
+                          child: FirstProfileSetup(
+                            session: profileSession,
+                            child: const IntroScreen(),
+                          ),
                         )
                       : const IntroScreen(),
                 )

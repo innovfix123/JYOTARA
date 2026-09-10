@@ -13,10 +13,12 @@ class BirthForm extends StatefulWidget {
     super.key,
     required this.session,
     this.onSubmit,
+    this.onCompleted,
     this.initialGender,
     this.initialDetails,
   });
   final Future<void> Function(Map<String, dynamic>)? onSubmit;
+  final VoidCallback? onCompleted;
   final ProfileGender? initialGender;
   final Map<String, dynamic>? initialDetails;
   final ProfileSession session;
@@ -160,7 +162,13 @@ class _BirthFormState extends State<BirthForm> {
               : '${_place![1]}, ${_place![2]}',
         );
       }
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        if (widget.onCompleted != null) {
+          widget.onCompleted!();
+        } else {
+          Navigator.of(context).pop();
+        }
+      }
     } on JyotaraApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
