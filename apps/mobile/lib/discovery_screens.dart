@@ -8,7 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
-import 'main.dart' show phoneAccess, testerAccess, profileSession, ivory, muted;
+import 'main.dart'
+    show
+        phoneAccess,
+        testerAccess,
+        profileSession,
+        languagePreferences,
+        ivory,
+        muted;
 import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
@@ -44,6 +51,19 @@ const zodiacIds = [
   'aquarius',
   'pisces',
 ];
+String readingLanguage(BuildContext context) =>
+    context
+                .dependOnInheritedWidgetOfExactType<UiLanguageScope>()
+                ?.notifier
+                ?.value ==
+            'ta' ||
+        languagePreferences.value == 'tamil'
+    ? 'ta'
+    : 'en';
+
+String readingText(BuildContext context, String value) =>
+    readingLanguage(context) == 'ta' ? tamilUi[value] ?? value : value;
+
 String zodiacLabel(BuildContext context, int index) =>
     uiText(context, zodiacNames[index]);
 
@@ -64,7 +84,7 @@ Future<Map<String, dynamic>> discoveryRequest(
         },
         body: jsonEncode(body),
       )
-      .timeout(const Duration(seconds: 25));
+      .timeout(const Duration(seconds: 60));
   final data = jsonDecode(response.body) as Map<String, dynamic>;
   if (response.statusCode != 200) {
     throw Exception(data['error'] ?? 'Please try again later.');
@@ -85,7 +105,7 @@ class DiscoveryActions extends StatelessWidget {
             MaterialPageRoute<void>(builder: (_) => const WalletScreen()),
           ),
           icon: const Icon(Icons.account_balance_wallet_outlined),
-          label: const Text('Wallet · ₹0  +'),
+          label: const UiText('Wallet · ₹0  +'),
         ),
       ),
       const SizedBox(height: 12),
@@ -122,7 +142,7 @@ class DiscoveryActions extends StatelessWidget {
                         child: Icon(item.$1, color: ivory, size: 28),
                       ),
                       const SizedBox(height: 10),
-                      Text(item.$2, textAlign: TextAlign.center),
+                      UiText(item.$2, textAlign: TextAlign.center),
                     ],
                   ),
                 ),
@@ -144,22 +164,22 @@ class _WalletScreenState extends State<WalletScreen> {
   int selected = 100;
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Wallet')),
+    appBar: AppBar(title: const UiText('Wallet')),
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text('Your balance', style: TextStyle(color: muted)),
-        const Text(
+        const UiText('Your balance', style: TextStyle(color: muted)),
+        const UiText(
           '₹0',
           style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        const Text('Wallet preview', style: TextStyle(color: ivory)),
-        const Text(
+        const UiText('Wallet preview', style: TextStyle(color: ivory)),
+        const UiText(
           'Choose a recharge amount to preview. Payments and deductions are not enabled during this test.',
         ),
         const SizedBox(height: 28),
-        const Text(
+        const UiText(
           'Add money',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
@@ -183,33 +203,35 @@ class _WalletScreenState extends State<WalletScreen> {
                         color: selected == amount ? ivory : muted,
                       ),
                     ),
-                    child: Text('₹$amount'),
+                    child: UiText('₹$amount'),
                   ),
                 ),
             ],
           ),
         ),
         const SizedBox(height: 28),
-        Text('Selected recharge: ₹$selected'),
+        UiText('Selected recharge: ₹$selected'),
         const SizedBox(height: 12),
         const FilledButton(
           onPressed: null,
-          child: Text('Payments coming later'),
+          child: UiText('Payments coming later'),
         ),
         const SizedBox(height: 24),
-        const Text(
+        const UiText(
           'Transaction history',
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 10),
-        const Text('No transactions yet.'),
+        const UiText('No transactions yet.'),
       ],
     ),
   );
 }
 
 class DailyHoroscopeScreen extends StatefulWidget {
-  const DailyHoroscopeScreen({super.key});
+  const DailyHoroscopeScreen({super.key, this.request = discoveryRequest});
+  final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
+  request;
   @override
   State<DailyHoroscopeScreen> createState() => _DailyHoroscopeScreenState();
 }
@@ -219,10 +241,15 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
   Map<String, dynamic>? reading;
   String? error;
   bool busy = false;
+  String? _language;
   @override
-  void initState() {
-    super.initState();
-    _load();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final value = readingLanguage(context);
+    if (_language != value) {
+      _language = value;
+      _load();
+    }
   }
 
   String get date => DateTime.now()
@@ -238,9 +265,10 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
       error = null;
     });
     try {
-      final value = await discoveryRequest('/api/horoscope/daily', {
+      final value = await widget.request('/api/horoscope/daily', {
         'sign': zodiacIds[sign],
         'date': date,
+        'language': readingLanguage(context),
       });
       if (mounted && current == revision) setState(() => reading = value);
     } catch (e) {
@@ -258,12 +286,12 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
     body: ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        const Text(
+        const UiText(
           'A little guidance for your day',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
+        const UiText(
           'General zodiac readings for all 12 signs. These are not personal birth-chart predictions.',
           style: TextStyle(color: muted),
         ),
@@ -296,7 +324,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                       child: RasiFigure(index: i),
                     ),
                     const SizedBox(height: 8),
-                    Text(
+                    UiText(
                       zodiacLabel(context, i).replaceFirst(' · ', '\n'),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: sign == i ? ivory : muted),
@@ -328,7 +356,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
         const SizedBox(height: 20),
         Center(child: RasiFigure(index: sign, size: 96)),
         const SizedBox(height: 12),
-        Text(
+        UiText(
           '${zodiacLabel(context, sign)}\n$date · IST',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
         ),
@@ -341,8 +369,8 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
             ),
           ),
         if (error != null) ...[
-          Text(error!),
-          TextButton(onPressed: _load, child: const Text('Retry')),
+          UiText(error!),
+          TextButton(onPressed: _load, child: const UiText('Retry')),
         ],
         if (reading != null) ...[
           for (final section in reading!['sections'] as List)
@@ -359,7 +387,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
             'Health · everyday reminder',
             'Make room for rest, regular meals and comfortable movement today. A horoscope cannot assess your health.',
           ),
-          const Text(
+          const UiText(
             'General, Love and Career are daily readings. Money and Health are everyday reminders, not date-specific forecasts.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
@@ -381,8 +409,8 @@ class _ReadingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
+          UiText(
+            readingText(context, title),
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.bold,
@@ -390,12 +418,12 @@ class _ReadingCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text(text),
+          UiText(readingText(context, text)),
           if (details != null && details != text)
             ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: const Text('Full reading'),
-              children: [Text(details!)],
+              title: UiText(readingText(context, 'Full reading')),
+              children: [UiText(details!)],
             ),
         ],
       ),
@@ -551,18 +579,18 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete this Kundli?'),
-        content: const Text(
+        title: const UiText('Delete this Kundli?'),
+        content: const UiText(
           'This removes its saved chart from this device and the server.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
+            child: const UiText('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete'),
+            child: const UiText('Delete'),
           ),
         ],
       ),
@@ -583,7 +611,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Free Kundli')),
+    appBar: AppBar(title: const UiText('Free Kundli')),
     body: ListView(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -592,36 +620,36 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         20 + MediaQuery.viewPaddingOf(context).bottom,
       ),
       children: [
-        const Text(
+        const UiText(
           'Charts for the people you know',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
-        const Text(
+        const UiText(
           'Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.',
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: 18),
         TextField(
           onChanged: (v) => setState(() => query = v),
-          decoration: const InputDecoration(
-            prefixIcon: Icon(Icons.search),
-            hintText: 'Search Kundli by name',
+          decoration: InputDecoration(
+            prefixIcon: const Icon(Icons.search),
+            hintText: uiText(context, 'Search Kundli by name'),
           ),
         ),
         const SizedBox(height: 20),
         if (busy) const LinearProgressIndicator(),
         if (error != null) ...[
-          Text(error!),
+          UiText(error!),
           TextButton(
             onPressed: busy ? null : _load,
-            child: const Text('Retry loading Kundlis'),
+            child: const UiText('Retry loading Kundlis'),
           ),
         ],
         if (!busy && rows.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
-            child: Text('Your saved Kundlis will appear here.'),
+            child: UiText('Your saved Kundlis will appear here.'),
           ),
         for (final row in rows.where(
           (r) => r.session.nickname.toLowerCase().contains(query.toLowerCase()),
@@ -629,13 +657,13 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
           Card(
             margin: const EdgeInsets.only(bottom: 12),
             child: ListTile(
-              title: Text(
+              title: UiText(
                 row.session.nickname.isEmpty
                     ? 'Unfinished Kundli'
                     : row.session.nickname,
               ),
-              subtitle: Text(
-                '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? 'Add birth details'}\n${row.session.birthplaceLabel ?? 'Birthplace not saved'}',
+              subtitle: UiText(
+                '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? uiText(context, 'Add birth details')}\n${row.session.birthplaceLabel ?? uiText(context, 'Birthplace not saved')}',
               ),
               isThreeLine: true,
               onTap: busy
@@ -647,7 +675,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                             MaterialPageRoute<void>(
                               builder: (_) => Scaffold(
                                 appBar: AppBar(
-                                  title: Text(row.session.nickname),
+                                  title: UiText(row.session.nickname),
                                 ),
                                 body: ListView(
                                   padding: EdgeInsets.fromLTRB(
@@ -661,7 +689,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                                   children: [
                                     SouthIndianChart(facts: row.session.facts!),
                                     const SizedBox(height: 16),
-                                    Text(
+                                    UiText(
                                       row.session.birthTimeKnown
                                           ? 'Calculated from the saved birth details.'
                                           : 'Birth time is unknown. Time-sensitive chart details are limited.',
@@ -675,12 +703,12 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    tooltip: 'Edit Kundli',
+                    tooltip: uiText(context, 'Edit Kundli'),
                     onPressed: busy ? null : () => _edit(row),
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: 'Delete Kundli',
+                    tooltip: uiText(context, 'Delete Kundli'),
                     onPressed: busy ? null : () => _remove(row),
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -692,7 +720,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         FilledButton.icon(
           onPressed: busy || !libraryLoaded ? null : () => _edit(),
           icon: const Icon(Icons.add),
-          label: const Text('Create New Kundli'),
+          label: const UiText('Create New Kundli'),
         ),
       ],
     ),
@@ -757,12 +785,12 @@ class _MatchingScreenState extends State<MatchingScreen> {
     final data =
         (male ? boyDraft : girlDraft) ??
         (selected?.session.birthInput == null ? null : _input(selected!));
-    if (data == null) return 'No birth details entered yet.';
+    if (data == null) return uiText(context, 'No birth details entered yet.');
     final stamp = DateTime.parse(data['datetime'] as String)
         .toUtc()
         .add(const Duration(hours: 5, minutes: 30))
         .toIso8601String();
-    return '${data['nickname'] ?? 'Selected profile'}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · confirmed birth time' : 'Birth time unknown — enter the confirmed time below'}';
+    return '${data['nickname'] ?? uiText(context, 'Saved profile')}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · ${uiText(context, 'confirmed birth time')}' : uiText(context, 'Birth time unknown — provisional comparison')}';
   }
 
   Future<void> _notice(String message) async {
@@ -770,12 +798,12 @@ class _MatchingScreenState extends State<MatchingScreen> {
     await showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Check matching details'),
-        content: Text(message),
+        title: const UiText('Check matching details'),
+        content: UiText(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            child: const UiText('OK'),
           ),
         ],
       ),
@@ -801,11 +829,6 @@ class _MatchingScreenState extends State<MatchingScreen> {
                   ? null
                   : _input((male ? boy : girl)!)),
           onSubmit: (data) async {
-            if (data['exactTime'] != true) {
-              throw const JyotaraApiException(
-                'Matching needs a confirmed birth time. Please enter the known time.',
-              );
-            }
             if (!mounted) return;
             setState(() {
               if (male) {
@@ -847,12 +870,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
     }
     final boyInput = boyDraft ?? _input(boy!);
     final girlInput = girlDraft ?? _input(girl!);
-    if (boyInput['exactTime'] != true || girlInput['exactTime'] != true) {
-      await _notice(
-        'Both people need confirmed birth times. Use Enter birth details to provide them.',
-      );
-      return;
-    }
+
     setState(() {
       busy = true;
       error = null;
@@ -863,6 +881,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
         'boy': boyInput,
         'girl': girlInput,
         'consent': true,
+        'language': readingLanguage(context),
       });
       if (mounted) {
         setState(() => result = value);
@@ -876,18 +895,18 @@ class _MatchingScreenState extends State<MatchingScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Matching result: ${value['score']} / ${value['maximum']}',
+                  UiText(
+                    '${uiText(context, value['provisional'] == true ? 'Provisional comparison' : 'Matching result')}: ${value['score']} / ${value['maximum']}',
                     style: Theme.of(context).textTheme.headlineSmall,
                   ),
                   const SizedBox(height: 16),
-                  Text(value['interpretation'] as String),
+                  UiText(value['interpretation'] as String),
                   const SizedBox(height: 16),
-                  Text(value['note'] as String),
+                  UiText(value['note'] as String),
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Done'),
+                    child: const UiText('Done'),
                   ),
                 ],
               ),
@@ -906,7 +925,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Kundli Matching')),
+    appBar: AppBar(title: const UiText('Kundli Matching')),
     body: ListView(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -915,16 +934,20 @@ class _MatchingScreenState extends State<MatchingScreen> {
         20 + MediaQuery.viewPaddingOf(context).bottom,
       ),
       children: [
-        const Text(
+        const UiText(
           'Compare two birth charts',
           style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 10),
-        const Text(
+        const UiText(
           'Traditional Ashta Kuta matching · 36 points. This calculation uses the male and female roles of that system; it does not measure love or guarantee a marriage outcome.',
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: 20),
+        const UiText(
+          'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.',
+        ),
+        const SizedBox(height: 12),
         for (final male in [true, false])
           Padding(
             padding: const EdgeInsets.only(bottom: 20),
@@ -934,7 +957,10 @@ class _MatchingScreenState extends State<MatchingScreen> {
               ),
               initialValue: male ? boy?.id : girl?.id,
               decoration: InputDecoration(
-                labelText: male ? "Boy’s Kundli" : "Girl’s Kundli",
+                labelText: uiText(
+                  context,
+                  male ? "Boy’s Kundli" : "Girl’s Kundli",
+                ),
               ),
               isExpanded: true,
               items: [
@@ -943,7 +969,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
                 ))
                   DropdownMenuItem(
                     value: row.id,
-                    child: Text(
+                    child: UiText(
                       row.session.nickname.isEmpty
                           ? 'Saved profile'
                           : row.session.nickname,
@@ -978,8 +1004,8 @@ class _MatchingScreenState extends State<MatchingScreen> {
             child: OutlinedButton.icon(
               onPressed: busy ? null : () => _enterBirth(male),
               icon: const Icon(Icons.person_add_alt),
-              label: Text(
-                '${male ? "Boy" : "Girl"}: ${(male ? boyDraft : girlDraft)?['nickname'] ?? "Enter birth details"}',
+              label: UiText(
+                '${uiText(context, male ? "Boy" : "Girl")}: ${(male ? boyDraft : girlDraft)?['nickname'] ?? uiText(context, "Enter birth details")}',
               ),
             ),
           ),
@@ -996,13 +1022,13 @@ class _MatchingScreenState extends State<MatchingScreen> {
                   await _load();
                 },
           icon: const Icon(Icons.add),
-          label: const Text('Create or edit Kundlis'),
+          label: const UiText('Create or edit Kundlis'),
         ),
         CheckboxListTile(
           contentPadding: EdgeInsets.zero,
           value: consent,
           onChanged: busy ? null : (v) => setState(() => consent = v ?? false),
-          title: Text(
+          title: UiText(
             consent
                 ? 'Permission confirmed for both people.'
                 : 'I confirm both people agree to this comparison.',
@@ -1011,21 +1037,21 @@ class _MatchingScreenState extends State<MatchingScreen> {
         if (error != null)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Text(error!),
+            child: UiText(error!),
           ),
         FilledButton(
           onPressed: busy ? null : _match,
-          child: Text(busy ? 'Comparing…' : 'Match Horoscope'),
+          child: UiText(busy ? 'Comparing…' : 'Match Horoscope'),
         ),
         if (result != null) ...[
           const SizedBox(height: 24),
           _ReadingCard(
-            '${result!['score']} / ${result!['maximum']} points',
+            '${uiText(context, result!['provisional'] == true ? 'Provisional comparison' : 'Matching result')}: ${result!['score']} / ${result!['maximum']}',
             result!['interpretation'] as String,
           ),
-          Text(result!['note'] as String),
+          UiText(result!['note'] as String),
           const SizedBox(height: 12),
-          Text(
+          UiText(
             result!['source'] as String,
             style: const TextStyle(color: muted),
           ),

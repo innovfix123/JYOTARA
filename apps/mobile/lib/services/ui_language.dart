@@ -79,6 +79,75 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.': 'பிறந்த நேரம் தெரியாவிட்டால் நண்பகல் நேரத்தில் உத்தேசமாக ஒப்பிடுவோம். உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.',
+  'The daily reading is unavailable right now. Please try again later.': 'தினசரிப் பலன் இப்போது கிடைக்கவில்லை. சிறிது நேரத்தில் மீண்டும் முயலவும்.',
+  'Matching is unavailable right now. No result has been created.':
+      'பொருத்தம் இப்போது கிடைக்கவில்லை. முடிவு உருவாக்கப்படவில்லை.',
+
+  "Daily\nHoroscope": "தினசரி\nராசிபலன்",
+  "Free\nKundli": "இலவச\nஜாதகம்",
+  "Kundli\nMatching": "ஜாதகப்\nபொருத்தம்",
+  "Free Kundli": "இலவச ஜாதகம்",
+  "Kundli Matching": "ஜாதகப் பொருத்தம்",
+  "A little guidance for your day": "உங்கள் நாளுக்கான சிறு வழிகாட்டல்",
+  "General zodiac readings for all 12 signs. These are not personal birth-chart predictions.": "12 ராசிகளுக்குமான பொதுப் பலன்கள். இவை தனிப்பட்ட பிறப்பு ஜாதகப் பலன்கள் அல்ல.",
+  "General": "பொதுப் பலன்",
+  "Full reading": "முழுப் பலன்",
+  "Money · everyday reminder": "பணம் · அன்றாட நினைவூட்டல்",
+  "Health · everyday reminder": "உடல்நலம் · அன்றாட நினைவூட்டல்",
+  "Check your available budget before spending. Give yourself time to compare options before a purchase.": "செலவு செய்வதற்கு முன் உங்கள் கையிருப்பைப் பாருங்கள். வாங்குவதற்கு முன் தேர்வுகளை ஒப்பிட நேரம் எடுத்துக்கொள்ளுங்கள்.",
+  "Make room for rest, regular meals and comfortable movement today. A horoscope cannot assess your health.": "இன்று ஓய்வு, நேரத்துக்கு உணவு, உடலுக்கு ஏற்ற இயக்கம் ஆகியவற்றுக்கு இடமளியுங்கள். ராசிபலனால் உடல்நிலையை மதிப்பிட முடியாது.",
+  "General, Love and Career are daily readings. Money and Health are everyday reminders, not date-specific forecasts.": "பொது, காதல், தொழில் ஆகியவை தினசரிப் பலன்கள். பணம், உடல்நலம் ஆகியவை அன்றாட நினைவூட்டல்கள்; குறிப்பிட்ட நாளின் கணிப்புகள் அல்ல.",
+  "Charts for the people you know": "உங்களுக்குத் தெரிந்தவர்களின் ஜாதகங்கள்",
+  "Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.": "அனுமதியுடன் 10 ஜாதகங்கள் வரை சேமிக்கலாம். உங்கள் உரையாடல் சுயவிவரம் தனியாக இருக்கும். ஒரு சோதனைப் பயனர் நாளொன்றுக்கு 10 புதிய ஜாதகங்கள் வரை உருவாக்கலாம்.",
+  "Search Kundli by name": "பெயரால் ஜாதகத்தைத் தேடுங்கள்",
+  "Retry loading Kundlis": "ஜாதகங்களை மீண்டும் ஏற்றுங்கள்",
+  "Your saved Kundlis will appear here.": "சேமித்த ஜாதகங்கள் இங்கே தோன்றும்.",
+  "Unfinished Kundli": "முடிக்கப்படாத ஜாதகம்",
+  "Birthplace not saved": "பிறந்த இடம் சேமிக்கப்படவில்லை",
+  "Calculated from the saved birth details.":
+      "சேமித்த பிறந்த விவரங்களிலிருந்து கணக்கிடப்பட்டது.",
+  "Birth time is unknown. Time-sensitive chart details are limited.":
+      "பிறந்த நேரம் தெரியவில்லை. நேரத்தைச் சார்ந்த ஜாதக விவரங்கள் வரம்புடையவை.",
+  "Edit Kundli": "ஜாதகத்தைத் திருத்தவும்",
+  "Delete Kundli": "ஜாதகத்தை நீக்கவும்",
+  "Create New Kundli": "புதிய ஜாதகம் உருவாக்கவும்",
+  "Delete this Kundli?": "இந்த ஜாதகத்தை நீக்க வேண்டுமா?",
+  "This removes its saved chart from this device and the server.":
+      "இந்தச் சாதனத்திலும் சேவையகத்திலும் சேமித்த ஜாதகம் நீக்கப்படும்.",
+  "Saved Kundlis could not be opened. Please retry.":
+      "சேமித்த ஜாதகங்களைத் திறக்க முடியவில்லை. மீண்டும் முயலவும்.",
+  "Could not open saved Kundlis.": "சேமித்த ஜாதகங்களைத் திறக்க முடியவில்லை.",
+  "Compare two birth charts": "இருவரின் ஜாதகங்களை ஒப்பிடுங்கள்",
+  "Traditional Ashta Kuta matching · 36 points. This calculation uses the male and female roles of that system; it does not measure love or guarantee a marriage outcome.": "பாரம்பரிய அஷ்டகூடப் பொருத்தம் · 36 புள்ளிகள். இந்த முறையின் ஆண், பெண் அடிப்படையில் கணக்கிடப்படுகிறது. இது காதலை அளவிடுவதோ திருமண முடிவை உறுதிப்படுத்துவதோ அல்ல.",
+  "Boy’s Kundli": "ஆணின் ஜாதகம்",
+  "Girl’s Kundli": "பெண்ணின் ஜாதகம்",
+  "Boy": "ஆண்",
+  "Girl": "பெண்",
+  "Saved profile": "சேமித்த சுயவிவரம்",
+  "Boy: details used for matching": "ஆண்: பொருத்தத்திற்கான விவரங்கள்",
+  "Girl: details used for matching": "பெண்: பொருத்தத்திற்கான விவரங்கள்",
+  "Enter birth details": "பிறந்த விவரங்களை உள்ளிடுங்கள்",
+  "Create or edit Kundlis": "ஜாதகங்களை உருவாக்கவும் அல்லது திருத்தவும்",
+  "Permission confirmed for both people.":
+      "இருவரின் அனுமதியும் உறுதிசெய்யப்பட்டது.",
+  "I confirm both people agree to this comparison.":
+      "இந்த ஒப்பீட்டிற்கு இருவரும் சம்மதிப்பதை உறுதிசெய்கிறேன்.",
+  "Comparing…": "ஒப்பிடப்படுகிறது…",
+  "Match Horoscope": "ஜாதகப் பொருத்தம் பார்க்கவும்",
+  "Matching result": "பொருத்த முடிவு",
+  "Provisional comparison": "உத்தேசப் பொருத்தம்",
+  "Done": "முடிந்தது",
+  "No birth details entered yet.": "பிறந்த விவரங்கள் இன்னும் உள்ளிடப்படவில்லை.",
+  "Birth time unknown — provisional comparison":
+      "பிறந்த நேரம் தெரியாது — உத்தேச ஒப்பீடு",
+  "confirmed birth time": "உறுதியான பிறந்த நேரம்",
+  "Check matching details": "பொருத்த விவரங்களைச் சரிபார்க்கவும்",
+  "Enter birth details for both people, or choose their saved Kundlis.": "இருவரின் பிறந்த விவரங்களை உள்ளிடுங்கள் அல்லது சேமித்த ஜாதகங்களைத் தேர்ந்தெடுங்கள்.",
+  "Confirm that both people agreed to this comparison.":
+      "இந்த ஒப்பீட்டிற்கு இருவரும் சம்மதித்ததை உறுதிசெய்யுங்கள்.",
+  "This saved chart has no usable birth details. Please enter the birth details again.": "இந்த ஜாதகத்தில் பயன்படுத்தக்கூடிய பிறந்த விவரங்கள் இல்லை. மீண்டும் உள்ளிடுங்கள்.",
+
   'Welcome, tester': 'சோதனைப் பயனரே, வரவேற்கிறோம்',
   'This build is available to invited testers. Enter the access code shared with you.': 'அழைக்கப்பட்ட சோதனைப் பயனர்களுக்கான பதிப்பு இது. உங்களுடன் பகிரப்பட்ட அணுகல் குறியீட்டை உள்ளிடவும்.',
   'Tester access code': 'சோதனை அணுகல் குறியீடு',
@@ -294,7 +363,8 @@ const tamilUi = <String, String>{
   'For example: Erode': 'எடுத்துக்காட்டு: Erode',
   'Searching…': 'தேடுகிறது…',
   'Search birthplace': 'பிறந்த இடத்தைத் தேடவும்',
-  'Location data: astrology calculation service': 'இட விவரங்கள்: astrology calculation service',
+  'Location data: astrology calculation service':
+      'இட விவரங்கள்: astrology calculation service',
   'India · IST': 'இந்தியா · இந்திய நேரம்',
   'I am 18+ and agree to process my birth details for automated Vedic guidance.': 'எனக்கு 18 வயது நிறைவடைந்துள்ளது. தானியங்கி வேத ஜோதிட வழிகாட்டலுக்காக எனது பிறப்பு விவரங்களைப் பயன்படுத்தச் சம்மதிக்கிறேன்.',
   'Name or alias, selected gender and birth details go to astrology calculation service when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.': 'விரிவான அறிக்கையைக் கோரும்போது பெயர் அல்லது புனைப்பெயர், தேர்ந்தெடுத்த பாலினம் மற்றும் பிறப்பு விவரங்கள் ஜாதகக் கணக்கீட்டுச் சேவைக்கு அனுப்பப்படும்; ஜாதக விவரங்களும் உங்கள் கேள்வியும் மொழிச் சேவைக்கும் அனுப்பப்படும். உங்கள் ஜாதகமும் உரையாடல்களும் இந்தச் சாதனத்தில் மறையாக்கம் செய்து சேமிக்கப்படும். ஜாதகம் பகுதியில் அவற்றை நீக்கலாம். புதிய பிறப்பு விவரங்களை உருவாக்கும்போது ஆய்வுக்கான விருப்பப் பகிர்வு முடக்கப்படும்; கணக்கு பகுதியில் தனியாகத் தேர்ந்தெடுக்கலாம். இணைக்கப்பட்ட பிறப்பு விவரத்திற்கு, ஜாதகம் பகுதியில் சேவையக ஜாதக மற்றும் பதில் நகல்களையும் நீக்கலாம். குறைந்தபட்ச பயன்பாட்டுப் பதிவுகள் இருக்கும்; காப்பு நகல்கள் எட்டு நாட்களுக்குள் காலாவதியாகும்.',
