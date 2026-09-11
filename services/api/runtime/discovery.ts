@@ -102,12 +102,36 @@ export async function matching(request: Request) {
     if (consent !== true || !validBirth(boy) || !validBirth(girl)) return Response.json({error:'Both people must be aged 13 or older and consent, with valid birth dates and Indian birthplaces for this comparison.'},{status:400});
     const provisional = !boy.exactTime || !girl.exactTime;
     const reference = (person:any) => person.exactTime ? person.datetime : person.datetime.slice(0,10)+'T12:00:00+05:30';
-    const data = await provider('/astrology/kundli-matching',{ayanamsa:'1',la:'en',boy_dob:reference(boy),girl_dob:reference(girl),boy_coordinates:`${boy.latitude},${boy.longitude}`,girl_coordinates:`${girl.latitude},${girl.longitude}`});
+    const data = await provider('/astrology/kundli-matching/advanced',{ayanamsa:'1',la:'en',boy_dob:reference(boy),girl_dob:reference(girl),boy_coordinates:`${boy.latitude},${boy.longitude}`,girl_coordinates:`${girl.latitude},${girl.longitude}`});
     const score = data.guna_milan;
     if (!score || !Number.isFinite(score.total_points) || score.maximum_points !== 36 || score.total_points < 0 || score.total_points > 36 || typeof data.message?.description !== 'string') throw Error('Invalid matching');
+    const guna = score.guna;
+    if (!Array.isArray(guna) || guna.length !== 8 || new Set(guna.map((g:any)=>g.id)).size !== 8 || guna.some((g:any)=>!Number.isInteger(g.id) || g.id < 1 || g.id > 8 || g.maximum_points !== g.id || !Number.isFinite(g.obtained_points) || g.obtained_points < 0 || g.obtained_points > g.maximum_points) || Math.abs(guna.reduce((n:number,g:any)=>n+g.obtained_points,0)-score.total_points)>0.001) throw Error('Invalid score breakdown');
+    const names = language === 'ta' ? ['வர்ணம்','வசியம்','தாரை','யோனி','கிரக மைத்ரி','கணம்','ராசி பொருத்தம்','நாடி'] : ['Varna','Vasya','Tara','Yoni','Graha Maitri','Gana','Bhakoot','Nadi'];
+    const descriptions = language === 'ta' ? [
+      'பாரம்பரிய முறையில் அணுகுமுறைகளை ஒப்பிடும் ஒரு கூறு.',
+      'இருவரின் பரஸ்பர செல்வாக்கைப் பாரம்பரியமாக ஒப்பிடும் கூறு.',
+      'பிறந்த நட்சத்திரங்களுக்கு இடையிலான தொடர்பு.',
+      'நட்சத்திரங்களின் குறியீடுகளைக் கொண்டு இயல்புகளை ஒப்பிடும் கூறு.',
+      'இருவரின் ராசி அதிபதிகளுக்கு இடையிலான நட்பு.',
+      'பாரம்பரிய நட்சத்திர வகைகளின் இயல்புப் பொருத்தம்.',
+      'இருவரின் சந்திர ராசிகளுக்கு இடையிலான தொடர்பு.',
+      'பாரம்பரிய நாடி வகைப்பாட்டின் பொருத்தம். இது மருத்துவம் அல்லது குழந்தைப்பேறு குறித்த முடிவு அல்ல.'
+    ] : [
+      'One traditional comparison of approaches and dispositions.',
+      'A traditional comparison of mutual influence.',
+      'The relationship between the two birth stars.',
+      'A symbolic comparison of dispositions using birth-star categories.',
+      'The traditional friendship between the two Moon-sign rulers.',
+      'Temperament categories assigned to the birth stars.',
+      'The relationship between the two Moon signs.',
+      'Traditional Nadi grouping; this is not a medical or fertility assessment.'
+    ];
+    const factors = [...guna].sort((a:any,b:any)=>a.id-b.id).map((g:any)=>({id:g.id,name:names[g.id-1],score:g.obtained_points,maximum:g.maximum_points,description:descriptions[g.id-1]}));
+    const dosha = (value:any) => typeof value?.has_dosha === 'boolean' ? {present:value.has_dosha,exception:value.has_exception===true} : null;
     let interpretation = provisional ? 'This reference-time comparison uses noon wherever the birth time is unknown. The displayed score can change with the actual birth time; it is not a confirmed compatibility score.' : data.message.description;
     let note = provisional ? 'Names do not establish birth time or compatibility. You can save this provisional comparison now and update it when the time is known. Do not use it to decide whether to marry.' : 'This is a traditional chart comparison, not a prediction of relationship success. Consent, trust and communication matter.';
     if(language==='ta') [interpretation,note]=await tamilTranslation([interpretation,note]);
-    return Response.json({score:score.total_points,maximum:36,provisional,interpretation,source:'Ashta Kuta',note,language:language==='ta'?'ta':'en'});
+    return Response.json({score:score.total_points,maximum:36,factors,boyMangal:dosha(data.boy_mangal_dosha_details),girlMangal:dosha(data.girl_mangal_dosha_details),provisional,interpretation,source:'Ashta Kuta',note,language:language==='ta'?'ta':'en'});
   } catch { return Response.json({error:'Matching is unavailable right now. No result has been created.'},{status:503}); }
 }

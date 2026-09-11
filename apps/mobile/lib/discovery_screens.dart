@@ -728,7 +728,8 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 }
 
 class MatchingScreen extends StatefulWidget {
-  const MatchingScreen({super.key, this.request = discoveryRequest});
+  const MatchingScreen({super.key, this.request = discoveryRequest, this.loadKundlis = KundliLibrary.load});
+  final Future<List<SavedKundli>> Function() loadKundlis;
   final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
   request;
   @override
@@ -739,7 +740,9 @@ class _MatchingScreenState extends State<MatchingScreen> {
   List<SavedKundli> rows = [];
   SavedKundli? boy, girl;
   Map<String, dynamic>? boyDraft, girlDraft;
-  bool consent = false, busy = false;
+  bool consent = false, busy = false, openSaved = false;
+  String searchName = '';
+  bool selectBoy = true;
   String? error;
   Map<String, dynamic>? result;
   @override
@@ -750,16 +753,16 @@ class _MatchingScreenState extends State<MatchingScreen> {
 
   Future<void> _load() async {
     try {
-      final saved = await KundliLibrary.load();
+      final saved = await widget.loadKundlis();
       if (mounted) {
         setState(() {
           rows = [
             if (profileSession.facts != null)
               SavedKundli('personal', profileSession),
-            ...saved.where((r) => r.session.facts != null),
+            ...saved.where((r) => r.session.birthInput != null),
           ];
-          boy = null;
-          girl = null;
+          boy = rows.where((r) => r.id == boy?.id).firstOrNull;
+          girl = rows.where((r) => r.id == girl?.id).firstOrNull;
           result = null;
         });
       }
@@ -790,7 +793,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
         .toUtc()
         .add(const Duration(hours: 5, minutes: 30))
         .toIso8601String();
-    return '${data['nickname'] ?? uiText(context, 'Saved profile')}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · ${uiText(context, 'confirmed birth time')}' : uiText(context, 'Birth time unknown — provisional comparison')}';
+    return '${data['nickname'] ?? uiText(context, 'Saved profile')}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · ${uiText(context, 'confirmed birth time')}' : uiText(context, 'Birth time unknown — provisional comparison')}\n${data['birthplaceLabel'] ?? ''}';
   }
 
   Future<void> _notice(String message) async {
@@ -857,6 +860,10 @@ class _MatchingScreenState extends State<MatchingScreen> {
       );
       return;
     }
+    if (boy != null && girl != null && boy!.id == girl!.id) {
+      await _notice('Choose two different profiles.');
+      return;
+    }
     if (!consent) {
       await _notice('Confirm that both people agreed to this comparison.');
       return;
@@ -884,6 +891,8 @@ class _MatchingScreenState extends State<MatchingScreen> {
         'language': readingLanguage(context),
       });
       if (mounted) {
+        value['boyName'] = boyInput['nickname'];
+        value['girlName'] = girlInput['nickname'];
         setState(() => result = value);
         await showModalBottomSheet<void>(
           context: context,
@@ -895,14 +904,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  UiText(
-                    '${uiText(context, value['provisional'] == true ? 'Provisional comparison' : 'Matching result')}: ${value['score']} / ${value['maximum']}',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                  const SizedBox(height: 16),
-                  UiText(value['interpretation'] as String),
-                  const SizedBox(height: 16),
-                  UiText(value['note'] as String),
+                  MatchingReport(value: value),
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: () => Navigator.pop(context),
@@ -948,49 +950,45 @@ class _MatchingScreenState extends State<MatchingScreen> {
           'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.',
         ),
         const SizedBox(height: 12),
-        for (final male in [true, false])
-          Padding(
-            padding: const EdgeInsets.only(bottom: 20),
-            child: DropdownButtonFormField<String>(
-              key: ValueKey(
-                '${male ? "boy" : "girl"}:${male ? boy?.id : girl?.id}',
-              ),
-              initialValue: male ? boy?.id : girl?.id,
-              decoration: InputDecoration(
-                labelText: uiText(
-                  context,
-                  male ? "Boy’s Kundli" : "Girl’s Kundli",
-                ),
-              ),
-              isExpanded: true,
-              items: [
-                for (final row in rows.where(
-                  (r) => r.session.gender?.value == (male ? 'male' : 'female'),
-                ))
-                  DropdownMenuItem(
-                    value: row.id,
-                    child: UiText(
-                      row.session.nickname.isEmpty
-                          ? 'Saved profile'
-                          : row.session.nickname,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-              ],
-              onChanged: busy
-                  ? null
-                  : (id) => setState(() {
-                      if (male) {
-                        boy = rows.firstWhere((r) => r.id == id);
-                        boyDraft = null;
-                      } else {
-                        girl = rows.firstWhere((r) => r.id == id);
-                        girlDraft = null;
-                      }
-                      result = null;
-                    }),
-            ),
+        SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(value: true, label: UiText('Open Kundli'), icon: Icon(Icons.folder_open)),
+            ButtonSegment(value: false, label: UiText('New Matching'), icon: Icon(Icons.add)),
+          ],
+          selected: {openSaved},
+          onSelectionChanged: busy ? null : (v) => setState(() => openSaved = v.first),
+        ),
+        const SizedBox(height: 16),
+        if (openSaved) ...[
+          SegmentedButton<bool>(
+            segments: const [ButtonSegment(value: true, label: UiText('Boy’s Kundli')), ButtonSegment(value: false, label: UiText('Girl’s Kundli'))],
+            selected: {selectBoy},
+            onSelectionChanged: busy ? null : (v) => setState(() => selectBoy = v.first),
           ),
+          const SizedBox(height: 12),
+          TextField(
+            onChanged: (v) => setState(() => searchName = v.trim().toLowerCase()),
+            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: uiText(context, 'Search Kundli by name')),
+          ),
+          const SizedBox(height: 12),
+          if (rows.isEmpty) const UiText('No saved Kundlis yet. Use New Matching to enter birth details.'),
+          if (rows.isNotEmpty && !rows.any((r) => r.session.nickname.toLowerCase().contains(searchName))) const UiText('No matching names found.'),
+          for (final row in rows.where((r) => r.session.nickname.toLowerCase().contains(searchName)))
+            Card(child: ListTile(
+              key: ValueKey('matching-saved-${row.id}'),
+              leading: CircleAvatar(child: Text(row.session.nickname.isEmpty ? '?' : row.session.nickname.substring(0, 1).toUpperCase())),
+              title: Text(row.session.nickname.isEmpty ? uiText(context, 'Saved profile') : row.session.nickname),
+              subtitle: Text('${row.session.birthInput!.indiaDateTime.toIso8601String().substring(0, 10)} · ${row.session.birthInput!.exactTime ? row.session.birthInput!.indiaDateTime.toIso8601String().substring(11, 16) : uiText(context, 'Unknown birth time')}\n${row.session.birthplaceLabel ?? ''}'),
+              isThreeLine: true,
+              selected: (selectBoy ? boy : girl)?.id == row.id,
+              trailing: (selectBoy ? boy : girl)?.id == row.id ? const Icon(Icons.check_circle) : const Icon(Icons.circle_outlined),
+              onTap: busy || (selectBoy ? girl : boy)?.id == row.id ? null : () => setState(() {
+                if (selectBoy) { boy = row; boyDraft = null; } else { girl = row; girlDraft = null; }
+                consent = false; error = null; result = null;
+              }),
+            )),
+          const SizedBox(height: 12),
+        ],
         for (final male in [true, false])
           _ReadingCard(
             male
@@ -998,7 +996,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
                 : 'Girl: details used for matching',
             _detailsLabel(male),
           ),
-        for (final male in [true, false])
+        if (!openSaved) for (final male in [true, false])
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: OutlinedButton.icon(
@@ -1045,18 +1043,74 @@ class _MatchingScreenState extends State<MatchingScreen> {
         ),
         if (result != null) ...[
           const SizedBox(height: 24),
-          _ReadingCard(
-            '${uiText(context, result!['provisional'] == true ? 'Provisional comparison' : 'Matching result')}: ${result!['score']} / ${result!['maximum']}',
-            result!['interpretation'] as String,
-          ),
-          UiText(result!['note'] as String),
-          const SizedBox(height: 12),
-          UiText(
-            result!['source'] as String,
-            style: const TextStyle(color: muted),
-          ),
+          MatchingReport(value: result!),
         ],
       ],
     ),
   );
+}
+
+class MatchingReport extends StatelessWidget {
+  const MatchingReport({super.key, required this.value});
+  final Map<String, dynamic> value;
+  String number(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
+  @override
+  Widget build(BuildContext context) {
+    final score = (value['score'] as num).toDouble();
+    final maximum = (value['maximum'] as num).toDouble();
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      if (value['boyName'] != null || value['girlName'] != null)
+        Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('${value['boyName'] ?? ''} · ${value['girlName'] ?? ''}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge)),
+      Card(child: Padding(padding: const EdgeInsets.all(24), child: Column(children: [
+        UiText(value['provisional'] == true ? 'Provisional comparison' : 'Compatibility score', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 20),
+        SizedBox(height: 155, child: TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: (score / maximum).clamp(0, 1)),
+          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 800),
+          builder: (_, progress, _) => CustomPaint(size: const Size(280, 155), painter: _MatchingGauge(progress)),
+        )),
+        Text('${number(score)} / ${number(maximum)}', style: Theme.of(context).textTheme.headlineLarge),
+      ]))),
+      const SizedBox(height: 16),
+      UiText(value['interpretation'] as String),
+      const SizedBox(height: 12),
+      UiText(value['note'] as String),
+      const SizedBox(height: 20),
+      if (value['factors'] is List) ...[
+        const UiText('Score breakdown', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+        for (final f in (value['factors'] as List).whereType<Map>())
+          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [Expanded(child: Text(f['name'] as String, style: Theme.of(context).textTheme.titleMedium)), Text('${number(f['score'] as num)} / ${number(f['maximum'] as num)}', style: const TextStyle(fontWeight: FontWeight.bold))]),
+            const SizedBox(height: 10),
+            LinearProgressIndicator(value: ((f['score'] as num) / (f['maximum'] as num)).clamp(0, 1)),
+            const SizedBox(height: 12),
+            Text(f['description'] as String),
+          ]))),
+      ],
+      for (final role in ['boy', 'girl'])
+        if (value['${role}Mangal'] is Map)
+          _ReadingCard('${value['${role}Name'] ?? uiText(context, role == 'boy' ? 'Boy' : 'Girl')} · ${uiText(context, 'Mangal Dosha')}',
+            '${uiText(context, value['${role}Mangal']['present'] == true ? 'Present' : 'Not present')}${value['${role}Mangal']['exception'] == true ? ' · ${uiText(context, 'Exception reported')}' : ''}'),
+    ]);
+  }
+}
+
+class _MatchingGauge extends CustomPainter {
+  _MatchingGauge(this.progress);
+  final double progress;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height - 12);
+    final radius = min(size.width / 2 - 20, size.height - 25);
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    const colors = [Color(0xffc95649), Color(0xffdc883a), Color(0xffdfb442), Color(0xff80a660), Color(0xff398567)];
+    for (var i = 0; i < colors.length; i++) {
+      canvas.drawArc(rect, pi + i * pi / 5, pi / 5 - 0.018, false, Paint()..color = colors[i]..style = PaintingStyle.stroke..strokeWidth = 24);
+    }
+    final angle = pi + pi * progress;
+    canvas.drawLine(center, center + Offset(cos(angle), sin(angle)) * (radius - 12), Paint()..color = const Color(0xff68392b)..strokeWidth = 5..strokeCap = StrokeCap.round);
+    canvas.drawCircle(center, 8, Paint()..color = const Color(0xff68392b));
+  }
+  @override
+  bool shouldRepaint(_MatchingGauge oldDelegate) => oldDelegate.progress != progress;
 }

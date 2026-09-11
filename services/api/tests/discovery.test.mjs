@@ -38,7 +38,7 @@ test('unknown-time matching uses explicit noon reference and returns a provision
  let calculated;
  globalThis.fetch=async(url,options)=>{
   if(String(url).endsWith('/token'))return Response.json({access_token:'test',expires_in:3600});
-  if(String(url).includes('/kundli-matching')){calculated=new URL(url);return Response.json({status:'ok',data:{guna_milan:{total_points:22,maximum_points:36},message:{description:'Exact report that must not be used for unknown times.'}}});}
+  if(String(url).includes('/kundli-matching')){calculated=new URL(url);return Response.json({status:'ok',data:{guna_milan:{total_points:22,maximum_points:36,guna:[1,2,3,4,5,6,7,8].map(id=>({id,maximum_points:id,obtained_points:({6:0,8:0})[id]??id}))},message:{description:'Exact report that must not be used for unknown times.'}}});}
   const texts=JSON.parse(JSON.parse(options.body).input[1].content);
   assert.match(texts[0],/noon/);
   return Response.json({output_text:JSON.stringify(['உத்தேசப் பொருத்தம். பிறந்த நேரம் தெரியாததால் நண்பகல் பயன்படுத்தப்பட்டது.','உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.'])});
@@ -47,7 +47,7 @@ test('unknown-time matching uses explicit noon reference and returns a provision
   const birth={datetime:'2002-07-29T05:00:00+05:30',latitude:11.34,longitude:77.72,exactTime:false};
   const response=await matching(new Request('https://test',{method:'POST',body:JSON.stringify({boy:birth,girl:{...birth,exactTime:true},consent:true,language:'ta'})}));
   assert.equal(response.status,200);const result=await response.json();
-  assert.equal(result.provisional,true);assert.equal(result.language,'ta');
+  assert.equal(result.factors.length,8);assert.equal(result.factors.reduce((n,g)=>n+g.score,0),22);assert.match(calculated.pathname,/matching\/advanced$/);assert.equal(result.provisional,true);assert.equal(result.language,'ta');
   assert.match(result.interpretation,/உத்தேச/);
   assert.equal(calculated.searchParams.get('boy_dob'),'2002-07-29T12:00:00+05:30');
   assert.equal(calculated.searchParams.get('girl_dob'),'2002-07-29T05:00:00+05:30');

@@ -157,7 +157,8 @@ void main() {
       expect(calls, 1);
       expect(submitted!['consent'], true);
       expect(submitted!['boy']['nickname'], 'Test A');
-      expect(find.text('Matching result: 24.5 / 36'), findsOneWidget);
+      expect(find.text('24.5 / 36'), findsWidgets);
+      expect(find.text('Compatibility score'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );
@@ -234,7 +235,8 @@ void main() {
     expect(calls, 1);
     expect(submitted!['consent'], true);
     expect(submitted!['boy']['nickname'], 'Test A');
-    expect(find.text('Provisional comparison: 24.5 / 36'), findsOneWidget);
+    expect(find.text('24.5 / 36'), findsWidgets);
+    expect(find.text('Provisional comparison'), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }
