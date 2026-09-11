@@ -90,13 +90,16 @@ export async function daily(request: Request) {
 }
 export function validBirth(value: any) {
   if (!value || typeof value.datetime !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:00\+05:30$/.test(value.datetime) || !Number.isFinite(Date.parse(value.datetime))) return false;
-  const age = (Date.now()-Date.parse(value.datetime))/86400000/365.2425;
-  return age >= 18 && age < 130 && typeof value.exactTime === 'boolean' && Number.isFinite(value.latitude) && Number.isFinite(value.longitude) && value.latitude >= 6 && value.latitude <= 38 && value.longitude >= 68 && value.longitude <= 98;
+  const birth = new Date(Date.parse(value.datetime) + 330 * 60000);
+  const today = new Date(Date.now() + 330 * 60000);
+  let age = today.getUTCFullYear() - birth.getUTCFullYear();
+  if (today.getUTCMonth() < birth.getUTCMonth() || (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
+  return age >= 13 && age < 130 && typeof value.exactTime === 'boolean' && Number.isFinite(value.latitude) && Number.isFinite(value.longitude) && value.latitude >= 6 && value.latitude <= 38 && value.longitude >= 68 && value.longitude <= 98;
 }
 export async function matching(request: Request) {
   try {
     const {boy,girl,consent,language} = await request.json() as any;
-    if (consent !== true || !validBirth(boy) || !validBirth(girl)) return Response.json({error:'Both consenting adults need valid birth dates and Indian birthplaces for this comparison.'},{status:400});
+    if (consent !== true || !validBirth(boy) || !validBirth(girl)) return Response.json({error:'Both people must be aged 13 or older and consent, with valid birth dates and Indian birthplaces for this comparison.'},{status:400});
     const provisional = !boy.exactTime || !girl.exactTime;
     const reference = (person:any) => person.exactTime ? person.datetime : person.datetime.slice(0,10)+'T12:00:00+05:30';
     const data = await provider('/astrology/kundli-matching',{ayanamsa:'1',la:'en',boy_dob:reference(boy),girl_dob:reference(girl),boy_coordinates:`${boy.latitude},${boy.longitude}`,girl_coordinates:`${girl.latitude},${girl.longitude}`});

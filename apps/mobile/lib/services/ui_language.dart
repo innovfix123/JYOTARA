@@ -238,7 +238,7 @@ const tamilUi = <String, String>{
   'Your chart is available. Open it to check details, freshness and storage status.': 'உங்கள் ஜாதகம் உள்ளது. விவரங்கள், கணக்கிட்ட நேரம் மற்றும் சேமிப்பு நிலையைத் திறந்து பார்க்கவும்.',
   'Ask in your natural language': 'உங்களுக்கு இயல்பான மொழியில் கேளுங்கள்',
   'Choose English or Tamil menus in Account. Chat in English, Tamil or Tanglish; set your reply language separately.': 'கணக்குப் பகுதியில் ஆங்கிலம் அல்லது தமிழ் மெனுவைத் தேர்ந்தெடுக்கவும். ஆங்கிலம், தமிழ் அல்லது தங்கிலீஷில் கேளுங்கள்; பதில் மொழியைத் தனியாகத் தேர்ந்தெடுக்கலாம்.',
-  'This test app supports personal birth profiles for adults aged 18 or older.': 'இந்தச் சோதனைச் செயலியில் 18 வயது நிறைவடைந்தவர்களின் சொந்த பிறப்பு விவரங்களை மட்டுமே பயன்படுத்தலாம்.',
+  'This test app supports personal birth profiles for people aged 13 or older.': 'இந்தச் சோதனைச் செயலியில் 13 வயது நிறைவடைந்தவர்களின் சொந்த பிறப்பு விவரங்களை மட்டுமே பயன்படுத்தலாம்.',
   'For same-day retry recovery, the server also keeps an encrypted chart response for up to 23 hours, separately from research consent. Expired copies are removed when chart requests arrive; scheduled deletion is not yet available.': 'அதே நாளில் மீண்டும் முயற்சிக்கும்போது ஜாதகத்தை மீட்க, அதன் பதில் சேவையகத்தில் அதிகபட்சம் 23 மணி நேரம் மறையாக்கம் செய்து வைக்கப்படும். இது ஆய்வுச் சம்மதத்திலிருந்து தனியானது. காலாவதியான பிரதிகள் அடுத்த ஜாதகக் கோரிக்கைகள் வரும்போது நீக்கப்படும்; குறிப்பிட்ட நேரத்தில் தானாக நீக்கும் வசதி இன்னும் இல்லை.',
   'Recovered the earlier chart without a new calculation. The calculation time below is the original time.': 'புதிதாகக் கணக்கிடாமல் முந்தைய ஜாதகம் மீட்கப்பட்டது. கீழே காட்டப்படுவது முதலில் கணக்கிட்ட நேரம்.',
   'The test backend allows three question requests per session and one chart attempt per session per day, within a shared daily cap. Uncertain or failed attempts may still count to prevent duplicate charges. Payments are not enabled in this build.': 'இந்தச் சோதனைப் பதிப்பில் ஒரு அமர்வுக்கு மூன்று கேள்விக் கோரிக்கைகளும், ஒரு நாளில் ஒரு அமர்வுக்கு ஒரு ஜாதக முயற்சியும் அனுமதிக்கப்படும். அனைவருக்கும் பொதுவான தினசரி வரம்பும் உள்ளது. மீண்டும் கட்டணம் ஏற்படாமல் இருக்க, முடிவு உறுதியாகத் தெரியாத அல்லது தோல்வியடைந்த முயற்சிகளும் கணக்கில் சேரலாம். இந்தப் பதிப்பில் கட்டணம் செலுத்தும் வசதி இல்லை.',
@@ -349,8 +349,8 @@ const tamilUi = <String, String>{
   'Your birth profile': 'உங்கள் பிறப்பு விவரங்கள்',
   'Personal guidance starts with your chart':
       'உங்கள் ஜாதகத்திலிருந்து தனிப்பட்ட வழிகாட்டல் தொடங்குகிறது',
-  'India · Age 18+ · Times are Indian Standard Time (UTC+05:30).':
-      'இந்தியா · வயது 18+ · நேரங்கள் இந்திய நேரப்படி (UTC+05:30).',
+  'India · Age 13+ · Times are Indian Standard Time (UTC+05:30).':
+      'இந்தியா · வயது 13+ · நேரங்கள் இந்திய நேரப்படி (UTC+05:30).',
   'Changing your birth date, time or place replaces this device’s chart and clears its previous guide chats only after the new chart is verified. If calculation fails, your existing profile and chats stay unchanged. Refreshing the same details keeps your chats.': 'பிறந்த தேதி, நேரம் அல்லது இடத்தை மாற்றினால், புதிய ஜாதகம் சரிபார்க்கப்பட்ட பிறகே இந்தச் சாதனத்தின் பழைய ஜாதகமும் உரையாடல்களும் மாற்றப்படும். கணக்கீடு தோல்வியடைந்தால் பழைய விவரங்களும் உரையாடல்களும் அப்படியே இருக்கும். அதே விவரங்களைப் புதுப்பித்தால் உரையாடல்கள் அழியாது.',
   'Name or alias (used on detailed reports)':
       'பெயர் அல்லது புனைப்பெயர் (விரிவான அறிக்கைகளில் பயன்படுத்தப்படும்)',
@@ -360,14 +360,14 @@ const tamilUi = <String, String>{
   'Exact birth time': 'சரியான பிறந்த நேரம்',
   'Select time (AM/PM)': 'நேரத்தைத் தேர்ந்தெடுக்கவும் (முற்பகல்/பிற்பகல்)',
   'A noon estimate will be used. Rasi/Nakshatra may change during the day; Lagnam and Dasa guidance are withheld.': 'நண்பகல் நேரம் தோராயமாகப் பயன்படுத்தப்படும். அன்றைய நாளில் ராசி அல்லது நட்சத்திரம் மாறக்கூடும்; லக்னம் மற்றும் தசை வழிகாட்டல் வழங்கப்படாது.',
-  'Birth town or city': 'பிறந்த ஊர் அல்லது நகரம்',
+  'Birth town, city or district': 'பிறந்த ஊர், நகரம் அல்லது மாவட்டம்',
   'For example: Erode': 'எடுத்துக்காட்டு: Erode',
   'Searching…': 'தேடுகிறது…',
   'Search birthplace': 'பிறந்த இடத்தைத் தேடவும்',
   'Location data: astrology calculation service':
       'இட விவரங்கள்: astrology calculation service',
   'India · IST': 'இந்தியா · இந்திய நேரம்',
-  'I am 18+ and agree to process my birth details for automated Vedic guidance.': 'எனக்கு 18 வயது நிறைவடைந்துள்ளது. தானியங்கி வேத ஜோதிட வழிகாட்டலுக்காக எனது பிறப்பு விவரங்களைப் பயன்படுத்தச் சம்மதிக்கிறேன்.',
+  'I am 13+ and agree to process my birth details for automated Vedic guidance.': 'எனக்கு 13 வயது நிறைவடைந்துள்ளது. தானியங்கி வேத ஜோதிட வழிகாட்டலுக்காக எனது பிறப்பு விவரங்களைப் பயன்படுத்தச் சம்மதிக்கிறேன்.',
   'Name or alias, selected gender and birth details go to astrology calculation service when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.': 'விரிவான அறிக்கையைக் கோரும்போது பெயர் அல்லது புனைப்பெயர், தேர்ந்தெடுத்த பாலினம் மற்றும் பிறப்பு விவரங்கள் ஜாதகக் கணக்கீட்டுச் சேவைக்கு அனுப்பப்படும்; ஜாதக விவரங்களும் உங்கள் கேள்வியும் மொழிச் சேவைக்கும் அனுப்பப்படும். உங்கள் ஜாதகமும் உரையாடல்களும் இந்தச் சாதனத்தில் மறையாக்கம் செய்து சேமிக்கப்படும். ஜாதகம் பகுதியில் அவற்றை நீக்கலாம். புதிய பிறப்பு விவரங்களை உருவாக்கும்போது ஆய்வுக்கான விருப்பப் பகிர்வு முடக்கப்படும்; கணக்கு பகுதியில் தனியாகத் தேர்ந்தெடுக்கலாம். இணைக்கப்பட்ட பிறப்பு விவரத்திற்கு, ஜாதகம் பகுதியில் சேவையக ஜாதக மற்றும் பதில் நகல்களையும் நீக்கலாம். குறைந்தபட்ச பயன்பாட்டுப் பதிவுகள் இருக்கும்; காப்பு நகல்கள் எட்டு நாட்களுக்குள் காலாவதியாகும்.',
   'Calculating your chart…': 'உங்கள் ஜாதகம் கணக்கிடப்படுகிறது…',
   'Calculate my chart': 'என் ஜாதகத்தைக் கணக்கிடவும்',

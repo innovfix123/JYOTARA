@@ -11,7 +11,7 @@ const allowedCategories = new Set([
   'Daily', 'Education', 'Career', 'Love', 'Breakup', 'Relationships',
   'Marriage', 'Family', 'Business', 'Property', 'Spiritual', 'Panchang',
 ]);
-const allowedAgeBands = new Set(['18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
+const allowedAgeBands = new Set(['13-17', '18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
 const sessionCookie = 'nirayana_pilot_session';
 
 export async function POST(request: Request) {

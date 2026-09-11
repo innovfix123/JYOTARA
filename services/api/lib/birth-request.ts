@@ -15,14 +15,14 @@ export function validChartSession(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
 }
 
-export function isAdultBirthDate(value: string, now = Date.now()): boolean {
+export function isEligibleBirthDate(value: string, now = Date.now()): boolean {
   const birth = new Date(Date.parse(value) + 330 * 60_000);
   const today = new Date(now + 330 * 60_000);
   if (!Number.isFinite(birth.getTime()) || !Number.isFinite(today.getTime())) return false;
   let age = today.getUTCFullYear() - birth.getUTCFullYear();
   if (today.getUTCMonth() < birth.getUTCMonth() ||
       (today.getUTCMonth() === birth.getUTCMonth() && today.getUTCDate() < birth.getUTCDate())) age--;
-  return age >= 18;
+  return age >= 13;
 }
 
 /** India-first unknown-time convention. The timestamp is converted to its

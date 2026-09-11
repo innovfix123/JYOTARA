@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label';
 type Screen = 'splash' | 'welcome' | 'consent' | 'profile' | 'interests' | 'calculating' | 'home' | 'chart' | 'chat' | 'privacy' | 'premium';
 const screens = new Set<Screen>(['splash', 'welcome', 'consent', 'profile', 'interests', 'calculating', 'home', 'chart', 'chat', 'privacy', 'premium']);
 type Category = 'Daily' | 'Education' | 'Career' | 'Love' | 'Breakup' | 'Relationships' | 'Marriage' | 'Family' | 'Business' | 'Property' | 'Spiritual' | 'Panchang';
-type AgeBand = '18-20' | '21-27' | '28-35' | '36-45' | '46-59' | '60+';
+type AgeBand = '13-17' | '18-20' | '21-27' | '28-35' | '36-45' | '46-59' | '60+';
 type ApiState = 'idle' | 'sandbox' | 'live' | 'unavailable';
 type LocationResult = { latitude: number; longitude: number; timezone: string };
 type PlanetSummary = { name: string; rasi: string; degree: number; position: number; isRetrograde: boolean };
@@ -120,6 +120,7 @@ const tamilCategoryCopy: Record<Category, { title: string; subtitle: string }> =
 };
 
 const agePriorities: Record<AgeBand, Category[]> = {
+  '13-17': ['Education', 'Daily', 'Family', 'Relationships'],
   '18-20': ['Daily', 'Education', 'Career', 'Relationships'],
   '21-27': ['Love', 'Career', 'Daily', 'Marriage'],
   '28-35': ['Marriage', 'Career', 'Business', 'Love', 'Family'],
@@ -136,7 +137,8 @@ function getAgeBand(date: string): AgeBand | null {
   let age = today.getFullYear() - born.getFullYear();
   const beforeBirthday = today.getMonth() < born.getMonth() || (today.getMonth() === born.getMonth() && today.getDate() < born.getDate());
   if (beforeBirthday) age -= 1;
-  if (age < 18) return null;
+  if (age < 13) return null;
+  if (age < 18) return '13-17';
   if (age <= 20) return '18-20';
   if (age <= 27) return '21-27';
   if (age <= 35) return '28-35';
@@ -283,7 +285,7 @@ export default function Home() {
   const [birthLocation, setBirthLocation] = useState<LocationResult | null>(null);
   const tradition = 'South Indian';
   const [unknownTime, setUnknownTime] = useState(false);
-  const [adultConfirmed, setAdultConfirmed] = useState(false);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [consent, setConsent] = useState(false);
   const [questionResearchConsent, setQuestionResearchConsent] = useState(false);
   const [selectedInterests, setSelectedInterests] = useState<Category[]>([]);
@@ -304,7 +306,7 @@ export default function Home() {
   const profileCompletedRef = useRef(false);
   const calculationRunRef = useRef(0);
   const ageBand = getAgeBand(birthDate);
-  const canContinue = Boolean(adultConfirmed && consent && birthDate && ageBand && birthplace && birthLocation && (birthTime || unknownTime));
+  const canContinue = Boolean(ageConfirmed && consent && birthDate && ageBand && birthplace && birthLocation && (birthTime || unknownTime));
   const canGenerate = canContinue && selectedInterests.length > 0;
   const isTamil = language === 'தமிழ்';
   const t = (english: string, tamil: string) => isTamil ? tamil : english;
@@ -600,7 +602,7 @@ export default function Home() {
     calculationRunRef.current += 1;
     profileCompletedRef.current = false;
     setAsked([]); setSelectedQuestion(''); setQuestionDraft(''); setLiveAnswer(null); setAnswerState('idle'); setFeedback(null);
-    setName(''); setBirthDate(''); setBirthTime(''); setBirthplace(''); setBirthLocation(null); setUnknownTime(false); setAdultConfirmed(false); setConsent(false); setQuestionResearchConsent(false); setSelectedInterests([]);
+    setName(''); setBirthDate(''); setBirthTime(''); setBirthplace(''); setBirthLocation(null); setUnknownTime(false); setAgeConfirmed(false); setConsent(false); setQuestionResearchConsent(false); setSelectedInterests([]);
     setApiState('idle'); setProfileError(''); setSandboxModules([]); setChartSummary({ yogas: [], planets: [] }); locationWidgetReady.current = false;
     goToScreen('welcome', 'replace');
   }
@@ -666,11 +668,11 @@ export default function Home() {
               <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">தொடங்குவதற்கு முன்</h2>
               <p className="mt-3 leading-7 text-muted-foreground">Jyotara கணக்கிடப்பட்ட ஜாதகத் தகவல்களை எளிய தமிழில் விளக்கும் தானியங்கி பாரம்பரிய வழிகாட்டல். இது மனித ஜோதிடர் ஆலோசனை அல்ல.</p>
               <div className="mt-7 space-y-4">
-                <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/55 p-4 text-sm leading-6"><Checkbox className="mt-1" checked={adultConfirmed} onCheckedChange={(value) => setAdultConfirmed(Boolean(value))} aria-label="எனக்கு 18 வயது அல்லது அதற்கு மேல்" /><span><strong className="block text-foreground">எனக்கு 18 வயது அல்லது அதற்கு மேல்.</strong><span className="text-muted-foreground">இந்தச் சேவை பெரியவர்களுக்கு மட்டும்.</span></span></div>
+                <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/55 p-4 text-sm leading-6"><Checkbox className="mt-1" checked={ageConfirmed} onCheckedChange={(value) => setAgeConfirmed(Boolean(value))} aria-label="எனக்கு 13 வயது அல்லது அதற்கு மேல்" /><span><strong className="block text-foreground">எனக்கு 13 வயது அல்லது அதற்கு மேல்.</strong><span className="text-muted-foreground">இந்தச் சேவை 13 வயது மற்றும் அதற்கு மேற்பட்டவர்களுக்கு.</span></span></div>
                 <div className="flex items-start gap-3 rounded-2xl border border-border bg-secondary/55 p-4 text-sm leading-6"><Checkbox className="mt-1" checked={consent} onCheckedChange={(value) => setConsent(Boolean(value))} aria-label="பிறந்த விவரங்களைப் பயன்படுத்த சம்மதிக்கிறேன்" /><span><strong className="block text-foreground">ஜாதகத்தை உருவாக்க என் பிறந்த விவரங்களைப் பயன்படுத்த சம்மதிக்கிறேன்.</strong><span className="text-muted-foreground">இந்த இணையச் சோதனையில் பிறந்த விவரங்கள் நிரந்தரமாக சேமிக்கப்படாது. மருத்துவ, சட்ட அல்லது நிதி முடிவுகளுக்கு இதை மட்டும் நம்ப வேண்டாம்.</span></span></div>
               </div>
               <div className="mt-5 flex flex-wrap gap-4 text-sm text-primary"><button onClick={() => goToScreen('privacy')}>தனியுரிமை மற்றும் தரவு நீக்கம்</button><button onClick={() => goToScreen('premium')}>இலவசம் மற்றும் Plus திட்டம்</button></div>
-              <Button disabled={!adultConfirmed || !consent} onClick={() => goToScreen('profile')} className="mt-7 h-13 w-full rounded-2xl text-base">பிறந்த விவரங்களைச் சேர்க்க <ArrowRight className="ml-1" /></Button>
+              <Button disabled={!ageConfirmed || !consent} onClick={() => goToScreen('profile')} className="mt-7 h-13 w-full rounded-2xl text-base">பிறந்த விவரங்களைச் சேர்க்க <ArrowRight className="ml-1" /></Button>
             </div>
           </section>
         )}
@@ -686,7 +688,7 @@ export default function Home() {
                 <div className="space-y-2"><Label htmlFor="birth-time">{t('Exact birth time', 'சரியான பிறந்த நேரம்')}</Label><Input id="birth-time" type="time" value={birthTime} onChange={(e) => setBirthTime(e.target.value)} onInput={(e) => setBirthTime(e.currentTarget.value)} disabled={unknownTime} className="h-12 rounded-xl" /><label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={unknownTime} onCheckedChange={(v) => setUnknownTime(Boolean(v))} /> {t('I don’t know my exact time', 'எனக்கு சரியான நேரம் தெரியாது')}</label></div>
                 <div className="space-y-2 sm:col-span-2"><Label htmlFor="birthplace">{t('Birthplace', 'பிறந்த இடம்')}</Label><Input ref={locationInputRef} id="birthplace" value={birthplace} onChange={(e) => { setBirthplace(e.target.value); setBirthLocation(null); }} placeholder={t('Type a city, then choose from the suggestions', 'நகரத்தின் பெயரை உள்ளிட்டு பரிந்துரையில் தேர்ந்தெடுக்கவும்')} autoComplete="off" className="prokerala-location-input h-12 rounded-xl" /><p className={`text-xs ${birthLocation ? 'text-emerald-400' : 'text-muted-foreground'}`}>{birthLocation ? t('Location selected — coordinates and timezone are ready.', 'இடம் தேர்ந்தெடுக்கப்பட்டது — கணக்கீட்டிற்கு தயாராக உள்ளது.') : t('Select the correct Indian birthplace from the suggestion list.', 'பரிந்துரை பட்டியலில் சரியான இந்தியப் பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.')}</p></div>
               </div>
-              {birthDate && !ageBand && <div className="mt-5 rounded-2xl border border-rose-400/25 bg-rose-400/8 p-4 text-sm text-rose-100">இந்தச் சேவையைப் பயன்படுத்த 18 வயது அல்லது அதற்கு மேல் இருக்க வேண்டும். சரியான பிறந்த தேதியைச் சரிபார்க்கவும்.</div>}
+              {birthDate && !ageBand && <div className="mt-5 rounded-2xl border border-rose-400/25 bg-rose-400/8 p-4 text-sm text-rose-100">இந்தச் சேவையைப் பயன்படுத்த 13 வயது அல்லது அதற்கு மேல் இருக்க வேண்டும். சரியான பிறந்த தேதியைச் சரிபார்க்கவும்.</div>}
               {ageBand && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-muted-foreground">வயது குழு: <strong className="text-foreground">{ageBand}</strong>. இது அடுத்த திரையில் பரிந்துரைகளின் வரிசையை மட்டும் மாற்றும்; எந்தப் பகுதியும் மறைக்கப்படாது.</div>}
               <Button disabled={!canContinue} onClick={() => goToScreen('interests')} className="mt-6 h-13 w-full rounded-2xl text-base">ஆர்வங்களைத் தேர்ந்தெடுக்க <ArrowRight className="ml-1" /></Button>
             </div>

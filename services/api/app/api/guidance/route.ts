@@ -37,7 +37,7 @@ const guideVoices:Record<string,string>={
  Arul:'Spiritual reflection: gentle and unhurried; offer optional simple practices, never fear or costly remedies.',
 };
 const allowedLanguages = new Set(['ta', 'en']);
-const allowedAgeBands = new Set(['18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
+const allowedAgeBands = new Set(['13-17', '18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
 const sessionCookie = 'nirayana_pilot_session';
 const researchConsentVersion = 'anonymous-questions-v1';
 

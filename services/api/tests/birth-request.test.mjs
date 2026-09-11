@@ -5,7 +5,7 @@ import ts from 'typescript';
 const compile = text => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const url = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const helperUrl = url(compile(readFileSync(new URL('../lib/birth-request.ts', import.meta.url), 'utf8')));
-const { validBirthDatetime, validChartSession, calculationBirthDatetime, isAdultBirthDate } = await import(helperUrl);
+const { validBirthDatetime, validChartSession, calculationBirthDatetime, isEligibleBirthDate } = await import(helperUrl);
 const invalidDates = [
   '2002-02-29T05:00:00+05:30', '2000-02-30T05:00:00+05:30',
   '2002-04-31T05:00:00+05:30', '2002-13-01T05:00:00+05:30',
@@ -37,7 +37,7 @@ test('actual chart route rejects invalid date/session before metering or provide
   globalThis.fetch = async () => { touched++; throw Error('Network must not be reached'); };
   const source = readFileSync(new URL('../app/api/astrology/kundli/route.ts', import.meta.url), 'utf8');
   const code = compile(source).replace(/^import .*;$/gm, '');
-  const prelude = `import { validBirthDatetime, validChartSession, calculationBirthDatetime, isAdultBirthDate } from '${helperUrl}';
+  const prelude = `import { validBirthDatetime, validChartSession, calculationBirthDatetime, isEligibleBirthDate } from '${helperUrl}';
     const env = globalThis.__birthRequestEnv;
     const chartTicketConfigured = value => Boolean(value);
     const issueChartTicket = () => { throw Error('Unexpected ticket issuance'); };
@@ -68,12 +68,12 @@ test('actual chart route rejects invalid date/session before metering or provide
     delete globalThis.__birthRequestEnv;
   }
 });
-test('adult profile cutoff uses India birthday, including midnight and leap-day boundaries', () => {
+test('13+ profile cutoff uses India birthday, including midnight and leap-day boundaries', () => {
   const now=Date.parse('2026-09-06T18:30:00Z');
-  assert.equal(isAdultBirthDate('2008-09-07T23:00:00+05:30',now),true);
-  assert.equal(isAdultBirthDate('2008-09-08T00:00:00+05:30',now),false);
-  assert.equal(isAdultBirthDate('1940-01-01T05:00:00+05:30',now),true);
-  assert.equal(isAdultBirthDate('2006-03-01T05:00:00+05:30',Date.parse('2024-02-29T12:00:00+05:30')),false);
+  assert.equal(isEligibleBirthDate('2013-09-07T23:00:00+05:30',now),true);
+  assert.equal(isEligibleBirthDate('2013-09-08T00:00:00+05:30',now),false);
+  assert.equal(isEligibleBirthDate('1940-01-01T05:00:00+05:30',now),true);
+  assert.equal(isEligibleBirthDate('2011-03-01T05:00:00+05:30',Date.parse('2024-02-29T12:00:00+05:30')),false);
 });
 test('unknown birth time uses noon on the India date, while exact time is unchanged', () => {
   assert.equal(calculationBirthDatetime('2002-07-29T05:00:00+05:30', false), '2002-07-29T12:00:00+05:30');

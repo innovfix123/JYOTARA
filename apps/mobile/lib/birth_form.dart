@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'services/adult_birth_date.dart';
@@ -38,6 +39,7 @@ class _BirthFormState extends State<BirthForm> {
   List<dynamic>? _place;
   String? _error;
   int _searchRevision = 0;
+  Timer? _searchDebounce;
 
   @override
   void initState() {
@@ -84,14 +86,16 @@ class _BirthFormState extends State<BirthForm> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _placeQuery.dispose();
     _nickname.dispose();
     super.dispose();
   }
 
   Future<void> _search() async {
+    _searchDebounce?.cancel();
     final query = _placeQuery.text.trim();
-    if (query.length < 3 || _searching) return;
+    if (query.length < 3) return;
     final revision = ++_searchRevision;
     setState(() {
       _searching = true;
@@ -112,7 +116,7 @@ class _BirthFormState extends State<BirthForm> {
         );
       }
     } finally {
-      if (mounted) setState(() => _searching = false);
+      if (mounted && revision == _searchRevision) setState(() => _searching = false);
     }
   }
 
@@ -130,6 +134,10 @@ class _BirthFormState extends State<BirthForm> {
         () => _error =
             'Choose your date, time and birthplace, then confirm consent.',
       );
+      return;
+    }
+    if (_date!.isAfter(latestEligibleBirthDate(DateTime.now()))) {
+      setState(() => _error = 'This test app supports personal birth profiles for people aged 13 or older.');
       return;
     }
     setState(() {
@@ -259,7 +267,7 @@ class _BirthFormState extends State<BirthForm> {
             ),
             const SizedBox(height: 12),
             const UiText(
-              'India · Age 18+ · Times are Indian Standard Time (UTC+05:30).',
+              'India · Age 13+ · Times are Indian Standard Time (UTC+05:30).',
             ),
             if (widget.session.facts != null) ...[
               const SizedBox(height: 12),
@@ -298,7 +306,7 @@ class _BirthFormState extends State<BirthForm> {
                   ? null
                   : () async {
                       final now = DateTime.now();
-                      final latest = latestAdultBirthDate(now);
+                      final latest = latestEligibleBirthDate(now);
                       final date = await showDatePicker(
                         context: context,
                         initialDate: _date == null || _date!.isAfter(latest)
@@ -348,15 +356,21 @@ class _BirthFormState extends State<BirthForm> {
               controller: _placeQuery,
               enabled: !_busy,
               onChanged: (_) {
+                _searchDebounce?.cancel();
                 _searchRevision++;
                 setState(() {
                   _place = null;
                   _places = [];
+                  _error = null;
+                  _searching = false;
                 });
+                if (_placeQuery.text.trim().length >= 3) {
+                  _searchDebounce = Timer(const Duration(milliseconds: 350), _search);
+                }
               },
               onSubmitted: (_) => _search(),
               decoration: InputDecoration(
-                labelText: uiText(context, 'Birth town or city'),
+                labelText: uiText(context, 'Birth town, city or district'),
                 hintText: uiText(context, 'For example: Erode'),
               ),
             ),
@@ -377,7 +391,16 @@ class _BirthFormState extends State<BirthForm> {
                       ? Icons.check_circle
                       : Icons.circle_outlined,
                 ),
-                onTap: _busy ? null : () => setState(() => _place = row),
+                onTap: _busy ? null : () {
+                  _searchDebounce?.cancel();
+                  _searchRevision++;
+                  setState(() {
+                    _place = row;
+                    _placeQuery.text = '${row[1]}, ${row[2]}';
+                    _places = [];
+                    _searching = false;
+                  });
+                },
                 title: UiText('${row[1]}, ${row[2]}'),
                 subtitle: const UiText('India · IST'),
               ),
@@ -389,7 +412,7 @@ class _BirthFormState extends State<BirthForm> {
                   ? null
                   : (value) => setState(() => _consent = value ?? false),
               title: const UiText(
-                'I am 18+ and agree to process my birth details for automated Vedic guidance.',
+                'I am 13+ and agree to process my birth details for automated Vedic guidance.',
               ),
               subtitle: const UiText(
                 'Name or alias, selected gender and birth details go to astrology calculation service when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',

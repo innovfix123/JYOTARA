@@ -4,7 +4,7 @@ import { chartTicketConfigured, issueChartTicket } from '@/lib/chart-ticket';
 import { normalizeProviderChart, normalizeProviderNavamsa } from '@/lib/provider-chart';
 import { currentContext } from '@/db/current-context';
 import { prokeralaJson, type ProviderCharge } from '@/lib/prokerala-client';
-import { validBirthDatetime, validChartSession, calculationBirthDatetime, isAdultBirthDate } from '@/lib/birth-request';
+import { validBirthDatetime, validChartSession, calculationBirthDatetime, isEligibleBirthDate } from '@/lib/birth-request';
 import { reserveProfile } from '@/db/profile-reservation';
 import { requestIdentity } from '@/db/guidance-requests';
 import { cleanupProfileRecovery, completeProfile, recoverProfile } from '@/db/profile-recovery';
@@ -54,8 +54,8 @@ export async function POST(request: Request) {
     return Response.json({ error: 'Valid coordinates and datetime are required' }, { status: 400, headers: sessionHeaders(session) });
   }
 
-  if (!isAdultBirthDate(body.datetime)) {
-    return Response.json({ error: 'This test app supports personal birth profiles for adults aged 18 or older.' }, { status: 400 });
+  if (!isEligibleBirthDate(body.datetime)) {
+    return Response.json({ error: 'This test app supports personal birth profiles for people aged 13 or older.' }, { status: 400 });
   }
   const chartSecret = (env.JYOTARA_CHART_TICKET_KEY ?? env.NIRAYANA_CHART_TICKET_KEY);
   if (!chartTicketConfigured(chartSecret)) {
