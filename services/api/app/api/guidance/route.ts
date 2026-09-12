@@ -125,9 +125,15 @@ async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePack
     return outputText(await response.json());
   });
   const answer=result.answer;
-  if(!answer)return null;
+  if(!answer) { console.warn('consultation_unavailable', {stage:'review', attempts:result.attempts}); return null; }
   const unsupportedAstrology = !reviewedInterpretation && !chartContext && !providerSources.length && practicalScope && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
-  return !unsupportedAstrology && acceptableAnswer(answer, style) && periodClaimsAgree(answer, packet.facts) ? {answer, usesAstrology:!!result.review?.claims.length} : null;
+  const shapeOk=acceptableAnswer(answer, style);
+  const periodsOk=periodClaimsAgree(answer, packet.facts);
+  if(unsupportedAstrology || !shapeOk || !periodsOk) {
+    console.warn('consultation_unavailable', {stage:'final_gate', unsupportedAstrology, shapeOk, periodsOk});
+    return null;
+  }
+  return {answer, usesAstrology:!!result.review?.claims.length};
 }
 
 async function ensureRequestTable() {
@@ -309,7 +315,9 @@ export async function POST(request: Request) {
       generated=reply?.answer ?? null;
       generatedUsesAstrology=reply?.usesAstrology ?? false;
     }
-  } catch {
+  } catch (error) {
+    // Operational reason only: never log dialogue, birth details or credentials.
+    console.warn('consultation_unavailable', {stage:'model', reason: error instanceof Error && ['TimeoutError','AbortError'].includes(error.name) ? 'timeout' : 'upstream_error'});
     generated = null;
   }
   if (!generated && !career?.ok && scripted) practical = scripted;
