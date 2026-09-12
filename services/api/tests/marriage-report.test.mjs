@@ -28,7 +28,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
   .replace('@/lib/profile-overview', url(compile(source('../lib/profile-overview.ts')))).replace('@/lib/astrology-evidence', evidence)
-  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
+  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')).replace('@/lib/consultation-writer', moduleUrl('../lib/consultation-writer.ts')));
 
 const {parseMarriageReport,marriageTimingQuestion,marriageReportReply}=await import(moduleUrl('../lib/marriage-report.ts'));
 const text='Synthetic cover\fFavourable Marriage Periods\nDasha Lord Sub Dasha Lord Start End\nMercury Venus 2020-01-01 2027-01-01\nMercury Moon 2028-01-01 2030-01-01\fDisclaimer';

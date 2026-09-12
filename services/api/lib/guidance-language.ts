@@ -179,10 +179,10 @@ export function providerReadingSources(chart: {yogas: Array<{name:string;descrip
 
 export function conversationTopic(question:string, fallback:string, history:string[] = []): string {
   const q=question.toLowerCase();
-  if (/business|startup|வியாபார|வணிக|தொழில் தொடங்க|thozhil thodang/u.test(q)) return 'Business';
+  if (/business|startup|partnership|வியாபார|வணிக|தொழில் தொடங்க|thozhil thodang/u.test(q)) return 'Business';
   if (/marriage|wedding|திருமண|கல்யாண|kalyanam/u.test(q)) return 'Marriage';
-  if (/job|career|promotion|interview|வேலை|பணி|சம்பள|velai|velaikku|தொழில் பற்றி/u.test(q)) return 'Career';
-  if (/exam|education|stud(?:y|ies)|college|படிப்பு|படிக்க|தேர்வு|padippu/u.test(q)) return 'Education';
+  if (/job|career|(?:my|about|at) work\b|work (?:themes|life|prospects)|promotion|interview|software|salary|resign|வேலை|பணி|சம்பள|velai|velaikku|தொழில் பற்றி/u.test(q)) return 'Career';
+  if (/exam|education|stud(?:y|ies)|college|course|analytics|learning|மேல்படிப்பு|கல்வி|படிப்பு|படிக்க|தேர்வு|padippu/u.test(q)) return 'Education';
   if (/property|buy.*house|வீடு வாங்க|நிலம் வாங்க/u.test(q)) return 'Property';
   if (/love|relationship|காதல்|உறவு|kaadhal/u.test(q)) return 'Love';
   for (const earlier of [...history].reverse()) {

@@ -28,7 +28,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
   .replace('@/lib/profile-overview', url(compile(source('../lib/profile-overview.ts')))).replace('@/lib/astrology-evidence', evidence)
-  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')));
+  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')).replace('@/lib/consultation-writer', moduleUrl('../lib/consultation-writer.ts')));
 
 test('actual route reserves before model work, replays encrypted result, allows continued chat and isolates identities', async () => {
   const db = new DatabaseSync(':memory:');
@@ -63,11 +63,12 @@ test('actual route reserves before model work, replays encrypted result, allows 
       };
     },
   } };
-  globalThis.fetch = async () => {
+  globalThis.fetch = async (address, options) => {
     calls++;
     started();
     if (calls === 1) await modelWait;
-    return Response.json({ output_text: 'Mercury Mahadasha and Venus Antardasha are the supplied periods.' });
+    const answer='Focus on one need you would like to discuss. What matters most to you?';
+    return Response.json({output_text:JSON.parse(options.body).instructions.includes('independent final editor') ? JSON.stringify({answer,claims:[],corrections:[]}) : answer});
   };
   try {
     const { POST, DELETE } = await import(route);
@@ -91,7 +92,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     assert.deepEqual(await replay.json(), { ...reply, replayed: true, providerUsage:{calls:[],newProviderCalls:0,receiptReused:true} });
     assert.equal(reply.replayed, false);
     assert.ok(Number.isFinite(Date.parse(reply.answeredAt)));
-    assert.equal(calls, 1);
+    assert.equal(calls, 2, 'one draft and one review; replay makes no new calls');
     const stored = db.prepare('SELECT * FROM guide_requests').get();
     assert.equal(stored.question_text, null);
     assert.equal(stored.research_consent_version, null);
@@ -132,11 +133,12 @@ test('actual route reserves before model work, replays encrypted result, allows 
     let finishPending;
     const began = new Promise(resolve => { pendingStarted = resolve; });
     const pause = new Promise(resolve => { finishPending = resolve; });
-    globalThis.fetch = async () => {
+    globalThis.fetch = async (address, options) => {
       calls++;
       pendingStarted();
       await pause;
-      return Response.json({ output_text: 'Mercury Mahadasha and Venus Antardasha are the supplied periods.' });
+      const answer='Focus on one need you would like to discuss. What matters most to you?';
+    return Response.json({output_text:JSON.parse(options.body).instructions.includes('independent final editor') ? JSON.stringify({answer,claims:[],corrections:[]}) : answer});
     };
     const lateBase = { ...base, researchConsent: true, chartTicket: await ticket('delete-pending', 'one') };
     const late = post(lateBase, 'delete-pending');
@@ -233,7 +235,8 @@ test('actual route reserves before model work, replays encrypted result, allows 
     }), /could not be completed/, 'late chart completion cannot restore erased cache');
     assert.equal(calls, beforeErasure, 'revoked work cannot spend');
     // Real, assistant-reviewed catalogue; only the chart is synthetic.
-    // Do not inject approvals or model text for this branch.
+    // Verify the deterministic approved fallback when no writer is configured.
+    delete globalThis.__receiptTestEnv.OPENROUTER_API_KEY;
     const matchingChart = { rashi: 'Karka', nakshatra: 'Pushya', lagna: 'Karka', yogas: [],
       planets: ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu'].map(name => ({name, rasi: 'Karka', position: 4, degree: 1, isRetrograde: false})),
       navamsa: [{name: 'Mars', rasi: 'Mithuna', position: 3, degree: 1}],

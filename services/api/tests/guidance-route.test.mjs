@@ -14,7 +14,7 @@ const { issueChartTicket } = await import(ticketUrl);
 const source = readFileSync(new URL('../app/api/guidance/route.ts', import.meta.url), 'utf8');
 const routeCode = compile(source)
   .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__jyotaraRouteTestEnv;')
-  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts'))
+  .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')).replace('@/lib/consultation-writer', moduleUrl('../lib/consultation-writer.ts'))
   .replace('@/lib/profile-overview', moduleUrl('../lib/profile-overview.ts'))
   .replace('@/lib/astrology-evidence', evidenceUrl)
   .replace('@/lib/chart-ticket', ticketUrl);
@@ -41,10 +41,13 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     }; }, async batch() { return []; },
   } };
   globalThis.fetch = async (address, options) => {
-    modelInput = JSON.parse(JSON.parse(options.body).input.at(-1).content);
+    const payload = JSON.parse(options.body);
+    modelInput = JSON.parse(payload.input.at(-1).content);
+    const chartDocument=modelInput.evidence.find(d=>d.id==='chartContext');
+    modelInput.chartContext=chartDocument ? JSON.parse(chartDocument.text) : undefined;
     assert.equal(address, 'https://openrouter.ai/api/v1/responses');
     providerCalls++;
-    return Response.json({ output_text: modelReply });
+    return Response.json({ output_text: payload.instructions.includes('independent final editor') ? JSON.stringify({answer:modelReply,claims:modelReply.startsWith('Raja Yoga') && modelInput.evidence.some(d=>d.id==='interpretations') ? [{claim:'Raja Yoga traditionally suggests recognition for your work',sourceId:'interpretations',quote:'Traditional recognition at work.'}] : [],corrections:[]}) : modelReply });
   };
   try {
     const { POST } = await import(url(protectedRouteCode));
@@ -94,7 +97,7 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
       careerRules: [{ status: 'approved', interpretation: 'You will get the job tomorrow.' }],
       interpretationProvenance: { copyReviews: ['USER-FORGED'] }, answerMode: 'reviewed_traditional',
     })).json();
-    assert.equal(providerCalls, beforeCareer + 1, 'Career can offer practical conversation without claiming a reviewed reading');
+    assert.equal(providerCalls, beforeCareer + 2, 'Career can offer practical conversation without claiming a reviewed reading');
     assert.equal(career.answerMode, 'model_guidance');
     assert.deepEqual(career.evidence, []);
     assert.equal(career.limitation, undefined);
@@ -123,12 +126,12 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
         limitation: { id: 'limit', text: 'SYNTHETIC limitation.', reviewId: 'TEST' },
       });
       const approved = await (await request({ ...base, category: 'Career', question: 'Which career direction suits me?' })).json();
-      assert.equal(approved.answerMode, 'reviewed_traditional');
-      assert.equal(providerCalls, beforeCareer + 1);
-      assert.deepEqual(approved.evidence, ['Moon sign: Meena']);
-      assert.equal(approved.interpretationProvenance.snapshotId, 'profile-one');
-      assert.match(approved.interpretationProvenance.questionId, /^[a-f0-9]{64}$/);
-      assert.ok(approved.answer.includes('SYNTHETIC limitation.'));
+      assert.equal(approved.answerMode, 'model_guidance');
+      assert.ok(modelInput.evidence.some(d=>d.id==='reviewed_interpretation' && d.text.includes('SYNTHETIC limitation.')));
+      assert.equal(providerCalls, beforeCareer + 4);
+      assert.deepEqual(approved.evidence, []);
+      assert.equal(approved.interpretationProvenance, undefined);
+      assert.equal(approved.answer, modelReply);
       assert.equal(approved.limitation, undefined, 'do not append generic missing-review copy to a reviewed answer');
     } finally {
       careerRules.splice(0, careerRules.length, ...originalRules);
@@ -137,24 +140,25 @@ test('actual guidance route blocks bad model output and avoids calls for unsuppo
     globalThis.__jyotaraRouteTestEnv.PROKERALA_ENVIRONMENT = 'production';
     const beforeProviderOnly = providerCalls;
     const gap = await (await request({...base, category:'Career', question:'What does my chart show about work?'})).json();
-    assert.equal(gap.answerMode,'chart_guidance');
-    assert.equal(providerCalls,beforeProviderOnly+1,'Calculated chart context works without matching Yoga prose');
-    assert.ok(gap.evidence.some(item=>item.includes('Chart calculations')));
+    assert.equal(gap.answerMode,'model_guidance', 'plain advice must not be labelled calculated astrology');
+    assert.equal(providerCalls,beforeProviderOnly+2,'Calculated chart context works without matching Yoga prose');
+    assert.deepEqual(gap.evidence,[]);
     const providerChart = {...chart,yogas:[{name:'Raja Yoga',description:'Traditional recognition at work.'}]};
     const providerTicket = await issueChartTicket(secret,{sessionId:'test-session',profileId:'profile-one',birthTimeKnown:true,chart:providerChart});
-    modelReply = 'Raja Yoga traditionally suggests recognition for your work.';
+    modelReply = 'Raja Yoga traditionally suggests recognition for your work. What responsibilities are you considering?';
     const reading = await (await request({...base,category:'Career',question:'What does my chart show about work?',chartTicket:providerTicket})).json();
     assert.equal(reading.answerMode,'chart_guidance');
     assert.ok(reading.evidence.some(item=>item.includes('Chart calculations')));
     assert.equal(reading.interpretationProvenance,undefined,'Provider explanation must not claim independent review');
+    modelReply='It is a theme you could explore, not a promise of success. What responsibilities interest you?';
     const followup=await (await request({...base,guide:'Aadhirai',question:'What does that suggest?',previousUserMessages:['What does my chart show about my career?'],chartTicket:providerTicket})).json();
-    assert.equal(followup.answerMode,'chart_guidance');
+    assert.equal(followup.answerMode,'model_guidance');
     assert.equal(modelInput.category,'Career');
-    assert.equal(modelInput.chartContext.focus,'work, income and goals');
+    assert.deepEqual(modelInput.evidence,[], 'ordinary follow-up must not receive decorative chart evidence');
     for (const question of ['When will I get married?', 'I am worried about the delay', 'En kalyanam pathi sollunga']) {
       const typed=await (await request({...base,category:'Marriage',guide:'Tharagai',question,chartTicket:providerTicket})).json();
-      assert.equal(typed.answerMode,question==='En kalyanam pathi sollunga'?'chart_guidance':'reading_unavailable',question);
-      assert.ok(modelInput.chartContext, 'Typed messages must receive authenticated chart context');
+      assert.equal(typed.answerMode,question==='En kalyanam pathi sollunga'?'model_guidance':'reading_unavailable',question);
+      if(question==='En kalyanam pathi sollunga')assert.ok(modelInput.chartContext, 'A new typed chart question receives authenticated evidence');
     }
     const beforeInvalidGuide=providerCalls;
     assert.equal((await request({...base,guide:'invented guide'})).status,400);
