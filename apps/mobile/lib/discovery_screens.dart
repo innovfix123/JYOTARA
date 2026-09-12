@@ -11,9 +11,9 @@ import 'package:http/http.dart' as http;
 import 'main.dart'
     show
         phoneAccess,
+        accountStorage,
         testerAccess,
         profileSession,
-        languagePreferences,
         ivory,
         muted;
 import 'birth_form.dart';
@@ -56,8 +56,7 @@ String readingLanguage(BuildContext context) =>
                 .dependOnInheritedWidgetOfExactType<UiLanguageScope>()
                 ?.notifier
                 ?.value ==
-            'ta' ||
-        languagePreferences.value == 'tamil'
+            'ta'
     ? 'ta'
     : 'en';
 
@@ -439,7 +438,7 @@ class SavedKundli {
 
 class KundliLibrary {
   static const storage = FlutterSecureStorage();
-  static const indexKey = 'jyotara.kundli.index.v1';
+  static String get indexKey => accountStorage.key('jyotara.kundli.index.v1');
   static Future<List<SavedKundli>> load() async {
     final raw = await storage.read(key: indexKey);
     final ids = raw == null
@@ -457,18 +456,21 @@ class KundliLibrary {
     return result;
   }
 
-  static ProfileSession _session(String id) => ProfileSession(
+  static ProfileSession _session(String id) {
+    final storageKey = accountStorage.key('jyotara.kundli.$id');
+    return ProfileSession(
     api: JyotaraApiClient(
       testerCode: () => testerAccess.code,
       phoneToken: () => phoneAccess.token,
     ),
     vault: LocalProfileVault(
-      read: () => storage.read(key: 'jyotara.kundli.$id'),
+      read: () => storage.read(key: storageKey),
       write: (value) => value == null
-          ? storage.delete(key: 'jyotara.kundli.$id')
-          : storage.write(key: 'jyotara.kundli.$id', value: value),
+          ? storage.delete(key: storageKey)
+          : storage.write(key: storageKey, value: value),
     ),
   );
+  }
   static Future<SavedKundli> create(List<SavedKundli> rows) async {
     if (rows.length >= 10) {
       throw Exception(

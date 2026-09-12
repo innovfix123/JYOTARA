@@ -93,7 +93,8 @@ const tamilUi = <String, String>{
   'New Matching': 'புதிய பொருத்தம்',
   'No saved Kundlis yet. Use New Matching to enter birth details.': 'சேமித்த ஜாதகங்கள் இல்லை. புதிய பொருத்தத்தில் பிறப்பு விவரங்களைச் சேர்க்கவும்.',
   'No matching names found.': 'இந்தப் பெயரில் ஜாதகம் இல்லை.',
-  'Choose two different profiles.': 'இரண்டு வெவ்வேறு ஜாதகங்களைத் தேர்ந்தெடுக்கவும்.',
+  'Choose two different profiles.':
+      'இரண்டு வெவ்வேறு ஜாதகங்களைத் தேர்ந்தெடுக்கவும்.',
   'Compatibility score': 'பொருத்த மதிப்பெண்',
   'Score breakdown': 'பொருத்த விவரங்கள்',
   'Unknown birth time': 'பிறந்த நேரம் தெரியவில்லை',
@@ -420,6 +421,12 @@ const tamilUi = <String, String>{
   'Your birth details are sensitive. Manage or delete your saved profile from the Chart tab. Research sharing is optional.': 'உங்கள் பிறப்பு விவரங்கள் தனிப்பட்டவை. ஜாதகம் பகுதியில் சேமித்த விவரங்களை நிர்வகிக்கலாம் அல்லது நீக்கலாம். ஆய்வுக்கான பகிர்வு உங்கள் விருப்பம்.',
   'About this build': 'இந்தப் பதிப்பு பற்றி',
   'Internal integration test': 'உள் ஒருங்கிணைப்புச் சோதனை',
+  'Phone verified': 'தொலைபேசி எண் உறுதிசெய்யப்பட்டது',
+  'Signed in': 'உள்நுழைந்துள்ளீர்கள்',
+  'Not signed in': 'உள்நுழையவில்லை',
+  'Sign out': 'வெளியேறு',
+  'Your saved profiles stay with this account':
+      'சேமித்த ஜாதகங்கள் இந்தக் கணக்கில் பாதுகாப்பாக இருக்கும்',
   'Local test session': 'சாதனச் சோதனை அமர்வு',
   'Not signed in · OTP not configured': 'உள்நுழையவில்லை · OTP அமைக்கப்படவில்லை',
   'Close': 'மூடு',

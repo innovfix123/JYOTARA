@@ -15,6 +15,12 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
   final provider = result.answerMode == 'provider_reading';
   final traditional = result.answerMode == 'reviewed_traditional';
   final limited = result.answerMode != 'personalised' && !traditional;
+  final compact =
+      chartReading ||
+      provider ||
+      traditional ||
+      result.answerMode == 'model_guidance' ||
+      result.answerMode == 'practical_guidance';
   final indiaTime = result.answeredAt?.toUtc().add(
     const Duration(hours: 5, minutes: 30),
   );
@@ -44,10 +50,11 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
           'முன்பு தயாரித்த பதில் மீட்கப்பட்டுள்ளது. இந்த மறுமுயற்சிக்காக புதிய பலன் தயாரிக்கப்படவில்லை.',
           'Munnaadi thayaaricha answer thirumba kidaichirukku. Indha retry-ku pudhu reading generate pannala.',
         ),
-      if (timestamp != null)
+      if (timestamp != null && (result.replayed || !compact))
         '${copy('Answer prepared', 'பதில் தயாரிக்கப்பட்ட நேரம்', 'Answer thayaaricha neram')}: $timestamp IST',
       result.answer,
-      if (result.evidence.isNotEmpty) '$heading\n${result.evidence.join('\n')}',
+      if (!compact && result.evidence.isNotEmpty)
+        '$heading\n${result.evidence.join('\n')}',
       if (result.limitation?.trim().isNotEmpty == true)
         '${copy('Limitations', 'வரம்புகள்', 'Varambugal')}: ${result.limitation}',
     ].join('\n\n'),

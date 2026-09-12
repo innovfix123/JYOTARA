@@ -9,25 +9,30 @@ void main() {
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   tearDown(() => languagePreferences.value = 'auto');
   testWidgets(
-    'Tamil chat preference requests Tamil daily content even with English UI',
+    'Tamil UI requests Tamil daily content independently of English chat',
     (tester) async {
-      languagePreferences.value = 'tamil';
+      languagePreferences.value = 'english';
+      final ui = UiLanguagePreferences(write: (_) async {});
+      await ui.set('ta');
       String? requested;
       await tester.pumpWidget(
-        MaterialApp(
-          home: DailyHoroscopeScreen(
-            request: (_, body) async {
-              requested = body['language'] as String;
-              return {
-                'sections': [
-                  {
-                    'title': 'General',
-                    'text': 'இன்று தெளிவாகப் பேசுங்கள்.',
-                    'details': 'விரிவான தமிழ்ப் பலன்.',
-                  },
-                ],
-              };
-            },
+        UiLanguageScope(
+          preferences: ui,
+          child: MaterialApp(
+            home: DailyHoroscopeScreen(
+              request: (_, body) async {
+                requested = body['language'] as String;
+                return {
+                  'sections': [
+                    {
+                      'title': 'General',
+                      'text': 'இன்று தெளிவாகப் பேசுங்கள்.',
+                      'details': 'விரிவான தமிழ்ப் பலன்.',
+                    },
+                  ],
+                };
+              },
+            ),
           ),
         ),
       );
@@ -47,6 +52,34 @@ void main() {
       expect(find.text('Money · everyday reminder'), findsNothing);
     },
   );
+
+  testWidgets('English UI keeps daily content English when chat is Tamil', (
+    tester,
+  ) async {
+    languagePreferences.value = 'tamil';
+    String? requested;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DailyHoroscopeScreen(
+          request: (_, body) async {
+            requested = body['language'] as String;
+            return {
+              'sections': [
+                {
+                  'title': 'General',
+                  'text': 'A steady day.',
+                  'details': 'General reading.',
+                },
+              ],
+            };
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(requested, 'en');
+    expect(find.text('Daily Horoscope'), findsOneWidget);
+  });
   testWidgets(
     'Tamil app preference localises Kundli library heading and create action',
     (tester) async {

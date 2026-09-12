@@ -1,3 +1,6 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import 'services/account_storage.dart';
 import 'first_profile_setup.dart';
 import 'services/phone_access.dart';
 import 'phone_access_screen.dart';
@@ -34,15 +37,39 @@ import 'tester_access_screen.dart';
 final languagePreferences = LanguagePreferences();
 final uiLanguagePreferences = UiLanguagePreferences();
 final testerAccess = TesterAccess();
-final phoneAccess = PhoneAccess(testerCode: () => testerAccess.code);
-final profileSession = ProfileSession(
-  api: JyotaraApiClient(
-    testerCode: () => testerAccess.code,
-    phoneToken: () => phoneAccess.token,
-  ),
-  preferences: languagePreferences,
-  vault: LocalProfileVault(),
+final accountStorage = AccountStorage();
+final phoneAccess = PhoneAccess(
+  testerCode: () => testerAccess.code,
+  prepareAccount: _prepareAccount,
 );
+ProfileSession profileSession = _newProfileSession();
+ProfileSession _newProfileSession() {
+  final storageKey = accountStorage.key('nirayana.private-profile.v1');
+  return ProfileSession(
+    api: JyotaraApiClient(
+      testerCode: () => testerAccess.code,
+      phoneToken: () => phoneAccess.token,
+    ),
+    preferences: languagePreferences,
+    vault: LocalProfileVault(
+      read: () => const FlutterSecureStorage().read(key: storageKey),
+      write: (value) => value == null
+          ? const FlutterSecureStorage().delete(key: storageKey)
+          : const FlutterSecureStorage().write(key: storageKey, value: value),
+    ),
+  );
+}
+
+Future<void> _prepareAccount(String account) async {
+  if (accountStorage.account == account) return;
+  await profileSession.flushStorage();
+  if (profileSession.calculating || profileSession.answering) {
+    throw StateError('Finish the current request before switching accounts.');
+  }
+  accountStorage.account = account;
+  profileSession = _newProfileSession();
+  await profileSession.restore();
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -72,7 +99,12 @@ Future<void> _restoreApp() async {
     await testerAccess.restore();
   }
   await phoneAccess.restore();
-  await profileSession.restore();
+  await accountStorage.migrateLegacy(phoneAccess.accountId);
+  if (phoneAccess.accountId != null) {
+    await _prepareAccount(phoneAccess.accountId!);
+  } else {
+    await profileSession.restore();
+  }
 }
 
 const appBuildLabel = String.fromEnvironment(
@@ -195,9 +227,13 @@ class JyotaraApp extends StatelessWidget {
                       const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH')
                       ? PhoneAccessScreen(
                           access: phoneAccess,
-                          child: FirstProfileSetup(
-                            session: profileSession,
-                            child: const IntroScreen(),
+                          child: AnimatedBuilder(
+                            animation: phoneAccess,
+                            builder: (context, _) => FirstProfileSetup(
+                              key: ValueKey(phoneAccess.accountId),
+                              session: profileSession,
+                              child: const IntroScreen(),
+                            ),
                           ),
                         )
                       : const IntroScreen(),
@@ -447,25 +483,12 @@ class _IntroScreenState extends State<IntroScreen>
     super.dispose();
   }
 
-  void _enter() {
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder<void>(
-        pageBuilder: (_, animation, secondaryAnimation) => const MainShell(),
-        transitionsBuilder: (_, animation, secondaryAnimation, child) =>
-            FadeTransition(
-              opacity: CurvedAnimation(
-                parent: animation,
-                curve: Curves.easeOut,
-              ),
-              child: child,
-            ),
-        transitionDuration: const Duration(milliseconds: 550),
-      ),
-    );
-  }
+  bool _entered = false;
+  void _enter() => setState(() => _entered = true);
 
   @override
   Widget build(BuildContext context) {
+    if (_entered) return const MainShell();
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
@@ -1693,20 +1716,24 @@ class AccountScreen extends StatelessWidget {
                     child: const Icon(Icons.person_rounded),
                   ),
                   const SizedBox(width: 14),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         UiText(
-                          'Local test session',
+                          phoneAccess.authorized
+                              ? 'Phone verified'
+                              : 'Local test session',
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
                         ),
                         SizedBox(height: 4),
-                        UiText(
-                          'Not signed in · OTP not configured',
+                        Text(
+                          phoneAccess.authorized
+                              ? '${uiText(context, 'Signed in')}${phoneAccess.mobile == null ? '' : ' · ••••••${phoneAccess.mobile!.substring(6)}'}'
+                              : uiText(context, 'Not signed in'),
                           style: TextStyle(color: muted),
                         ),
                       ],
@@ -1717,6 +1744,31 @@ class AccountScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
+          if (phoneAccess.authorized)
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const UiText('Sign out'),
+              subtitle: const UiText(
+                'Your saved profiles stay with this account',
+              ),
+              onTap: () async {
+                if (profileSession.calculating || profileSession.answering) {
+                  return;
+                }
+                await profileSession.flushStorage();
+                await phoneAccess.signOut();
+                if (!context.mounted) return;
+                if (!phoneAccess.authorized) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneAccess.error ?? 'Please try again.'),
+                    ),
+                  );
+                }
+              },
+            ),
           ...items.map(
             (item) => ListTile(
               onTap: () async {

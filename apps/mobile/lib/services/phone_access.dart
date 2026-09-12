@@ -14,6 +14,7 @@ class PhoneAccess extends ChangeNotifier {
     Future<String?> Function()? read,
     Future<void> Function(String)? write,
     DateTime Function()? now,
+    this.prepareAccount,
   }) : _now = now ?? DateTime.now,
        _client = client ?? http.Client(),
        _base = Uri.parse(baseUrl ?? defaultApiBaseUrl),
@@ -29,6 +30,8 @@ class PhoneAccess extends ChangeNotifier {
              value: v,
            ));
   final String? Function() testerCode;
+  final Future<void> Function(String account)? prepareAccount;
+  String? get accountId => _account;
   final DateTime Function() _now;
   final http.Client _client;
   final Uri _base;
@@ -206,14 +209,18 @@ class PhoneAccess extends ChangeNotifier {
           data['expiresAt'] <= _now().millisecondsSinceEpoch) {
         throw const FormatException();
       }
-      if (_account != null && _account != data['accountId']) {
+      if (_account != null &&
+          _account != data['accountId'] &&
+          prepareAccount == null) {
         await _post('logout', {}, bearer: data['token']);
         throw _PhoneError(
           'Use the phone number previously verified on this device to protect its saved profiles.',
         );
       }
+      await prepareAccount?.call(data['accountId'] as String);
       await _write(
         jsonEncode({
+          'mobile': _mobile,
           'token': data['token'],
           'accountId': data['accountId'],
           'expiresAt': data['expiresAt'],
@@ -227,6 +234,29 @@ class PhoneAccess extends ChangeNotifier {
       error = e.message;
     } catch (_) {
       error = 'Unable to verify or save sign-in. Please request a new code and try again.';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> signOut() async {
+    if (busy) return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      if (token != null) await _post('logout', {}, bearer: token);
+      await _write(jsonEncode({'accountId': _account}));
+      _token = null;
+      _expires = 0;
+      _mobile = null;
+      _challenge = null;
+      _challengeExpires = 0;
+      resendAt = null;
+      notice = null;
+    } catch (_) {
+      error = 'Unable to sign out. Check your connection and try again.';
     } finally {
       busy = false;
       notifyListeners();

@@ -7,6 +7,48 @@ import 'package:jyotara/services/phone_access.dart';
 
 void main() {
   test(
+    'new account storage is prepared before credentials authorize access',
+    () async {
+      var prepared = false;
+      String? stored;
+      final access = PhoneAccess(
+        testerCode: () => 'test',
+        read: () async => jsonEncode({'accountId': 'old'}),
+        prepareAccount: (id) async {
+          expect(id, 'new');
+          prepared = true;
+        },
+        write: (value) async {
+          if (jsonDecode(value)['token'] != null) expect(prepared, true);
+          stored = value;
+        },
+        client: MockClient(
+          (r) async => http.Response(
+            jsonEncode(
+              r.url.path.endsWith('/send')
+                  ? {'challengeId': List.filled(48, 'b').join()}
+                  : {
+                      'token': List.filled(64, 'a').join(),
+                      'accountId': 'new',
+                      'expiresAt': DateTime.now()
+                          .add(const Duration(days: 1))
+                          .millisecondsSinceEpoch,
+                    },
+            ),
+            200,
+          ),
+        ),
+      );
+      await access.restore();
+      await access.send('9000000000');
+      await access.verify('123456');
+      expect(access.authorized, true);
+      expect(access.accountId, 'new');
+      expect(jsonDecode(stored!)['mobile'], '9000000000');
+    },
+  );
+
+  test(
     'pending OTP survives restart without sending again or resetting expiry',
     () async {
       String? saved;

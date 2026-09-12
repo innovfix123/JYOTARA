@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'services/adult_birth_date.dart';
@@ -116,7 +117,9 @@ class _BirthFormState extends State<BirthForm> {
         );
       }
     } finally {
-      if (mounted && revision == _searchRevision) setState(() => _searching = false);
+      if (mounted && revision == _searchRevision) {
+        setState(() => _searching = false);
+      }
     }
   }
 
@@ -137,7 +140,9 @@ class _BirthFormState extends State<BirthForm> {
       return;
     }
     if (_date!.isAfter(latestEligibleBirthDate(DateTime.now()))) {
-      setState(() => _error = 'This test app supports personal birth profiles for people aged 13 or older.');
+      setState(
+        () => _error = 'This test app supports personal birth profiles for people aged 13 or older.',
+      );
       return;
     }
     setState(() {
@@ -305,6 +310,7 @@ class _BirthFormState extends State<BirthForm> {
               onTap: _busy
                   ? null
                   : () async {
+                      FocusScope.of(context).unfocus();
                       final now = DateTime.now();
                       final latest = latestEligibleBirthDate(now);
                       final date = await showDatePicker(
@@ -337,6 +343,7 @@ class _BirthFormState extends State<BirthForm> {
                 onTap: _busy
                     ? null
                     : () async {
+                        FocusScope.of(context).unfocus();
                         final time = await showTimePicker(
                           context: context,
                           initialTime:
@@ -365,7 +372,10 @@ class _BirthFormState extends State<BirthForm> {
                   _searching = false;
                 });
                 if (_placeQuery.text.trim().length >= 3) {
-                  _searchDebounce = Timer(const Duration(milliseconds: 350), _search);
+                  _searchDebounce = Timer(
+                    const Duration(milliseconds: 350),
+                    _search,
+                  );
                 }
               },
               onSubmitted: (_) => _search(),
@@ -391,16 +401,18 @@ class _BirthFormState extends State<BirthForm> {
                       ? Icons.check_circle
                       : Icons.circle_outlined,
                 ),
-                onTap: _busy ? null : () {
-                  _searchDebounce?.cancel();
-                  _searchRevision++;
-                  setState(() {
-                    _place = row;
-                    _placeQuery.text = '${row[1]}, ${row[2]}';
-                    _places = [];
-                    _searching = false;
-                  });
-                },
+                onTap: _busy
+                    ? null
+                    : () {
+                        _searchDebounce?.cancel();
+                        _searchRevision++;
+                        setState(() {
+                          _place = row;
+                          _placeQuery.text = '${row[1]}, ${row[2]}';
+                          _places = [];
+                          _searching = false;
+                        });
+                      },
                 title: UiText('${row[1]}, ${row[2]}'),
                 subtitle: const UiText('India · IST'),
               ),
