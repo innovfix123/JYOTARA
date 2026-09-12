@@ -62,9 +62,21 @@ test('citation retry identifies invented quote and rejects it again',async()=>{
  });
  assert.equal(result.answer,null);
  assert.match(requests[2].input.at(-1).content,/Citation not found in document house/);
+ assert.match(JSON.parse(requests[2].input.at(-1).content).previousReview,/seventh house/);
 });
 
 test('Tamil selection rejects mostly Tanglish even if it contains a few Tamil words',()=>{
  assert.ok(replyShapeErrors('Ava night shift nu sonna pressure illaama கேளுங்க. Oru message mattum anuppunga.', 'tamil').some(e=>e.includes('predominantly')));
  assert.deepEqual(replyShapeErrors('அவர் இரவு வேலை செய்வதால் பகலில் ஓய்வு தேவைப்படலாம். ஓய்வு எடுத்த பிறகு பேச வசதியான நேரத்தைச் சொல்லச் சொல்லுங்கள்.', 'tamil'),[]);
+});
+
+test('Tanglish comparison of question formats is not itself a likelihood ranking',()=>{
+ const c={...context,question:'Love marriage ah arranged marriage ah?',evidence:[]};
+ assert.deepEqual(parseReviewedReply(JSON.stringify({answer:'Love vs arranged vida, neenga ethirpaarkkum commitment pathi pesalaam. Unga viruppam enna?',claims:[],corrections:[]}),c).errors,[]);
+});
+
+test('matching a literal dasha date quote cannot authorize a career interpretation',()=>{
+ const c={...context,question:'Which dasha am I in?',evidence:[{id:'dasha_periods',text:'Rahu: 2024-12-11 to 2027-10-17'}]};
+ const r={answer:'Research and investigation are visible work themes. Build your skills.',claims:[{claim:'Research and investigation are visible work themes',sourceId:'dasha_periods',quote:'2024-12-11 to 2027-10-17'}],corrections:[]};
+ assert.equal(parseReviewedReply(JSON.stringify(r),c).value,null);
 });

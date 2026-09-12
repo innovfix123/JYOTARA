@@ -18,7 +18,7 @@ export function consultationMode(question:string, dialogue:Turn[]):'reading'|'ex
   return dialogue.length?'conversation':'reading';
 }
 
-export const consultationVersion = 'memory-evidence-review-v8';
+export const consultationVersion = 'memory-evidence-review-v9';
 
 export const consultationInstructions = `You are a warm AI Vedic astrology guide in an ongoing consultation. Never claim to be a human or invent experience. Never mention providers, APIs, credits or internal review.
 Read lastExchange first to identify what the user is replying to; then read dialogue in order for background. Answer the latest message, not the oldest topic or the guide's speciality. A request to simplify or give a next step refers to the immediately preceding exchange. An answer to your question advances that topic. Do not ask for details already given. Earlier assistant claims are NOT verified evidence; correct unsupported claims without propagating them.
@@ -65,15 +65,17 @@ export function parseReviewedReply(text:string,context:Consultation):{value:Revi
   const r=result as Partial<ReviewedReply>;
   if(typeof r.answer!=='string'||!Array.isArray(r.claims)||!Array.isArray(r.corrections)||r.corrections.some(x=>typeof x!=='string'))return {value:null,errors:['missing review fields']};
   const errors=replyShapeErrors(r.answer,context.language);
+  if(/dasha|dasa|தசை/iu.test(context.question) && /\d{4}-\d{2}-\d{2}|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/iu.test(r.answer))errors.push('For this chat answer name the current mahadasha and antardasha without calendar dates. Keep the explanation of what those period names do and do not establish.');
   if(r.claims.length && /strongest|better than|suit you better|most suited/iu.test(r.answer))errors.push('remove unsupported ranking; describe a supplied theme without ranking suitability');
   const formatQuestion=/love marriage|arranged marriage|காதல் திருமணம்/iu.test(context.question);
-  if(formatQuestion && !context.evidence.some(d=>d.id==='event_interpretations') && /love.cum.arranged|stronger|more likely|chance.*(?:jasthi|adhigam)|pure stranger|\bvida\b|வாய்ப்பு அதிக/iu.test(r.answer))errors.push('house associations do not rank marriage formats');
+  if(formatQuestion && !context.evidence.some(d=>d.id==='event_interpretations') && /love.cum.arranged|stronger|more likely|chance.*(?:jasthi|adhigam)|pure stranger|(?:love|arranged).*\bvida\b.*(?:jasthi|adhigam|chance)|வாய்ப்பு அதிக/iu.test(r.answer))errors.push('house associations do not rank marriage formats');
   if(!context.evidence.length && r.claims.length)errors.push('no astrology assertions permitted without evidence');
   // Planet names can appear in a denial or clarification without asserting a
   // personal placement. The independent review still must cite every assertion.
   if(!context.evidence.length && /your chart (?:shows|indicates|confirms)|உங்கள் ஜாதகத்தில்|unga jathagathula/iu.test(r.answer))errors.push('new chart detail in a conversational reply');
   for(const claim of r.claims) {
     if(!claim || typeof claim.claim!=='string'||!claim.claim.trim()||typeof claim.sourceId!=='string'||typeof claim.quote!=='string'||claim.quote.trim().length<8) {errors.push('invalid claim citation');continue;}
+    if(claim.sourceId==='dasha_periods' && /research|investigat|analytic|opportunit|success|career|\bjob|\bwork|marriage|திருமண|வேலை|தொழில்|வாய்ப்பு|வெற்றி|ஆராய்ச்சி|kalyan|velai|vaaippu/iu.test(claim.claim))errors.push('Dasha dates support only period names and boundaries. Remove the career, opportunity or event interpretation from the final answer; raw periods cannot support it.');
     const source=context.evidence.find(d=>d.id===claim.sourceId);
     if(!source || !source.text.includes(claim.quote))errors.push(`Citation not found in document ${claim.sourceId}: ${JSON.stringify(claim.quote)}. Copy a literal passage from that document; do not reconstruct or paraphrase a quote. Revise or remove the associated claim if the source does not support it.`);
     if(!r.answer.includes(claim.claim))errors.push('claim absent from final answer');
@@ -100,16 +102,19 @@ export async function writeConsultation(context:Consultation, complete:Complete)
   const alreadyContacted = /(?:messag|text|contact|reach).*(?:panninen|pannitten|senjen|sent|already)|(?:already|i have|i've|i).*(?:sent|messaged|texted)|செய்தி.*அனுப்பி/iu.test(context.question);
   const noReply = /(?:reply|response|badhil).*(?:varala|illa|no|not)|no (?:reply|response)|பதில்.*(?:இல்லை|வரவில்லை)/iu.test(context.question);
   const scoped = {...context, evidence, mode,
+    ...(periodQuestion && mode==='reading' ? {dialogue:context.dialogue.filter(t=>t.role==='user'),periodInstruction:'Name the supplied current mahadasha and antardasha only, without calendar dates. No career themes, personal skills, marriage events or opportunities can be derived from period dates. Explain this limit briefly. Earlier assistant interpretations are deliberately omitted and cannot be reused.'} : {}),
     situationInstruction: alreadyContacted && noReply ? 'The user explicitly says they ALREADY sent a message and received NO REPLY. Acknowledge that completed action. Do NOT recommend another message or one final check-in now. Ask about elapsed time only if necessary; respect any waiting boundary already agreed.' : undefined,
-    lastExchange:context.dialogue.slice(-2),
+    lastExchange:periodQuestion && mode==='reading' ? [] : context.dialogue.slice(-2),
     focusInstruction:mode==='explain'?'Explain ONLY lastExchange. Do not introduce any new chart claim, theme, prediction or topic. Earlier assistant predictions are not proof.':undefined};
   const content=JSON.stringify(scoped);
   const draft=await complete({instructions:consultationInstructions,input:[{role:'system',content:consultationInstructions},{role:'user',content}],max_output_tokens:650});
   let errors:string[]=[];
+  let previousReview:string|undefined;
   for(let attempt=1;attempt<=2;attempt++) {
-    const raw=await complete({instructions:reviewInstructions,input:[{role:'system',content:reviewInstructions},{role:'user',content:JSON.stringify({...scoped,draft,validationErrors:errors,repairInstruction:errors.length ? 'MANDATORY REPAIR: Choose only ONE suggested question. Delete every alternative example and any trailing question. The entire answer must contain at most ONE question mark, counting inside quotes too. Use the exact requested language field, regardless of draft or history. If language is tamil, rewrite the ENTIRE answer in natural Tamil script; a few Tamil words inside Tanglish are not sufficient.' : undefined})}],max_output_tokens:1800});
+    const raw=await complete({instructions:reviewInstructions,input:[{role:'system',content:reviewInstructions},{role:'user',content:JSON.stringify({...scoped,draft,previousReview,validationErrors:errors,repairInstruction:errors.length ? 'MANDATORY REPAIR: Choose only ONE suggested question. Delete every alternative example and any trailing question. The entire answer must contain at most ONE question mark, counting inside quotes too. Use the exact requested language field, regardless of draft or history. If language is tamil, rewrite the ENTIRE answer in natural Tamil script; a few Tamil words inside Tanglish are not sufficient. Repair previousReview against the errors. Remove any claim without a valid supporting quote from the answer itself, not just from the citations or corrections list.' : undefined})}],max_output_tokens:1800});
     const parsed=parseReviewedReply(raw,scoped);
     if(parsed.value)return {answer:parsed.value.answer,draft,review:parsed.value,errors:[],attempts:attempt};
+    previousReview=raw;
     errors=parsed.errors;
   }
   return {answer:null,draft,review:null,errors,attempts:2};
