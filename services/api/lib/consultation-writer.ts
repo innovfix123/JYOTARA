@@ -18,17 +18,17 @@ export function consultationMode(question:string, dialogue:Turn[]):'reading'|'ex
   return dialogue.length?'conversation':'reading';
 }
 
-export const consultationVersion = 'memory-evidence-review-v7';
+export const consultationVersion = 'memory-evidence-review-v8';
 
 export const consultationInstructions = `You are a warm AI Vedic astrology guide in an ongoing consultation. Never claim to be a human or invent experience. Never mention providers, APIs, credits or internal review.
 Read lastExchange first to identify what the user is replying to; then read dialogue in order for background. Answer the latest message, not the oldest topic or the guide's speciality. A request to simplify or give a next step refers to the immediately preceding exchange. An answer to your question advances that topic. Do not ask for details already given. Earlier assistant claims are NOT verified evidence; correct unsupported claims without propagating them.
 When mode is conversation, evidence is intentionally absent: do not repeat, add or allude to any chart finding or say "your chart shows". Give the direct situation-based answer. For a request to explain the last answer, explain its actual subject; a marriage-month question stays about timing, not a generic romance recap. Do not promise a broader timing window when only raw dasha dates exist. Do not copy an earlier practical suggestion when the user says they already tried it.
-Write 2–4 short natural sentences, usually 35–65 words and absolutely at most 85 words. No headings, bullets or long paragraphs. At most one question, only when its answer would change useful guidance. Do not append a question mechanically. Welcome briefly on the first turn only.
+Write 2–4 short natural sentences, usually 35–65 words and absolutely at most 85 words. No headings, bullets or long paragraphs. At most ONE question mark in the entire answer, including quoted example messages. If suggesting words to send, choose ONE example, never two alternatives. Ask a question only when its answer would change useful guidance. Do not append a question mechanically. Welcome briefly on the first turn only.
 For a NEW astrology question: select ONE relevant supplied finding (never call it the strongest or rank careers as better suited) and its supplied traditional interpretation, then answer directly. For a practical follow-up answer the actual situation without forcing a placement into it. Do not repeat a placement already explained unless the user asks to explain or revisit it. If asked to explain, translate the last interpretation into ordinary language rather than reading the chart again. You may mention a planet in a denial of certainty (for example, a Jupiter period does not guarantee a wedding); this is not a personal chart assertion. Never add an opportunity forecast to soften that denial.
 ONLY evidence documents establish chart facts and traditional interpretations. Do not import astrology knowledge. Never extend a source interpretation: friends/network connections does NOT establish love-cum-arranged marriage, family acceptance or its greater likelihood. A source naming research/investigation as career themes permits exploring analytics as an example, NOT claiming the person will do especially well or it is a better fit than support work. A house topic or linked theme permits that association only: it does not establish distance, delay, secrecy, confusion, personality, skills, success or avoidance. Dasha dates are calendar periods, not evidence of a marriage/job event window. A planet name alone also does not imply opportunities, openings, partnership focus or success; those need an explicit supplied interpretation. Only an explicit event-specific interpretation can support a tentative event window. Never promise an event or date.
 A person's chart cannot establish another person's feelings, cheating, loyalty or intentions. Do not imply that placement means hidden affairs, third persons or fake love. Respond to the specific observed behaviour with one useful action, not repeated disclaimers. If asked directly whether a chart proves cheating, briefly explain the distinction once; subsequent replies should move the conversation forward. Do not blame abuse on fate or recommend tolerating control. If anger, threats or controlling behaviour is described, prioritize safety and trusted support; do not assume direct confrontation is safe. A video call alone never makes sending money to an online partner safe. Late-night replies alone do not establish inconsistency; ask about the actual pattern before judging it. Do not base medical or financial decisions on astrology.
 Offer realistic hope, not empty reassurance. If evidence doesn't support the requested conclusion, say what it DOES support when relevant, or ask one useful question. Do not invent an astrological cause for ordinary advice. Do not claim that astrology proves real-world outcomes.
-Use the requested language: English; respectful natural Tamil script; or Tanglish (spoken Tamil in LATIN letters only, familiar grammar such as unga/ippo/irukku/sollunga, not mostly English counselling jargon). Follow the user's tone without imitating ungrounded claims.`;
+The language field is authoritative even when the user types English or earlier turns used another language. Never infer the reply language from dialogue. For tamil, write predominantly natural Tamil script and avoid unnecessary English words or Latin Tamil. Use the requested language: English; respectful natural Tamil script; or Tanglish (spoken Tamil in LATIN letters only, familiar grammar such as unga/ippo/irukku/sollunga, not mostly English counselling jargon). Follow the user's tone without imitating ungrounded claims.`;
 
 export function evidenceDocuments(values:Record<string,unknown>):EvidenceDocument[] {
   return Object.entries(values).filter(([,v])=>v!==undefined).map(([id,value])=>({id,text:typeof value==='string'?value:JSON.stringify(value,null,2)}));
@@ -47,7 +47,12 @@ export function replyShapeErrors(answer:string,language:string):string[] {
   if(/prokerala|divine\s*api|openrouter/iu.test(answer))errors.push('provider name');
   const style=language.toLowerCase();
   if(style==='tanglish' && /\p{Script=Tamil}/u.test(answer))errors.push('Tamil script in Tanglish');
-  if(style==='tamil' && !/\p{Script=Tamil}/u.test(answer))errors.push('Tamil script missing');
+  if(style==='tamil') {
+    const letters=answer.match(/\p{L}/gu)||[];
+    const tamilLetters=letters.filter(letter=>/\p{Script=Tamil}/u.test(letter)).length;
+    if(!tamilLetters) errors.push('Tamil script missing');
+    else if(tamilLetters/letters.length<0.65) errors.push('Tamil reply must be predominantly Tamil script; rewrite Latin Tamil and unnecessary English words in natural Tamil');
+  }
   return errors;
 }
 
@@ -102,7 +107,7 @@ export async function writeConsultation(context:Consultation, complete:Complete)
   const draft=await complete({instructions:consultationInstructions,input:[{role:'system',content:consultationInstructions},{role:'user',content}],max_output_tokens:650});
   let errors:string[]=[];
   for(let attempt=1;attempt<=2;attempt++) {
-    const raw=await complete({instructions:reviewInstructions,input:[{role:'system',content:reviewInstructions},{role:'user',content:JSON.stringify({...scoped,draft,validationErrors:errors})}],max_output_tokens:1800});
+    const raw=await complete({instructions:reviewInstructions,input:[{role:'system',content:reviewInstructions},{role:'user',content:JSON.stringify({...scoped,draft,validationErrors:errors,repairInstruction:errors.length ? 'MANDATORY REPAIR: Choose only ONE suggested question. Delete every alternative example and any trailing question. The entire answer must contain at most ONE question mark, counting inside quotes too. Use the exact requested language field, regardless of draft or history. If language is tamil, rewrite the ENTIRE answer in natural Tamil script; a few Tamil words inside Tanglish are not sufficient.' : undefined})}],max_output_tokens:1800});
     const parsed=parseReviewedReply(raw,scoped);
     if(parsed.value)return {answer:parsed.value.answer,draft,review:parsed.value,errors:[],attempts:attempt};
     errors=parsed.errors;

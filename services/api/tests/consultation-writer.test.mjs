@@ -63,3 +63,8 @@ test('citation retry identifies invented quote and rejects it again',async()=>{
  assert.equal(result.answer,null);
  assert.match(requests[2].input.at(-1).content,/Citation not found in document house/);
 });
+
+test('Tamil selection rejects mostly Tanglish even if it contains a few Tamil words',()=>{
+ assert.ok(replyShapeErrors('Ava night shift nu sonna pressure illaama கேளுங்க. Oru message mattum anuppunga.', 'tamil').some(e=>e.includes('predominantly')));
+ assert.deepEqual(replyShapeErrors('அவர் இரவு வேலை செய்வதால் பகலில் ஓய்வு தேவைப்படலாம். ஓய்வு எடுத்த பிறகு பேச வசதியான நேரத்தைச் சொல்லச் சொல்லுங்கள்.', 'tamil'),[]);
+});
