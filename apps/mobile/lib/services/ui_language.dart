@@ -375,6 +375,12 @@ const tamilUi = <String, String>{
   'A noon estimate will be used. Rasi/Nakshatra may change during the day; Lagnam and Dasa guidance are withheld.': 'நண்பகல் நேரம் தோராயமாகப் பயன்படுத்தப்படும். அன்றைய நாளில் ராசி அல்லது நட்சத்திரம் மாறக்கூடும்; லக்னம் மற்றும் தசை வழிகாட்டல் வழங்கப்படாது.',
   'Birth town, city or district': 'பிறந்த ஊர், நகரம் அல்லது மாவட்டம்',
   'For example: Erode': 'எடுத்துக்காட்டு: Erode',
+  'Birthplace selected': 'பிறந்த இடம் தேர்ந்தெடுக்கப்பட்டது',
+  'Select a birthplace from the search results.': 'தேடல் முடிவிலிருந்து பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.',
+  'Select your birthplace from the search results below the field.': 'இடத்திற்குக் கீழே உள்ள தேடல் முடிவிலிருந்து பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.',
+  'Choose your date of birth.': 'பிறந்த தேதியைத் தேர்ந்தெடுக்கவும்.',
+  'Choose your birth time or select unknown.': 'பிறந்த நேரத்தைத் தேர்ந்தெடுக்கவும் அல்லது தெரியவில்லை என்பதைத் தேர்ந்தெடுக்கவும்.',
+  'Confirm consent to calculate this chart.': 'இந்த ஜாதகத்தைக் கணக்கிட அனுமதியை உறுதிசெய்யவும்.',
   'Searching…': 'தேடுகிறது…',
   'Search birthplace': 'பிறந்த இடத்தைத் தேடவும்',
   'Location data: astrology calculation service':

@@ -95,7 +95,10 @@ class _BirthFormState extends State<BirthForm> {
 
   Future<void> _search() async {
     _searchDebounce?.cancel();
-    final query = _placeQuery.text.trim();
+    // Keyboard Search can fire after a result is selected. Do not invalidate
+    // coordinates by searching the display label again. Edits clear _place.
+    if (_place != null) return;
+    final query = _placeQuery.text.trim().split(',').first.trim();
     if (query.length < 3) return;
     final revision = ++_searchRevision;
     setState(() {
@@ -129,14 +132,16 @@ class _BirthFormState extends State<BirthForm> {
       setState(() => _showGender = true);
       return;
     }
-    if (_date == null ||
-        (!_unknown && _time == null) ||
-        _place == null ||
-        !_consent) {
-      setState(
-        () => _error =
-            'Choose your date, time and birthplace, then confirm consent.',
-      );
+    final missing = <String>[
+      if (_date == null) 'Choose your date of birth.',
+      if (!_unknown && _time == null)
+        'Choose your birth time or select unknown.',
+      if (_place == null)
+        'Select your birthplace from the search results below the field.',
+      if (!_consent) 'Confirm consent to calculate this chart.',
+    ];
+    if (missing.isNotEmpty) {
+      setState(() => _error = missing.first);
       return;
     }
     if (_date!.isAfter(latestEligibleBirthDate(DateTime.now()))) {
@@ -360,6 +365,7 @@ class _BirthFormState extends State<BirthForm> {
               ),
             const SizedBox(height: 16),
             TextField(
+              key: const Key('birthplaceField'),
               controller: _placeQuery,
               enabled: !_busy,
               onChanged: (_) {
@@ -382,6 +388,15 @@ class _BirthFormState extends State<BirthForm> {
               decoration: InputDecoration(
                 labelText: uiText(context, 'Birth town, city or district'),
                 hintText: uiText(context, 'For example: Erode'),
+                helperText: uiText(
+                  context,
+                  _place == null
+                      ? 'Select a birthplace from the search results.'
+                      : 'Birthplace selected',
+                ),
+                suffixIcon: _place == null
+                    ? null
+                    : const Icon(Icons.check_circle, color: Colors.green),
               ),
             ),
             TextButton.icon(
@@ -410,8 +425,10 @@ class _BirthFormState extends State<BirthForm> {
                           _place = row;
                           _placeQuery.text = '${row[1]}, ${row[2]}';
                           _places = [];
+                          _error = null;
                           _searching = false;
                         });
+                        FocusScope.of(context).unfocus();
                       },
                 title: UiText('${row[1]}, ${row[2]}'),
                 subtitle: const UiText('India · IST'),
