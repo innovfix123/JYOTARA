@@ -370,7 +370,7 @@ test('Divine route verifies birth details, replays without charge and isolates p
   const {POST}=await import(`${route}#divine`);
   const person={datetime:'2001-06-12T06:20:00+05:30',latitude:13.0827,longitude:80.2707,name:'QA alias',gender:'male',place:'Chennai'};
   const chart={rashi:'Meena',nakshatra:'Uttara Bhadrapada',planets:[],yogas:[]};
-  const ticket=await issueChartTicket(secret,{sessionId:'owner',profileId:'one',chart,birthTimeKnown:true,birthDatetime:person.datetime,contextLocation:{latitude:person.latitude,longitude:person.longitude}});
+  const ticket=await issueChartTicket(secret,{sessionId:'owner',profileId:'one',chart,birthTimeKnown:true,birthDatetime:person.datetime,contextLocation:{latitude:person.latitude,longitude:person.longitude}},Date.now()-2*86400000);
   const base={requestId:'divine-question-0001',profileId:'one',chartTicket:ticket,category:'Marriage',question:'When will I get married?',language:'en',responseStyle:'english',reportPerson:person};
   const post=body=>POST(new Request('https://test/api/guidance',{method:'POST',headers:{cookie:'nirayana_pilot_session=owner','content-type':'application/json'},body:JSON.stringify(body)}));
   const first=await (await post(base)).json();assert.equal(first.answer,reading);assert.equal(first.answerMode,'provider_reading');assert.equal(requests.length,2);

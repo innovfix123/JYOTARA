@@ -3,7 +3,7 @@ import { writeConsultation, evidenceDocuments } from '@/lib/consultation-writer'
 import { profileOverviewQuestion, profileOverview, saturnStatus } from '@/lib/profile-overview';
 import { env } from 'cloudflare:workers';
 import { chartSessionDeleted } from '@/db/profile-deletion';
-import { chartTicketConfigured, openChartTicket } from '@/lib/chart-ticket';
+import { chartTicketConfigured, openChartTicket, openBirthGuidanceTicket } from '@/lib/chart-ticket';
 import { requestIdentity, reserveQuestion, sealReply, openReply, eraseGuidanceContent, completeQuestion } from '@/db/guidance-requests';
 import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
@@ -199,7 +199,7 @@ export async function POST(request: Request) {
   if (!chartTicketConfigured(chartSecret)) {
     return Response.json({ error: 'Chart protection is not configured.' }, { status: 503 });
   }
-  const trusted = await openChartTicket(chartSecret, body.chartTicket, session.id, body.profileId);
+  const trusted = await openChartTicket(chartSecret, body.chartTicket, session.id, body.profileId) ?? (env.JYOTARA_CHAT_PROVIDER === 'divine' ? await openBirthGuidanceTicket(chartSecret,body.chartTicket,session.id,body.profileId) : null);
   if (!trusted) return Response.json({ error: 'Your chart session is missing or expired. Please reopen your profile.' }, { status: 401 });
   if (await chartSessionDeleted(env.DB, session.id)) return Response.json({ error: 'This chart session was deleted.', code: 'profile_deleted' }, { status: 410 });
   // Client chart/birthTimeKnown fields are never used as evidence, even if present.

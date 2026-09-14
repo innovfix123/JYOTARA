@@ -6,7 +6,7 @@ const compile = text => ts.transpileModule(text, {compilerOptions: {target: ts.S
 const url = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const evidence = url(compile(readFileSync(new URL('../lib/astrology-evidence.ts', import.meta.url), 'utf8')));
 const ticket = url(compile(readFileSync(new URL('../lib/chart-ticket.ts', import.meta.url), 'utf8')).replace('./astrology-evidence', evidence));
-const { issueChartTicket, openChartTicket, openChartRenewalTicket, openChartDeletionTicket, chartProviderDataFresh } = await import(ticket);
+const { issueChartTicket, openBirthGuidanceTicket, openChartTicket, openChartRenewalTicket, openChartDeletionTicket, chartProviderDataFresh } = await import(ticket);
 
 test('renewal window cannot substitute for refreshing provider data', async () => {
   const secret = 'ab'.repeat(32), now = Date.UTC(2026,8,7), day = 86400000;
@@ -62,4 +62,16 @@ test('encrypted chart capability binds session/profile, rejects tampering and ex
   assert.deepEqual((await openChartTicket(secret, located, input.sessionId, input.profileId, now)).contextLocation, location);
   await assert.rejects(issueChartTicket(secret, { ...input, contextLocation: { latitude: 91, longitude: 77 } }, now));
   await assert.rejects(issueChartTicket(secret, { ...input, contextLocation: { latitude: 11, longitude: NaN } }, now));
+});
+
+test('birth-only reading access preserves calculation age and fixed renewal boundary',async()=>{
+ const secret='bc'.repeat(32),now=Date.UTC(2026,8,12),day=86400000;
+ const input={sessionId:'birth-owner',profileId:'birth-profile',birthTimeKnown:true,birthDatetime:'2001-06-12T06:20:00+05:30',contextLocation:{latitude:13,longitude:80},chart:{rashi:'Kumbha',nakshatra:'Dhanishta',planets:[],yogas:[]}};
+ const token=await issueChartTicket(secret,input,now);
+ const renewed=await openBirthGuidanceTicket(secret,token,input.sessionId,input.profileId,now+2*day);
+ assert.equal(renewed.birthDatetime,input.birthDatetime);assert.equal(renewed.providerCalculatedAt,now);
+ assert.equal(chartProviderDataFresh(renewed,now+2*day),false);
+ assert.equal(renewed.expiresAt,now+3*day);
+ assert.equal(await openBirthGuidanceTicket(secret,token,'other',input.profileId,now+2*day),null);
+ assert.equal(await openBirthGuidanceTicket(secret,token,input.sessionId,input.profileId,now+30*day),null);
 });

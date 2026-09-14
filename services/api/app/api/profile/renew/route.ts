@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { chartTicketConfigured, chartProviderDataFresh, openChartRenewalTicket } from '@/lib/chart-ticket';
+import { chartTicketConfigured, chartProviderDataFresh, openChartRenewalTicket, openBirthGuidanceTicket } from '@/lib/chart-ticket';
 import { chartSessionDeleted } from '@/db/profile-deletion';
 
 export async function POST(request: Request) {
@@ -12,6 +12,12 @@ export async function POST(request: Request) {
   const ticket = await openChartRenewalTicket(chartSecret, body?.chartTicket, session ?? '', body?.profileId, now);
   if (!ticket) return Response.json({ error: 'This saved chart cannot be renewed. Its protected renewal window may have expired.', code: 'renewal_unavailable' }, { status: 401 });
   if (await chartSessionDeleted(env.DB, ticket.sessionId, now)) return Response.json({ error: 'This chart session was deleted.', code: 'profile_deleted' }, { status: 410 });
+  if (env.JYOTARA_CHAT_PROVIDER === 'divine') {
+    const access=await openBirthGuidanceTicket(chartSecret,body?.chartTicket,session??'',body?.profileId,now);
+    if(access)return Response.json({profileId:ticket.profileId,chartTicket:body!.chartTicket,
+      chatAuthorizedAt:new Date(now).toISOString(),chatExpiresAt:new Date(access.expiresAt).toISOString(),
+      renewed:true,natalRecalculated:false},{headers:{'Cache-Control':'no-store'}});
+  }
   if (!chartProviderDataFresh(ticket, now)) return Response.json({
     error: 'Your calculation needs a provider refresh before another reading. No paid refresh has been started. Your saved birth details have not been deleted.',
     code: 'provider_refresh_required', natalRecalculated: false,

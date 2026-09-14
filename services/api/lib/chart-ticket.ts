@@ -113,3 +113,11 @@ async function readChartTicket(secret: string, token: unknown, sessionId: string
     return value as ChartTicket;
   } catch { return null; }
 }
+
+/** Fresh readings use immutable verified birth inputs, not stale chart context.
+ * The original renewal deadline still bounds access; no calculation is relabelled. */
+export async function openBirthGuidanceTicket(secret:string,token:unknown,sessionId:string,profileId:unknown,now=Date.now()):Promise<ChartTicket|null> {
+  const ticket=await openChartRenewalTicket(secret,token,sessionId,profileId,now);
+  if(!ticket?.birthTimeKnown||!ticket.birthDatetime||!ticket.contextLocation)return null;
+  return {...ticket,expiresAt:Math.min(ticket.renewalUntil!,now+lifetime)};
+}
