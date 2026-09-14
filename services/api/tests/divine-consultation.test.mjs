@@ -19,7 +19,11 @@ test('editor rejects invented numeric claims, wrong scripts and incomplete answe
  assert.equal(parseEdited(JSON.stringify({...edited,answer:'Marriage arrives in 2029.'}),reading,'english'),null);
  assert.equal(parseEdited(JSON.stringify({...edited,source_quotes:['Invented quote']}),reading,'english'),null);
  assert.equal(validChatText('Unfinished','english'),false);
+ assert.equal(validChatText('Your Gemini Ascendant favours communication.','english'),true);
+ assert.equal(validChatText('The Gemini model wrote this.','english'),false);
  assert.equal(validChatText('English sentence.','tamil'),false);
+ assert.equal(validChatText('\u0b95\u0bc1\u0bb0\u0bc1.','source'),true);
+ assert.equal(validChatText('\u0b95\u0bc1\u0bb0\u0bc1.','tanglish'),false);
 });
 test('one reading and one edit, context carried, cleanup acknowledged',async()=>{
  const calls=[];const store=db();

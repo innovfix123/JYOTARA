@@ -17,8 +17,8 @@ export function validChatText(answer:unknown,style:string,maxWords=85):answer is
   if(typeof answer!=='string'||!answer.trim()||answer.length>1800||answer.trim().split(/\s+/).length>maxWords)return false;
   if(!/[.!?]["'\u201d)]*$/.test(answer.trim())||answer.includes('```'))return false;
   if(style==='tamil'&&(!/[\u0b80-\u0bff]/.test(answer)||/[A-Za-z]/.test(answer)))return false;
-  if(style!=='tamil'&&/[\u0b80-\u0bff]/.test(answer))return false;
-  if(/prokerala|divine\s*api|openrouter|gemini|gpt[- ]?\d/i.test(answer))return false;
+  if(['english','tanglish'].includes(style)&&/[\u0b80-\u0bff]/.test(answer))return false;
+  if(/prokerala|divine\s*api|openrouter|gemini[-/ ](?:[23]|flash|model)\b|gpt[- ]?\d/i.test(answer))return false;
   return true;
 }
 export function parseEdited(raw:string,source:string,style:string) {
@@ -51,7 +51,7 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
   let answer:string|null=null;
   try {
     const lens=['Love','Marriage','Relationships','Breakup','Family'].includes(input.category)?'love':input.category==='Career'?'career':input.category==='Business'?'money':input.category==='Spiritual'?'spiritual':'general';
-    const notes='Answer in 2 short complete sentences. Give one relevant Vedic chart finding and its traditional interpretation, then answer the actual question. Preserve uncertainty. Use earlier conversation corrections, avoid repetition. Ask at most one useful missing detail. No generic texting schedules or sales pitches.';
+    const notes='Answer in 2 short complete sentences, at most 60 words. Give one relevant Vedic chart finding and its traditional interpretation, then answer the actual question. Preserve uncertainty. Use earlier conversation corrections, avoid repetition. Ask at most one useful missing detail. No generic texting schedules or sales pitches.';
     const message=input.dialogue.length?JSON.stringify({conversation_context:input.dialogue.slice(-12),current_question:input.question}):input.question;
     const charge:ChatUsage={provider:'divine',status:'submitted'};calls.push(charge);
     const response=await send('https://ask.divineapi.com/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
@@ -65,7 +65,7 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
     charge.status='completed';
     if(Number.isFinite(original.credits_charged))charge.credits=original.credits_charged;
     const source=original.answer;
-    if(!validChatText(source,'english',180))throw Error('Incomplete reading');
+    if(!validChatText(source,'source',180))throw Error('Incomplete reading');
     const model=config.OPENROUTER_MODEL||'google/gemini-2.5-flash';
     const modelCharge:ChatUsage={provider:'openrouter',model,status:'submitted'};calls.push(modelCharge);
     const polished=await send('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${config.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({
