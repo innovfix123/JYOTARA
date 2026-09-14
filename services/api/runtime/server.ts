@@ -1,3 +1,4 @@
+import {cleanDivineSessions} from './divine-cleanup';
 import { PhoneAuth } from './phone-auth';
 import { discardPending } from './discard-pending';
 import { daily, matching } from './discovery';
@@ -99,6 +100,8 @@ const server = createServer(async (incoming, outgoing) => {
     outgoing.end(JSON.stringify({ error: 'Jyotara is temporarily unavailable.' }));
   }
 });
+const cleanupTimer=setInterval(()=>{void cleanDivineSessions().catch(()=>console.warn('Provider cleanup unavailable'));},3600000);
+cleanupTimer.unref();
 server.requestTimeout = 30000;
 server.headersTimeout = 10000;
 server.keepAliveTimeout = 5000;

@@ -22,6 +22,7 @@ const protectedRouteCode = routeCode.replace('@/db/guidance-requests', moduleUrl
   .replace('@/db/profile-deletion', url(compile(readFileSync(new URL('../db/profile-deletion.ts', import.meta.url), 'utf8')).replace('./guidance-requests', moduleUrl('../db/guidance-requests.ts'))))
   .replace('@/lib/career-response', careerUrl)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
+  .replace('@/lib/divine-consultation', moduleUrl('../lib/divine-consultation.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(readFileSync(new URL('../lib/provider-chart.ts', import.meta.url), 'utf8')).replace('./astrology-evidence', evidenceUrl)));

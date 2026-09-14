@@ -444,7 +444,7 @@ class _BirthFormState extends State<BirthForm> {
                 'I am 13+ and agree to process my birth details for automated Vedic guidance.',
               ),
               subtitle: const UiText(
-                'Name or alias, selected gender and birth details go to astrology calculation service when a detailed report is requested; chart facts and your question go to the language service. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
+                'Name or alias, selected gender, birth details, your question and recent chat context go to our astrology service for chat readings. Its reading and your question go to our language service. Astrology conversations may remain with the service while requested deletion is pending. Your chart and chat history are saved in encrypted storage on this device. Delete them from the Chart tab. Creating a profile turns optional research sharing off; you can choose it separately in Account. For a connected profile, the Chart tab can also delete server chart and answer copies. Minimal usage records remain; backup copies expire within eight days.',
               ),
             ),
             const UiText(

@@ -381,7 +381,7 @@ class JyotaraApiClient {
             },
             body: jsonEncode(body),
           )
-          .timeout(const Duration(seconds: 40));
+          .timeout(Duration(seconds: path == '/api/guidance' ? 75 : 40));
     } on TimeoutException {
       throw const JyotaraApiException(
         'The request timed out before an answer was received.',

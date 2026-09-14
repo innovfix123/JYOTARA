@@ -23,7 +23,7 @@ export async function tamilTranslation(texts: string[]): Promise<string[]> {
   if(!response.ok) throw Error('Translation unavailable');
   const body:any=await response.json();
   const raw=body.output_text ?? body.output?.flatMap((x:any)=>x.content??[]).filter((x:any)=>x.type==='output_text').map((x:any)=>x.text).join('');
-  const result=JSON.parse(raw);
+  const result=JSON.parse(raw.replace(/^\s*```(?:json)?\s*/i,'').replace(/\s*```\s*$/,''));
   if(!Array.isArray(result)||result.length!==texts.length||result.some(x=>typeof x!=='string'||!/[\u0b80-\u0bff]/u.test(x))) throw Error('Invalid translation');
   return result;
 }

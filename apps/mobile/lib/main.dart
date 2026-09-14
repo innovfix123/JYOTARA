@@ -1603,7 +1603,7 @@ class ChartScreen extends StatelessWidget {
                               scrollable: true,
                               content: UiText(
                                 active.canDeleteServer
-                                    ? 'Delete this session’s server chart cache, research questions and answer copies, then clear this device’s profile and history. Minimal usage and revocation records remain. Internet is required; if deletion fails, keep this app installed and retry.'
+                                    ? 'Delete this session’s server chart cache, research questions and answer copies, then clear this device’s profile and history. Minimal usage and revocation records remain. External astrology conversation deletion may still be pending. Internet is required; if deletion fails, keep this app installed and retry.'
                                     : 'This deletes the saved chart and chat history from this device. It does not delete server usage records.',
                               ),
                               actions: [
@@ -2454,7 +2454,7 @@ class _DisclosureCard extends StatelessWidget {
         SizedBox(width: 11),
         Expanded(
           child: UiText(
-            'Your birth details are sensitive. Manage or delete your saved profile from the Chart tab. Research sharing is optional.',
+            'Your birth details, questions and recent chat context are processed by astrology and language services. External astrology conversation deletion may still be pending after local and server deletion. Manage your saved profile from the Chart tab. Research sharing is optional.',
             style: TextStyle(color: muted, height: 1.4),
           ),
         ),

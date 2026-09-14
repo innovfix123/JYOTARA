@@ -11,5 +11,8 @@ declare namespace Cloudflare {
     JYOTARA_CHART_TICKET_KEY?: string;
     NIRAYANA_CHART_TICKET_KEY?: string;
     OPENROUTER_MODEL?: string;
+    JYOTARA_CHAT_PROVIDER?: string;
+    DIVINE_API_KEY?: string;
+    DIVINE_ACCESS_TOKEN?: string;
   }
 }

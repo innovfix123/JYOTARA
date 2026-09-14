@@ -79,6 +79,7 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  "Your birth details, questions and recent chat context are processed by astrology and language services. External astrology conversation deletion may still be pending after local and server deletion. Manage your saved profile from the Chart tab. Research sharing is optional.": "உங்கள் பிறந்த விவரங்கள், கேள்விகள் மற்றும் சமீபத்திய உரையாடல்கள் ஜோதிட மற்றும் மொழிச் சேவைகளில் செயலாக்கப்படுகின்றன. சாதனம் மற்றும் எங்கள் சேவையகத்தில் நீக்கிய பின்னரும் வெளிச் சேவையின் உரையாடல் நீக்கம் நிலுவையில் இருக்கலாம். ஜாதகம் பகுதியில் விவரங்களை நிர்வகிக்கலாம். ஆய்வுப் பகிர்வு உங்கள் விருப்பம்.",
   'Ashta Kuta': 'அஷ்டகூடப் பொருத்தம்',
   'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.': 'பிறந்த நேரம் தெரியாவிட்டால் நண்பகல் நேரத்தில் உத்தேசமாக ஒப்பிடுவோம். உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.',
   'The daily reading is unavailable right now. Please try again later.': 'தினசரிப் பலன் இப்போது கிடைக்கவில்லை. சிறிது நேரத்தில் மீண்டும் முயலவும்.',
@@ -376,11 +377,13 @@ const tamilUi = <String, String>{
   'Birth town, city or district': 'பிறந்த ஊர், நகரம் அல்லது மாவட்டம்',
   'For example: Erode': 'எடுத்துக்காட்டு: Erode',
   'Birthplace selected': 'பிறந்த இடம் தேர்ந்தெடுக்கப்பட்டது',
-  'Select a birthplace from the search results.': 'தேடல் முடிவிலிருந்து பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.',
+  'Select a birthplace from the search results.':
+      'தேடல் முடிவிலிருந்து பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.',
   'Select your birthplace from the search results below the field.': 'இடத்திற்குக் கீழே உள்ள தேடல் முடிவிலிருந்து பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.',
   'Choose your date of birth.': 'பிறந்த தேதியைத் தேர்ந்தெடுக்கவும்.',
   'Choose your birth time or select unknown.': 'பிறந்த நேரத்தைத் தேர்ந்தெடுக்கவும் அல்லது தெரியவில்லை என்பதைத் தேர்ந்தெடுக்கவும்.',
-  'Confirm consent to calculate this chart.': 'இந்த ஜாதகத்தைக் கணக்கிட அனுமதியை உறுதிசெய்யவும்.',
+  'Confirm consent to calculate this chart.':
+      'இந்த ஜாதகத்தைக் கணக்கிட அனுமதியை உறுதிசெய்யவும்.',
   'Searching…': 'தேடுகிறது…',
   'Search birthplace': 'பிறந்த இடத்தைத் தேடவும்',
   'Location data: astrology calculation service':

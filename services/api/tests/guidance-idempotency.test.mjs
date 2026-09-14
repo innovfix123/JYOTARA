@@ -24,6 +24,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/db/profile-deletion', deletion)
   .replace('@/lib/career-response', career)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
+  .replace('@/lib/divine-consultation', moduleUrl('../lib/divine-consultation.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
@@ -349,4 +350,37 @@ test('guidance refresh uses ticket-bound location and shared context, never call
   assert.deepEqual(await openReply(secret, 'profile:large', sealed, 2_000_000), chart);
   await assert.rejects(openReply(secret, 'profile:other', sealed, 2_000_000));
   await assert.rejects(sealReply(secret, 'profile:large', { value: 'x'.repeat(2_000_001) }, 2_000_000));
+});
+
+test('Divine route verifies birth details, replays without charge and isolates provider conversations',async()=>{
+ const db=new DatabaseSync(':memory:');
+ for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence','0013_divine_cleanup'])db.exec(source(`../drizzle/${name}.sql`));
+ const secret='ef'.repeat(32);const old=globalThis.fetch;const requests=[];
+ globalThis.__receiptTestEnv={NIRAYANA_CHART_TICKET_KEY:secret,JYOTARA_CHAT_PROVIDER:'divine',DIVINE_API_KEY:'test',OPENROUTER_API_KEY:'test',DB:{
+  prepare(sql){let args=[];return{bind(...v){args=v;return this;},async run(){return{meta:{changes:Number(db.prepare(sql).run(...args).changes)}};},async first(){return db.prepare(sql).get(...args)||null;}};}
+ }};
+ const reading='Venus may favour commitment. Marriage discussions may progress slowly.';
+ globalThis.fetch=async(url,opts)=>{
+  if(opts.method==='DELETE')return Response.json({deleted:true});
+  requests.push({url,payload:JSON.parse(opts.body)});
+  if(url.includes('ask.divine'))return Response.json({answer:reading,credits_charged:30});
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer:reading,source_quotes:['Venus may favour commitment.']})}}]});
+ };
+ try{
+  const {POST}=await import(`${route}#divine`);
+  const person={datetime:'2001-06-12T06:20:00+05:30',latitude:13.0827,longitude:80.2707,name:'QA alias',gender:'male',place:'Chennai'};
+  const chart={rashi:'Meena',nakshatra:'Uttara Bhadrapada',planets:[],yogas:[]};
+  const ticket=await issueChartTicket(secret,{sessionId:'owner',profileId:'one',chart,birthTimeKnown:true,birthDatetime:person.datetime,contextLocation:{latitude:person.latitude,longitude:person.longitude}});
+  const base={requestId:'divine-question-0001',profileId:'one',chartTicket:ticket,category:'Marriage',question:'When will I get married?',language:'en',responseStyle:'english',reportPerson:person};
+  const post=body=>POST(new Request('https://test/api/guidance',{method:'POST',headers:{cookie:'nirayana_pilot_session=owner','content-type':'application/json'},body:JSON.stringify(body)}));
+  const first=await (await post(base)).json();assert.equal(first.answer,reading);assert.equal(first.answerMode,'provider_reading');assert.equal(requests.length,2);
+  assert.equal(first.providerUsage.calls[0].credits,30);
+  const replay=await (await post(base)).json();assert.equal(replay.replayed,true);assert.equal(requests.length,2);
+  await post({...base,requestId:'divine-question-0002',question:'What about family approval?',conversationHistory:[{role:'user',content:base.question},{role:'assistant',content:reading}]});
+  assert.equal(requests.length,4);assert.notEqual(requests[0].payload.session_id,requests[2].payload.session_id);
+  assert.ok(requests[2].payload.message.includes('family approval'));
+  const mismatch=await (await post({...base,requestId:'divine-question-0003',reportPerson:{...person,datetime:'2002-06-12T06:20:00+05:30'}})).json();
+  assert.equal(mismatch.answerMode,'reading_unavailable');assert.equal(requests.length,4,'unverified birth details must not reach provider');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM divine_cleanup').get().n,0);
+ }finally{globalThis.fetch=old;delete globalThis.__receiptTestEnv;db.close();}
 });

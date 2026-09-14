@@ -1,3 +1,4 @@
+import { divineConsultation } from '@/lib/divine-consultation';
 import { writeConsultation, evidenceDocuments } from '@/lib/consultation-writer';
 import { profileOverviewQuestion, profileOverview, saturnStatus } from '@/lib/profile-overview';
 import { env } from 'cloudflare:workers';
@@ -247,6 +248,28 @@ export async function POST(request: Request) {
   const scripted = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, history, style);
   // Context-aware wording for ordinary conversation; dedicated sensitive boundaries remain.
   let practical = scripted && ['privacy', 'no_contact'].includes(scripted.kind) ? scripted : null;
+  if (env.JYOTARA_CHAT_PROVIDER === 'divine' && safetyPacket.intent !== 'high_stakes' && !practical && question !== profileOverviewQuestion) {
+    const person = reportPerson(body.reportPerson);
+    const verified = trusted.birthTimeKnown && person && (
+      (trusted.birthDatetime === person.datetime && trusted.contextLocation?.latitude === person.latitude && trusted.contextLocation?.longitude === person.longitude) ||
+      await verifiedReportPerson(env.DB,person,session.id,trusted.profileId,trusted.contextLocation,{
+        hash:async values=>(await requestIdentity(chartSecret,session.id,'profile-v1',values)).hash,
+        open:(id,cipher)=>openReply(chartSecret,id,cipher,2_000_000),
+      }));
+    const result = verified && person ? await divineConsultation(env,{id:identity.id,person,question,style,category:body.category,guide:body.guide,dialogue},env.DB) : {answer:null,calls:[]};
+    const unavailable = !verified
+      ? (style==='tamil'?'பிறந்த நேரத்துடன் சேமித்த விவரங்களைத் திறந்து உறுதிப்படுத்துங்கள்; அதன் பிறகு உங்கள் கேள்விக்கான ஜாதகப் பலனைப் பார்க்கலாம்.':style==='tanglish'?'Pirandha nerathoda saved details-a thirandhu urudhippaduthunga; appuram unga kelvikkaana jathaga palanai paarkalaam.':'Please confirm your saved birth details and birth time so I can prepare this chart reading.')
+      : (style==='tamil'?'பதிலைத் தயாரிப்பதில் தாமதம் ஏற்பட்டுள்ளது. சிறிது நேரத்தில் புதிய கேள்வியை அனுப்புங்கள்.':style==='tanglish'?'Badhil thayaarikka thaamadham aagudhu. Konjam nerathil pudhu kelviyai anuppunga.':'The reading could not be completed just now. Please send a new question in a moment.');
+    const reply={replayed:false,answer:result.answer||unavailable,answerMode:result.answer?'provider_reading':'reading_unavailable',
+      providerUsage:{calls:result.calls,newProviderCalls:result.calls.length},answeredAt:new Date().toISOString(),
+      evidence:[],support:'partially_supported',profileId:trusted.profileId};
+    const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,
+      question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,
+      consent:body.researchConsent===true?researchConsentVersion:null,ageBand,
+      ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
+    if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+    return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
+  }
   const charges:ProviderCharge[]=[];
   const providerAudit={requestId:identity.id,sessionId:session.id,charges};
   const wantsMarriageTiming= safetyPacket.intent!=='high_stakes' && safetyPacket.intent!=='additional_profile_required' && marriageTimingQuestion(question,history,body.category);
