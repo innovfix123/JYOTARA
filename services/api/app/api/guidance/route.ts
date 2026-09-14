@@ -1,16 +1,13 @@
+import { divineContext } from '@/lib/divine-calculations';
 import { divineConsultation } from '@/lib/divine-consultation';
-import { writeConsultation, evidenceDocuments } from '@/lib/consultation-writer';
-import { profileOverviewQuestion, profileOverview, saturnStatus } from '@/lib/profile-overview';
+import { profileOverviewQuestion, profileOverview } from '@/lib/profile-overview';
 import { env } from 'cloudflare:workers';
 import { chartSessionDeleted } from '@/db/profile-deletion';
 import { chartTicketConfigured, openChartTicket, openBirthGuidanceTicket } from '@/lib/chart-ticket';
 import { requestIdentity, reserveQuestion, sealReply, openReply, eraseGuidanceContent, completeQuestion } from '@/db/guidance-requests';
 import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
-import { meteredProkeralaFetch, type ProviderCharge } from '@/lib/prokerala-client';
-import { reportPerson, verifiedReportPerson, marriageTimingQuestion, loadMarriageReport, marriageReportReply } from '@/lib/marriage-report';
-import { prokeralaJson } from '@/lib/prokerala-client';
-import { reviewedCareerResponse } from '@/lib/career-response';
+import { reportPerson, verifiedReportPerson } from '@/lib/marriage-report';
 import { conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, relationshipFollowup, relationshipResponse, responseStyle, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
 import {
   buildTopicContext,
@@ -76,67 +73,6 @@ function outputText(payload: unknown) {
     .trim();
 }
 
-function practicalAdviceScope(packet: ReturnType<typeof buildEvidencePacket>) {
-  if (packet.intent === 'additional_profile_required' && !/how|what (?:can|should) (?:i|we)|help|discuss|plan|explain|எப்படி|என்ன.*செய்ய|பேச|eppadi|enna.*(?:panna|seiya)|share|express/iu.test(packet.question)) return false;
-  if (['Love', 'Relationships', 'Breakup', 'Marriage'].includes(packet.category)) return true;
-  const q = packet.question.toLocaleLowerCase();
-  if (/chart|astrolog|jathag|jothid|panchang|nakshatra|lagna|dasha|dasa|planet|ஜாதக|ஜோதிட|பஞ்சாங்க|நட்சத்திர|லக்ன|தசை|கிரக/u.test(q)) return false;
-  // Keep the reviewed career-reading route for broad vocation questions.
-  if (packet.category === 'Career') return /compar|offer|interview|practic|prepar|salary|resign|apply|applying|test|சம்பள|தயார|வேலை மாற|வேலையை விட|eppadi|practice/u.test(q);
-  return ['Education', 'Daily', 'Family', 'Business'].includes(packet.category);
-}
-
-async function generateNaturalAnswer(packet: ReturnType<typeof buildEvidencePacket>, sessionId: string, style: ResponseStyle, history: string[] = [], providerSources: ReturnType<typeof providerReadingSources> = [], chartContext?: ReturnType<typeof buildTopicContext>, guide?:string, dialogue: NonNullable<ReturnType<typeof conversationHistory>> = [], reviewedInterpretation?:string) {
-  const practicalScope = practicalAdviceScope(packet) || (env.PROKERALA_ENVIRONMENT === 'production' && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required') || (packet.category === 'Career' && packet.intent !== 'additional_profile_required');
-  const openRouterKey = env.OPENROUTER_API_KEY;
-  const openAiKey = env.OPENAI_API_KEY;
-  const apiKey = openRouterKey || openAiKey;
-
-  if (!practicalScope && !providerSources.length && !chartContext) return null;
-  // Career uses its separately constrained reviewed catalogue. Do not let a
-  // fluent model response bypass that gate or label fact repetition personal.
-  if (!apiKey || packet.intent === 'high_stakes') return null;
-  const safetyIdentifier = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(sessionId))
-    .then((value) => Array.from(new Uint8Array(value)).map((byte) => byte.toString(16).padStart(2, '0')).join('').slice(0, 48));
-
-  const readingContext = chartContext ? {
-    birthTimeKnown: chartContext.birthTimeKnown,
-    focus: chartContext.focus,
-    interpretationScope: chartContext.interpretationScope,
-    constraint: chartContext.constraint,
-    houses: chartContext.houses.map(({house, lord, lordHouse, topic, linkedTheme}) =>
-      ({house, lord, lordHouse, topic, linkedTheme})),
-    ...(chartContext.currentPanchang ? {currentPanchang:chartContext.currentPanchang} : {}),
-  } : undefined;
-  // Preserve both calculations and supplied interpretations; neither replaces the other.
-  const writerDeadline = AbortSignal.timeout(25_000);
-  const result = await writeConsultation({
-    question:packet.question, language:style, category:packet.category,
-    dialogue:dialogue.length ? dialogue : history.map(content=>({role:'user' as const,content})),
-    evidence:evidenceDocuments({chartContext:readingContext, interpretations:providerSources, facts:packet.facts, reviewed_interpretation:reviewedInterpretation}),
-    voice:guide ? `${guide}: ${guideVoices[guide]}` : undefined,
-  }, async request => {
-    const response = await fetch(openRouterKey ? 'https://openrouter.ai/api/v1/responses' : 'https://api.openai.com/v1/responses', {
-      method:'POST', signal:writerDeadline,
-      headers:{Authorization:`Bearer ${apiKey}`, 'Content-Type':'application/json', ...(openRouterKey ? {'X-OpenRouter-Title':'Jyotara'} : {})},
-      body:JSON.stringify({model:openRouterKey ? env.OPENROUTER_MODEL || 'openai/gpt-4.1-mini' : env.OPENAI_MODEL || 'gpt-5.4-nano',
-        store:false,safety_identifier:safetyIdentifier,...request}),
-    });
-    if(!response.ok)throw new Error('Consultation writer unavailable');
-    return outputText(await response.json());
-  });
-  const answer=result.answer;
-  if(!answer) { console.warn('consultation_unavailable', {stage:'review', attempts:result.attempts}); return null; }
-  const unsupportedAstrology = !reviewedInterpretation && !chartContext && !providerSources.length && practicalScope && /\b(?:moon|mercury|venus|jupiter|saturn|rahu|ketu|lagna|nakshatra|mahadasha|antardasha|zodiac|transit|retrograde)\b|சந்திர|சுக்கிர|புதன்|குரு|சனி|லக்ன|நட்சத்திர|தசை/iu.test(answer);
-  const shapeOk=acceptableAnswer(answer, style);
-  const periodsOk=periodClaimsAgree(answer, packet.facts);
-  if(unsupportedAstrology || !shapeOk || !periodsOk) {
-    console.warn('consultation_unavailable', {stage:'final_gate', unsupportedAstrology, shapeOk, periodsOk});
-    return null;
-  }
-  return {answer, usesAstrology:!!result.review?.claims.length};
-}
-
 async function ensureRequestTable() {
   // Migrations own schema. Request-triggered cleanup is not a scheduler.
   await env.DB.prepare(`UPDATE guide_requests SET response_ciphertext = NULL
@@ -199,7 +135,7 @@ export async function POST(request: Request) {
   if (!chartTicketConfigured(chartSecret)) {
     return Response.json({ error: 'Chart protection is not configured.' }, { status: 503 });
   }
-  const trusted = await openChartTicket(chartSecret, body.chartTicket, session.id, body.profileId) ?? (env.JYOTARA_CHAT_PROVIDER === 'divine' ? await openBirthGuidanceTicket(chartSecret,body.chartTicket,session.id,body.profileId) : null);
+  const trusted = await openChartTicket(chartSecret, body.chartTicket, session.id, body.profileId) ?? await openBirthGuidanceTicket(chartSecret,body.chartTicket,session.id,body.profileId);
   if (!trusted) return Response.json({ error: 'Your chart session is missing or expired. Please reopen your profile.' }, { status: 401 });
   if (await chartSessionDeleted(env.DB, session.id)) return Response.json({ error: 'This chart session was deleted.', code: 'profile_deleted' }, { status: 410 });
   // Client chart/birthTimeKnown fields are never used as evidence, even if present.
@@ -242,13 +178,13 @@ export async function POST(request: Request) {
   // Old tickets lack the location needed to safely refresh timed context.
   // Keep natal facts, but do not reuse their one-time Panchang selection.
   let chart: ChartFacts = { ...trusted.chart, transits: undefined, todayPanchang: undefined, contextCalculatedAt: undefined };
-  if (env.PROKERALA_ENVIRONMENT === 'production') body.category = conversationTopic(question, body.category, dialogue.length ? dialogue.filter(turn=>turn.role==='user').map(turn=>turn.content) : history) as GuidanceCategory;
+  body.category = conversationTopic(question, body.category, dialogue.length ? dialogue.filter(turn=>turn.role==='user').map(turn=>turn.content) : history) as GuidanceCategory;
   const safetyQuestion = relationshipFollowup(question) ? [...history, question].join('\n') : question;
   const safetyPacket = buildEvidencePacket({category: body.category, question: safetyQuestion, language, birthTimeKnown: trusted.birthTimeKnown, chart});
   const scripted = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, history, style);
   // Context-aware wording for ordinary conversation; dedicated sensitive boundaries remain.
   let practical = scripted && ['privacy', 'no_contact'].includes(scripted.kind) ? scripted : null;
-  if (env.JYOTARA_CHAT_PROVIDER === 'divine' && safetyPacket.intent !== 'high_stakes' && !practical && question !== profileOverviewQuestion) {
+  if (safetyPacket.intent !== 'high_stakes' && !practical && question !== profileOverviewQuestion) {
     const person = reportPerson(body.reportPerson);
     const verified = trusted.birthTimeKnown && person && (
       (trusted.birthDatetime === person.datetime && trusted.contextLocation?.latitude === person.latitude && trusted.contextLocation?.longitude === person.longitude) ||
@@ -270,131 +206,25 @@ export async function POST(request: Request) {
     if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
     return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
   }
-  const charges:ProviderCharge[]=[];
-  const providerAudit={requestId:identity.id,sessionId:session.id,charges};
-  const wantsMarriageTiming= safetyPacket.intent!=='high_stakes' && safetyPacket.intent!=='additional_profile_required' && marriageTimingQuestion(question,history,body.category);
-  let reportReply:ReturnType<typeof marriageReportReply>=null;
-  let reportStatus:string|undefined;
-  if(wantsMarriageTiming && env.PROKERALA_ENVIRONMENT==='production') {
-    const person=reportPerson(body.reportPerson);
-    const extract=(env as unknown as {JYOTARA_EXTRACT_PDF?:(bytes:Uint8Array)=>Promise<string>}).JYOTARA_EXTRACT_PDF;
-    if(!trusted.birthTimeKnown)reportStatus='birth_time_unknown';
-    else if(!person || !extract)reportStatus='profile_details_required';
-    else if(!(trusted.birthDatetime===person.datetime && trusted.contextLocation?.latitude===person.latitude && trusted.contextLocation?.longitude===person.longitude) && !await verifiedReportPerson(env.DB,person,session.id,trusted.profileId,trusted.contextLocation,{
-      hash:async values=>(await requestIdentity(chartSecret,session.id,'profile-v1',values)).hash,
-      open:(id,cipher)=>openReply(chartSecret,id,cipher,2_000_000),
-    }))reportStatus='profile_details_mismatch';
-    else {
-      const reportId=(await requestIdentity(chartSecret,session.id,'marriage-report-v1',[trusted.profileId,person.datetime,person.latitude,person.longitude,person.gender])).hash;
-      const loaded=await loadMarriageReport(env.DB,person,{id:reportId,session:session.id,profile:trusted.profileId,expiresAt:trusted.expiresAt},{
-        fetch:params=>meteredProkeralaFetch(env,'/report/personal-reading/instant',params,6000,providerAudit),
-        extract,seal:value=>sealReply(chartSecret,reportId,value),open:cipher=>openReply(chartSecret,reportId,cipher),
-      });
-      reportStatus=loaded.status==='ready'?(loaded.cached?'cached':'fetched'):loaded.status;
-      if(loaded.report) {
-        reportReply=marriageReportReply(loaded.report,style,question,new Date(),history);
-        if(!reportReply)reportStatus='no_matching_period';
-      }
-    }
+  // Only the profile introduction and explicit safety/privacy responses reach
+  // this path. Ordinary astrology questions use Divine above, without fallback
+  // to a retired provider or a generic model-generated chart reading.
+  const charges:import('@/lib/divine-calculations').CalculationCharge[]=[];
+  const overview=question===profileOverviewQuestion;
+  if(overview && trusted.contextLocation) {
+    const now=Date.now();
+    const context=await currentContext(env.DB,trusted.contextLocation,
+      (module,datetime,location)=>divineContext(env,module,{...location,datetime},charges),now);
+    chart={...chart,...normalizeProviderContext(context,new Date(now))};
   }
-  const initialPacket = buildEvidencePacket({ category: body.category, question, language,
-    birthTimeKnown: trusted.birthTimeKnown, chart });
-  if (!wantsMarriageTiming && !practical && trusted.contextLocation && safetyPacket.intent !== 'high_stakes' && initialPacket.intent !== 'additional_profile_required') {
-    // Location comes only from the authenticated calculation ticket. Raw timed
-    // Panchang intervals are re-selected at each question, not cached as names.
-    const now = Date.now();
-    try {
-      if (env.PROKERALA_ENVIRONMENT !== 'production') throw new Error('Live context unavailable');
-      const raw = await currentContext(env.DB, trusted.contextLocation,
-        (module, datetime, location) => prokeralaJson(env, module === 'transit' ? '/astrology/planet-position' : '/astrology/panchang', { ...location, datetime, language: 'en' },providerAudit), now);
-      chart = { ...chart, transits: undefined, todayPanchang: undefined, contextCalculatedAt: undefined,
-        ...normalizeProviderContext(raw, new Date(now)) };
-    } catch {
-      chart = { ...chart, transits: undefined, todayPanchang: undefined, contextCalculatedAt: undefined };
-    }
-  }
-  const packet = safetyPacket.intent === 'high_stakes' ? safetyPacket : buildEvidencePacket({
-    category: body.category,
-    question,
-    language,
-    birthTimeKnown: trusted.birthTimeKnown,
-    chart,
-  });
-
-  const providerSources = packet.intent === 'high_stakes' || packet.intent === 'additional_profile_required' ? [] : providerReadingSources(chart, packet.category);
-  // Typed messages and suggestion taps share the same authenticated evidence path.
-  const requestsReading = packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required';
-  const chartContext = requestsReading && env.PROKERALA_ENVIRONMENT === 'production' && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required' ? buildTopicContext(chart, packet.category, trusted.birthTimeKnown) : undefined;
-  const overview = question === profileOverviewQuestion;
-  if (chartContext) Object.assign(chartContext, {saturnStatus:saturnStatus(chart,trusted.birthTimeKnown)});
-  let generated: string | null = null;
-  let generatedUsesAstrology = false;
-  const career = packet.category === 'Career' && !practicalAdviceScope(packet) ? reviewedCareerResponse({
-    snapshotId: trusted.profileId, questionId: identity.id, packet, style,
-  }) : null;
-  try {
-    if (!overview && !wantsMarriageTiming && !practical) {
-      const reply=await generateNaturalAnswer(packet, session.id, style, history, requestsReading ? providerSources : [], chartContext, body.guide, dialogue, career?.ok ? career.answer : undefined);
-      generated=reply?.answer ?? null;
-      generatedUsesAstrology=reply?.usesAstrology ?? false;
-    }
-  } catch (error) {
-    // Operational reason only: never log dialogue, birth details or credentials.
-    console.warn('consultation_unavailable', {stage:'model', reason: error instanceof Error && ['TimeoutError','AbortError'].includes(error.name) ? 'timeout' : 'upstream_error'});
-    generated = null;
-  }
-  if (!generated && !career?.ok && scripted) practical = scripted;
-  const providerGap = env.PROKERALA_ENVIRONMENT === 'production' && !practical && !career?.ok && !generated && packet.intent !== 'high_stakes' && packet.intent !== 'additional_profile_required';
-  const gapAnswer = style === 'tamil'
-    ? 'இப்போது பதிலைத் தயாரிப்பதில் சிக்கல் ஏற்பட்டுள்ளது. உங்கள் ஜாதகம் சேமிக்கப்பட்டுள்ளது. சிறிது நேரத்தில் மீண்டும் கேட்கலாம்.'
-    : style === 'tanglish'
-    ? 'Ippo badhil thayaarippadhil oru sikkal. Unga jathagam save aagirukku. Konjam nerathil thirumba ketkalaam.'
-    : 'The reading could not be prepared just now. Please try a new question in a moment; your saved chart is still available.';
-  const missingBirth=reportStatus==='birth_time_unknown';
-  const refreshNeeded=reportStatus==='profile_details_required'||reportStatus==='profile_details_mismatch';
-  const timingLimit=style==='tamil'
-    ? missingBirth?'திருமணக் காலத்தைப் பார்க்க உறுதியான பிறந்த நேரம் தேவை. உங்கள் பிறந்த நேரம் தெரியுமா?':refreshNeeded?'சேமித்த பிறந்த விவரங்களைத் திறந்து ஜாதகத்தைப் புதுப்பிக்கவும். அதன் பிறகு திருமணக் கால அறிக்கையைப் பார்க்கலாம்.':'திருமணக் கால அறிக்கையை இப்போது பெற முடியவில்லை. புதிய அறிக்கை கோரிக்கையை மீண்டும் அனுப்பவில்லை; உங்கள் ஜாதகம் சேமிக்கப்பட்டுள்ளது.'
-    :style==='tanglish'
-    ? missingBirth?'Kalyana kaalam paarka confirmed birth time thevai. Unga pirandha neram theriyuma?':refreshNeeded?'Saved birth details-a thirandhu jathagathai refresh pannunga. Appuram kalyana kaala report-a paarkalaam.':'Kalyana kaala report ippo kidaikkala. Pudhu report request thirumba anuppala; unga jathagam save aagirukku.'
-    :missingBirth?'A marriage-period reading needs a confirmed birth time. Do you know your birth time?':refreshNeeded?'Please open your saved birth details and refresh the chart so I can check its marriage-period report.':'The marriage-period report is unavailable right now. No repeat report request was sent; your saved chart is still available.';
-  const noPeriod=style==='tamil'?'நீங்கள் கேட்ட காலத்துக்குப் பொருந்தும் திருமணக் காலம் இந்த அறிக்கையில் இல்லை. அதனால் திருமணம் நடக்காது என்று பொருள் இல்லை.':style==='tanglish'?'Neenga ketta kaalathukku porundhum kalyana kaalam indha report-la illa. Adhanaala kalyanam nadakkaadhunu artham illa.':'This report does not list a marriage period matching the time you asked about. That does not mean marriage will not happen.';
-  const answer = overview ? profileOverview(chart,trusted.birthTimeKnown,style) : reportReply?.answer ?? (wantsMarriageTiming ? reportStatus==='no_matching_period'?noPeriod:timingLimit : providerGap ? gapAnswer : practical?.answer ?? (generated || (career?.ok ? career.answer : scripted?.answer) || (style === 'tanglish' && packet.support !== 'unsupported' && packet.category !== 'Career' ? tanglishUnavailable() : buildFallbackAnswer(packet, style))));
-  const providerReading = !!generated && generatedUsesAstrology && requestsReading && providerSources.length > 0 && !chartContext;
-  const chartReading = !!generated && generatedUsesAstrology && !!chartContext && (chartContext.birthTimeKnown || !!chartContext.currentPanchang);
-  const modelPracticalAdvice = !!generated && !generatedUsesAstrology;
-  const answerMode = overview ? 'chart_guidance' : reportReply ? 'provider_reading' : wantsMarriageTiming ? 'reading_unavailable' : providerGap ? 'reading_unavailable' : practical ? 'practical_guidance' : generated ? (career?.ok && generatedUsesAstrology ? 'reviewed_traditional' : chartReading ? 'chart_guidance' : providerReading ? 'provider_reading' : 'model_guidance') : career?.ok ? 'reviewed_traditional' : 'grounded_fallback';
-  const researchQuestion = body.researchConsent === true ? redactContactDetails(question) : null;
-
-  const reply = {
-    replayed: false,
-    providerUsage:{calls:charges,newProviderCalls:charges.length,reportCacheReused:reportStatus==='cached'},
-    ...(reportStatus ? {reportStatus} : {}),
-    ...(reportReply ? {reportEvidence:reportReply.source} : {}),
-    answeredAt: new Date().toISOString(),
-    answer: answer.replace(/prokerala/gi, 'astrology').replace(/புரோகேரளா/g, 'ஜாதக'),
-    evidence: overview ? [] : reportReply ? reportReply.evidence : chartReading ? [`Chart calculations · ${chartContext?.birthTimeKnown ? 'confirmed birth time' : 'birth time unknown'}`] : providerReading ? providerSources.map(source => `Kundli: ${source.name}`) : practical || modelPracticalAdvice ? [] : career?.ok ? career.evidence : packet.facts.map((fact) => `${fact.label}: ${fact.displayValue ?? fact.value}`),
-    // Reviewed copy already includes its reviewed limitation in the answer.
-    limitation: overview || chartReading || providerGap || providerReading || practical || modelPracticalAdvice || career?.ok ? undefined : packet.missing.length ? packet.missing.join('; ') : undefined,
-    support: reportReply ? 'partially_supported' : practical ? 'partially_supported' : packet.support,
-    answerMode,
-    profileId: trusted.profileId,
-    ...(career?.ok && answerMode === 'reviewed_traditional' ? { interpretationProvenance: career.provenance } : {}),
-  };
-  const ciphertext = await sealReply(chartSecret, identity.id, reply);
-  const completed = await completeQuestion(env.DB, {
-    id: identity.id, session: session.id, support: reportReply ? 'partially_supported' : practical ? 'partially_supported' : packet.support, mode: answerMode,
-    question: researchQuestion, intent: practical ? `relationship_${practical.kind}` : packet.intent,
-    consent: body.researchConsent === true ? researchConsentVersion : null,
-    ageBand, ciphertext, expiresAt: trusted.expiresAt,
-  });
-  if (!completed) {
-    return Response.json({ error: 'This question is no longer active. Its answer was not saved or returned.', code: 'request_inactive' }, { status: 410, headers: { 'Cache-Control': 'no-store' } });
-  }
-
-  return Response.json(
-    reply,
-    {
-      headers: { 'Cache-Control': 'no-store' },
-    },
-  );
+  const answer=overview?profileOverview(chart,trusted.birthTimeKnown,style):practical?.answer??buildFallbackAnswer(safetyPacket,style);
+  const mode=overview?'chart_guidance':practical?'practical_guidance':'grounded_fallback';
+  const reply={replayed:false,answer,answerMode:mode,profileId:trusted.profileId,
+    providerUsage:{calls:charges,newProviderCalls:charges.length},answeredAt:new Date().toISOString(),evidence:[],support:safetyPacket.support};
+  const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:safetyPacket.support,mode,
+    question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,
+    consent:body.researchConsent===true?researchConsentVersion:null,ageBand,
+    ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
+  if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+  return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
 }

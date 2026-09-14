@@ -1,0 +1,83 @@
+{
+  "success": 1,
+  "data": {
+    "ashtakoot_milan": {
+      "varna": {
+        "p1": "Shudra",
+        "p2": "Kshatriya",
+        "points_obtained": 0,
+        "max_ponits": 1,
+        "area_of_life": "Karmic Classification",
+        "description": "There will be poor adjustment within the couple. The actions of the couple might be incongruent and erratic. They may stand against each other in the way of fulfilment of their karmic goals."
+      },
+      "vashya": {
+        "p1": "biped",
+        "p2": "quadruped",
+        "points_obtained": 1,
+        "max_ponits": 2,
+        "area_of_life": "Evolutionary Character",
+        "description": "There shall be some stiff moments in the relationship as QA Kavin and QA Ananya have a different line of heritage. Although there shall be a balanced power distribution between the couple, there could possibly be some adjustment issues at some times."
+      },
+      "tara": {
+        "p1": "Pratyari",
+        "p2": "Janma",
+        "points_obtained": 1.5,
+        "max_ponits": 3,
+        "area_of_life": "Luck",
+        "description": "There is a good match obtained in Tara Koota. This means that there shall be prosperity and growth of the couple after entering the bond of marriage. They will support each other through thick and thin."
+      },
+      "yoni": {
+        "p1": "Simha",
+        "p2": "Ashwa",
+        "points_obtained": 1,
+        "max_ponits": 4,
+        "area_of_life": "Sexual Compatibility",
+        "description": "The score is very low on this scale. QA Kavin belongs to Simha yoni while QA Ananya is attributed to Ashwa yoni. This is a clear mismatch suggesting that these individuals have different sexual tendencies. They may have a poor adjustment with each other's sexual character."
+      },
+      "graha_maitri": {
+        "p1": "Saturn",
+        "p2": "Mars",
+        "points_obtained": 0.5,
+        "max_ponits": 5,
+        "area_of_life": "Love and Affection",
+        "description": "The match doesn't look promising on the grounds of grah maitri. As the name suggests there has to be a friendship between the couple to embark on the beautiful journey of marriage but by the scores obtained there seem to be chances of discordance and conflicts. This match doesn't look eligible enough for a marriage on this scale."
+      },
+      "gana": {
+        "p1": "Rakshasa",
+        "p2": "Dev",
+        "points_obtained": 1,
+        "max_ponits": 6,
+        "area_of_life": "Temperament",
+        "description": "QA Kavin is Rakshasa and QA Ananya is Dev gana. This is an inimical pairing which stands a slim chance of getting along with each other. There may be fights and struggles between the couple as they are poles apart in terms of their persona. This marriage may have a fair chance of falling apart in the future leading to heartbreaking experiences for both."
+      },
+      "bhakoota": {
+        "p1": "Aquarius",
+        "p2": "Aries",
+        "points_obtained": 7,
+        "max_ponits": 7,
+        "area_of_life": "Emotional Bonding",
+        "description": "The couple will have great emotional connectivity between them. This score is extremely important for matchmaking as it contributes 7 points alone. QA Kavin will feel affectionate and empathetic towards his wife whereas QA Ananya will provide all the nurturing and care to her husband. Bhakoot is extremely important because it tests the conflict resolution patterns. While there are small hiccups in every relationship, one thing that is sure with this score is that the conflicts that may arise will be solved just by a fun chuckle and things will never be complicated."
+      },
+      "nadi": {
+        "p1": "Madhya",
+        "p2": "Adi",
+        "points_obtained": 8,
+        "max_ponits": 8,
+        "area_of_life": "Health and Progeny",
+        "description": "Nadi matching is considered the most crucial factor. Its importance lies heavily in the fact that the points obtained in this category have the highest impact on health and progeny. The couple will have a good sense of attraction and care towards each other and there will be a high probability of healthy and strong progeny. This is a very auspicious sign for the growth and nurturing of the marital relationship."
+      }
+    },
+    "ashtakoot_milan_result": {
+      "points_obtained": 20,
+      "max_ponits": 36,
+      "is_compatible": "true",
+      "content": "The compatibility score between the QA Kavin and QA Ananya is 20 out of 36, which is considered reasonably good. Additionally, their zodiac signs are friendly, indicating mental compatibility and mutual affection. Overall, it's a favorable match according to Ashtakoota."
+    },
+    "manglik_dosha": {
+      "p1": "false",
+      "p2": "false"
+    },
+    "nadi_dosha": "false",
+    "bhakoot_dosha": "false"
+  }
+}

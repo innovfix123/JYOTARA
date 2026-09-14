@@ -1,0 +1,387 @@
+{
+  "success": 1,
+  "data": {
+    "date": "2001-6-12",
+    "time": "06:20:00",
+    "maha_dasha": {
+      "Mars": {
+        "start_date": "1995-10-15",
+        "end_date": "2002-10-10",
+        "antar_dasha": {
+          "Mars": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Rahu": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Jupiter": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Saturn": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Mercury": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Ketu": {
+            "start_time": "--",
+            "end_time": "--"
+          },
+          "Venus": {
+            "start_time": "2000-09-10",
+            "end_time": "2001-11-10"
+          },
+          "Sun": {
+            "start_time": "2001-11-10",
+            "end_time": "2002-03-16"
+          },
+          "Moon": {
+            "start_time": "2002-03-16",
+            "end_time": "2002-10-10"
+          }
+        }
+      },
+      "Rahu": {
+        "start_date": "2002-10-10",
+        "end_date": "2020-10-10",
+        "antar_dasha": {
+          "Rahu": {
+            "start_time": "2002-10-10",
+            "end_time": "2005-06-22"
+          },
+          "Jupiter": {
+            "start_time": "2005-06-22",
+            "end_time": "2007-11-15"
+          },
+          "Saturn": {
+            "start_time": "2007-11-15",
+            "end_time": "2010-09-21"
+          },
+          "Mercury": {
+            "start_time": "2010-09-21",
+            "end_time": "2013-04-08"
+          },
+          "Ketu": {
+            "start_time": "2013-04-08",
+            "end_time": "2014-04-26"
+          },
+          "Venus": {
+            "start_time": "2014-04-26",
+            "end_time": "2017-04-26"
+          },
+          "Sun": {
+            "start_time": "2017-04-26",
+            "end_time": "2018-03-22"
+          },
+          "Moon": {
+            "start_time": "2018-03-22",
+            "end_time": "2019-09-22"
+          },
+          "Mars": {
+            "start_time": "2019-09-22",
+            "end_time": "2020-10-10"
+          }
+        }
+      },
+      "Jupiter": {
+        "start_date": "2020-10-10",
+        "end_date": "2036-10-10",
+        "antar_dasha": {
+          "Jupiter": {
+            "start_time": "2020-10-10",
+            "end_time": "2022-11-28"
+          },
+          "Saturn": {
+            "start_time": "2022-11-28",
+            "end_time": "2025-06-09"
+          },
+          "Mercury": {
+            "start_time": "2025-06-09",
+            "end_time": "2027-09-15"
+          },
+          "Ketu": {
+            "start_time": "2027-09-15",
+            "end_time": "2028-08-21"
+          },
+          "Venus": {
+            "start_time": "2028-08-21",
+            "end_time": "2031-04-21"
+          },
+          "Sun": {
+            "start_time": "2031-04-21",
+            "end_time": "2032-02-08"
+          },
+          "Moon": {
+            "start_time": "2032-02-08",
+            "end_time": "2033-06-08"
+          },
+          "Mars": {
+            "start_time": "2033-06-08",
+            "end_time": "2034-05-14"
+          },
+          "Rahu": {
+            "start_time": "2034-05-14",
+            "end_time": "2036-10-10"
+          }
+        }
+      },
+      "Saturn": {
+        "start_date": "2036-10-10",
+        "end_date": "2055-10-10",
+        "antar_dasha": {
+          "Saturn": {
+            "start_time": "2036-10-10",
+            "end_time": "2039-10-13"
+          },
+          "Mercury": {
+            "start_time": "2039-10-13",
+            "end_time": "2042-06-22"
+          },
+          "Ketu": {
+            "start_time": "2042-06-22",
+            "end_time": "2043-07-31"
+          },
+          "Venus": {
+            "start_time": "2043-07-31",
+            "end_time": "2046-10-01"
+          },
+          "Sun": {
+            "start_time": "2046-10-01",
+            "end_time": "2047-09-13"
+          },
+          "Moon": {
+            "start_time": "2047-09-13",
+            "end_time": "2049-04-13"
+          },
+          "Mars": {
+            "start_time": "2049-04-13",
+            "end_time": "2050-05-22"
+          },
+          "Rahu": {
+            "start_time": "2050-05-22",
+            "end_time": "2053-03-28"
+          },
+          "Jupiter": {
+            "start_time": "2053-03-28",
+            "end_time": "2055-10-10"
+          }
+        }
+      },
+      "Mercury": {
+        "start_date": "2055-10-10",
+        "end_date": "2072-10-10",
+        "antar_dasha": {
+          "Mercury": {
+            "start_time": "2055-10-10",
+            "end_time": "2058-03-09"
+          },
+          "Ketu": {
+            "start_time": "2058-03-09",
+            "end_time": "2059-03-08"
+          },
+          "Venus": {
+            "start_time": "2059-03-08",
+            "end_time": "2062-01-08"
+          },
+          "Sun": {
+            "start_time": "2062-01-08",
+            "end_time": "2062-11-14"
+          },
+          "Moon": {
+            "start_time": "2062-11-14",
+            "end_time": "2064-04-14"
+          },
+          "Mars": {
+            "start_time": "2064-04-14",
+            "end_time": "2065-04-10"
+          },
+          "Rahu": {
+            "start_time": "2065-04-10",
+            "end_time": "2067-10-28"
+          },
+          "Jupiter": {
+            "start_time": "2067-10-28",
+            "end_time": "2070-02-03"
+          },
+          "Saturn": {
+            "start_time": "2070-02-03",
+            "end_time": "2072-10-10"
+          }
+        }
+      },
+      "Ketu": {
+        "start_date": "2072-10-10",
+        "end_date": "2079-10-10",
+        "antar_dasha": {
+          "Ketu": {
+            "start_time": "2072-10-10",
+            "end_time": "2073-03-09"
+          },
+          "Venus": {
+            "start_time": "2073-03-09",
+            "end_time": "2074-05-09"
+          },
+          "Sun": {
+            "start_time": "2074-05-09",
+            "end_time": "2074-09-15"
+          },
+          "Moon": {
+            "start_time": "2074-09-15",
+            "end_time": "2075-04-15"
+          },
+          "Mars": {
+            "start_time": "2075-04-15",
+            "end_time": "2075-09-11"
+          },
+          "Rahu": {
+            "start_time": "2075-09-11",
+            "end_time": "2076-09-29"
+          },
+          "Jupiter": {
+            "start_time": "2076-09-29",
+            "end_time": "2077-09-04"
+          },
+          "Saturn": {
+            "start_time": "2077-09-04",
+            "end_time": "2078-10-13"
+          },
+          "Mercury": {
+            "start_time": "2078-10-13",
+            "end_time": "2079-10-10"
+          }
+        }
+      },
+      "Venus": {
+        "start_date": "2079-10-10",
+        "end_date": "2099-10-10",
+        "antar_dasha": {
+          "Venus": {
+            "start_time": "2079-10-10",
+            "end_time": "2083-02-10"
+          },
+          "Sun": {
+            "start_time": "2083-02-10",
+            "end_time": "2084-02-10"
+          },
+          "Moon": {
+            "start_time": "2084-02-10",
+            "end_time": "2085-10-10"
+          },
+          "Mars": {
+            "start_time": "2085-10-10",
+            "end_time": "2086-12-10"
+          },
+          "Rahu": {
+            "start_time": "2086-12-10",
+            "end_time": "2089-12-10"
+          },
+          "Jupiter": {
+            "start_time": "2089-12-10",
+            "end_time": "2092-08-10"
+          },
+          "Saturn": {
+            "start_time": "2092-08-10",
+            "end_time": "2095-10-10"
+          },
+          "Mercury": {
+            "start_time": "2095-10-10",
+            "end_time": "2098-08-10"
+          },
+          "Ketu": {
+            "start_time": "2098-08-10",
+            "end_time": "2099-10-10"
+          }
+        }
+      },
+      "Sun": {
+        "start_date": "2099-10-10",
+        "end_date": "2105-10-10",
+        "antar_dasha": {
+          "Sun": {
+            "start_time": "2099-10-10",
+            "end_time": "2100-01-28"
+          },
+          "Moon": {
+            "start_time": "2100-01-28",
+            "end_time": "2100-07-28"
+          },
+          "Mars": {
+            "start_time": "2100-07-28",
+            "end_time": "2100-12-04"
+          },
+          "Rahu": {
+            "start_time": "2100-12-04",
+            "end_time": "2101-10-28"
+          },
+          "Jupiter": {
+            "start_time": "2101-10-28",
+            "end_time": "2102-08-15"
+          },
+          "Saturn": {
+            "start_time": "2102-08-15",
+            "end_time": "2103-07-27"
+          },
+          "Mercury": {
+            "start_time": "2103-07-27",
+            "end_time": "2104-06-02"
+          },
+          "Ketu": {
+            "start_time": "2104-06-02",
+            "end_time": "2104-10-08"
+          },
+          "Venus": {
+            "start_time": "2104-10-08",
+            "end_time": "2105-10-10"
+          }
+        }
+      },
+      "Moon": {
+        "start_date": "2105-10-10",
+        "end_date": "2115-10-10",
+        "antar_dasha": {
+          "Moon": {
+            "start_time": "2105-10-10",
+            "end_time": "2106-08-10"
+          },
+          "Mars": {
+            "start_time": "2106-08-10",
+            "end_time": "2107-03-10"
+          },
+          "Rahu": {
+            "start_time": "2107-03-10",
+            "end_time": "2108-09-10"
+          },
+          "Jupiter": {
+            "start_time": "2108-09-10",
+            "end_time": "2110-01-10"
+          },
+          "Saturn": {
+            "start_time": "2110-01-10",
+            "end_time": "2111-08-10"
+          },
+          "Mercury": {
+            "start_time": "2111-08-10",
+            "end_time": "2113-01-10"
+          },
+          "Ketu": {
+            "start_time": "2113-01-10",
+            "end_time": "2113-08-10"
+          },
+          "Venus": {
+            "start_time": "2113-08-10",
+            "end_time": "2115-04-10"
+          },
+          "Sun": {
+            "start_time": "2115-04-10",
+            "end_time": "2115-10-10"
+          }
+        }
+      }
+    }
+  }
+}

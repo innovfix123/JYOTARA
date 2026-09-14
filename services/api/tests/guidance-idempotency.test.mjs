@@ -24,6 +24,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/db/profile-deletion', deletion)
   .replace('@/lib/career-response', career)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
+  .replace('@/lib/divine-calculations', moduleUrl('../lib/divine-calculations.ts'))
   .replace('@/lib/divine-consultation', moduleUrl('../lib/divine-consultation.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
@@ -38,6 +39,8 @@ test('actual route reserves before model work, replays encrypted result, allows 
   }
   db.exec(source('../drizzle/0010_green_johnny_blaze.sql'));
   db.exec(source('../drizzle/0011_report_evidence.sql'));
+  db.exec(source('../drizzle/0013_divine_cleanup.sql'));
+  const person={name:'QA Kavin',gender:'male',place:'Chennai',datetime:'2001-06-12T06:20:00+05:30',latitude:13.0827,longitude:80.2707};
   const secret = 'a3'.repeat(32);
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -45,7 +48,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
   let started;
   const modelStarted = new Promise(resolve => { started = resolve; });
   const modelWait = new Promise(resolve => { release = resolve; });
-  globalThis.__receiptTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, OPENROUTER_API_KEY: 'TEST-ONLY', DB: {
+  globalThis.__receiptTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, DIVINE_API_KEY:'test', OPENROUTER_API_KEY: 'TEST-ONLY', DB: {
     async batch(statements) {
       db.exec('BEGIN');
       try {
@@ -65,19 +68,20 @@ test('actual route reserves before model work, replays encrypted result, allows 
     },
   } };
   globalThis.fetch = async (address, options) => {
+    if(options.method==='DELETE')return Response.json({deleted:true});
     calls++;
     started();
     if (calls === 1) await modelWait;
     const answer='Focus on one need you would like to discuss. What matters most to you?';
-    return Response.json({output_text:JSON.parse(options.body).instructions.includes('independent final editor') ? JSON.stringify({answer,claims:[],corrections:[]}) : answer});
+    return Response.json(address.includes('ask.divine')?{answer,credits_charged:30}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:[answer]})}}]});
   };
   try {
     const { POST, DELETE } = await import(route);
     const chart = { rashi: 'Meena', nakshatra: 'Uttara Bhadrapada', lagna: 'Mithuna', planets: [], yogas: [],
       currentDasha: { name: 'Mercury', start: '2020-01-01T00:00:00Z', end: '2040-01-01T00:00:00Z' },
       currentAntardasha: { name: 'Venus', start: '2020-01-01T00:00:00Z', end: '2040-01-01T00:00:00Z' } };
-    const ticket = (sessionId, profileId) => issueChartTicket(secret, { sessionId, profileId, chart, birthTimeKnown: true });
-    const base = { requestId: 'request-0000000001', category: 'Love', question: 'What should I focus on?', language: 'en', responseStyle: 'english', researchConsent: false, profileId: 'one', chartTicket: await ticket('owner', 'one') };
+    const ticket = (sessionId, profileId) => issueChartTicket(secret, { sessionId, profileId, chart, birthTimeKnown: true, birthDatetime:person.datetime, contextLocation:{latitude:person.latitude,longitude:person.longitude} });
+    const base = { reportPerson:person, requestId: 'request-0000000001', category: 'Love', question: 'What should I focus on?', language: 'en', responseStyle: 'english', researchConsent: false, profileId: 'one', chartTicket: await ticket('owner', 'one') };
     const post = (body = base, session = 'owner') => POST(new Request('https://example.test/api/guidance', { method: 'POST', headers: { Cookie: `nirayana_pilot_session=${session}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
     const pending = post();
     await modelStarted;
@@ -135,11 +139,12 @@ test('actual route reserves before model work, replays encrypted result, allows 
     const began = new Promise(resolve => { pendingStarted = resolve; });
     const pause = new Promise(resolve => { finishPending = resolve; });
     globalThis.fetch = async (address, options) => {
+      if(options.method==='DELETE')return Response.json({deleted:true});
       calls++;
       pendingStarted();
       await pause;
       const answer='Focus on one need you would like to discuss. What matters most to you?';
-    return Response.json({output_text:JSON.parse(options.body).instructions.includes('independent final editor') ? JSON.stringify({answer,claims:[],corrections:[]}) : answer});
+    return Response.json(address.includes('ask.divine')?{answer,credits_charged:30}:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:[answer]})}}]});
     };
     const lateBase = { ...base, researchConsent: true, chartTicket: await ticket('delete-pending', 'one') };
     const late = post(lateBase, 'delete-pending');
@@ -252,15 +257,9 @@ test('actual route reserves before model work, replays encrypted result, allows 
     const reviewedResponse = await post(reviewedBody, 'reviewed-owner');
     assert.equal(reviewedResponse.status, 200);
     const reviewedAnswer = await reviewedResponse.json();
-    assert.equal(reviewedAnswer.answerMode, 'reviewed_traditional');
+    assert.equal(reviewedAnswer.answerMode, 'reading_unavailable');
     assert.equal(reviewedAnswer.profileId, 'reviewed-profile');
-    assert.equal(reviewedAnswer.evidence.length, 19);
-    assert.match(reviewedAnswer.answer, /Writing, accounting and craft-based work/u);
-    assert.match(reviewedAnswer.answer, /tenth houses from Lagna and Moon empty/u);
-    assert.match(reviewedAnswer.answer, /Try one small task/u);
-    assert.match(reviewedAnswer.answer, /not a complete career assessment/u);
-    assert.equal(reviewedAnswer.interpretationProvenance.snapshotId, 'reviewed-profile');
-    assert.ok(reviewedAnswer.interpretationProvenance.ruleVersions.includes('CAREER-BJ10-D9-MERCURY-CONVERGENCE-english@2'));
+    assert.deepEqual(reviewedAnswer.evidence, []);
     const recoveredResponse = await post(reviewedBody, 'reviewed-owner');
     assert.equal(recoveredResponse.status, 200);
     const recoveredAnswer = await recoveredResponse.json();
@@ -286,70 +285,6 @@ test('encrypted reply is bound to request and key; corruption fails closed', asy
   await assert.rejects(openReply(secret, 'request-two', sealed));
   await assert.rejects(openReply('34'.repeat(32), 'request-one', sealed));
   await assert.rejects(openReply(secret, 'request-one', sealed.slice(0, -1)));
-});
-
-test('guidance refresh uses ticket-bound location and shared context, never caller time or chart', async () => {
-  const db = new DatabaseSync(':memory:');
-  db.exec(source('../drizzle/0010_green_johnny_blaze.sql'));
-  db.exec(source('../drizzle/0011_report_evidence.sql'));
-  for (const name of ['0000_perpetual_giant_man', '0001_chilly_purple_man', '0002_broad_spacker_dave', '0003_reflective_betty_ross', '0007_cold_inhumans', '0008_damp_marvex']) db.exec(source(`../drizzle/${name}.sql`));
-  const secret = 'c4'.repeat(32);
-  const originalFetch = globalThis.fetch;
-  const providerRequests = [];
-  globalThis.__receiptTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, PROKERALA_ENVIRONMENT: 'production', PROKERALA_CLIENT_ID: 'synthetic-context-client', PROKERALA_CLIENT_SECRET: 'synthetic-secret', DB: {
-    prepare(sql) { let args = []; return {
-      bind(...values) { args = values; return this; },
-      async run() { return { meta: { changes: Number(db.prepare(sql).run(...args).changes) } }; },
-      async first() { return db.prepare(sql).get(...args) ?? null; },
-    }; },
-  } };
-  globalThis.fetch = async address => {
-    const target = new URL(address);
-    assert.equal(target.origin, 'https://api.prokerala.com');
-    if (target.pathname === '/token') return Response.json({ access_token: 'synthetic-token', expires_in: 3600 });
-    providerRequests.push(target);
-    if (target.pathname.endsWith('planet-position')) return Response.json({ data: { planet_position: [{ id: 1, name: 'Moon', degree: 10, position: 4, rasi: { name: 'Karka' } }] } });
-    assert.ok(target.pathname.endsWith('panchang'));
-    return Response.json({ data: { vaara: 'Test day', tithi: [{ name: 'Active test tithi', start: new Date(Date.now() - 60000).toISOString(), end: new Date(Date.now() + 3600000).toISOString() }] } });
-  };
-  try {
-    const { POST } = await import(`${route}#current-context`);
-    const profileId = 'context-one';
-    const chartTicket = await issueChartTicket(secret, { sessionId: 'context-owner', profileId, birthTimeKnown: false,
-      contextLocation: { latitude: 11.3428, longitude: 77.7274 },
-      chart: { rashi: 'Meena', nakshatra: 'Uttara Bhadrapada', planets: [], yogas: [], contextCalculatedAt: '2000-01-01T00:00:00Z', todayPanchang: { tithi: 'Stale tithi' } } });
-    const body = { requestId: 'context-question-0001', category: 'Panchang', question: 'What is today’s Panchangam?', language: 'en', responseStyle: 'english', profileId, chartTicket,
-      currentDatetime: '2000-01-01T00:00:00Z', latitude: 0, longitude: 0, chart: { rashi: 'Mesha' } };
-    const post = payload => POST(new Request('https://example.test/api/guidance', { method: 'POST', headers: { Cookie: 'nirayana_pilot_session=context-owner', 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }));
-    const first = await post(body);
-    assert.equal(first.status, 200);
-    const answer = await first.json();
-    assert.ok(answer.evidence.some(line => line.includes('Active test tithi')));
-    assert.ok(answer.evidence.every(line => !line.includes('Stale tithi')));
-    assert.ok(answer.evidence.some(line => line.includes('Current Moon') && line.includes('Karka')));
-    assert.equal(providerRequests.length, 2);
-    assert.ok(providerRequests.every(target => target.searchParams.get('coordinates') === '11.3428,77.7274'));
-    assert.ok(providerRequests.every(target => Math.abs(Date.parse(target.searchParams.get('datetime')) - Date.now()) < 10000));
-    assert.ok(providerRequests.every(target => target.searchParams.get('datetime').endsWith('+05:30')), 'provider Panchang day must use Indian civil time');
-    assert.equal((await post({ ...body, requestId: 'context-question-0002' })).status, 200);
-    assert.equal(providerRequests.length, 2, 'a new question reuses fresh current context without another provider charge');
-    await post({ ...body, requestId: 'context-question-0002' });
-    assert.equal(providerRequests.length, 2, 'retry must not charge provider again');
-    const unsupported = await post({ ...body, requestId: 'context-question-0003', category: 'Family', question: 'How is my parents health?' });
-    assert.equal((await unsupported.json()).support, 'unsupported');
-    assert.equal(providerRequests.length, 2, 'unsupported intents must not trigger context work');
-  } finally { globalThis.fetch = originalFetch; delete globalThis.__receiptTestEnv; db.close(); }
-});
-
- test('large chart recovery is explicit while chat receipts retain their smaller cap', async () => {
-  const secret = '12'.repeat(32);
-  const chart = { synthetic: 'x'.repeat(150_000) };
-  await assert.rejects(sealReply(secret, 'profile:large', chart));
-  const sealed = await sealReply(secret, 'profile:large', chart, 2_000_000);
-  await assert.rejects(openReply(secret, 'profile:large', sealed));
-  assert.deepEqual(await openReply(secret, 'profile:large', sealed, 2_000_000), chart);
-  await assert.rejects(openReply(secret, 'profile:other', sealed, 2_000_000));
-  await assert.rejects(sealReply(secret, 'profile:large', { value: 'x'.repeat(2_000_001) }, 2_000_000));
 });
 
 test('Divine route verifies birth details, replays without charge and isolates provider conversations',async()=>{

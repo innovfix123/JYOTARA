@@ -9,6 +9,6 @@ export const database = new PostgresDatabase(process.env.DATABASE_URL);
 export const env: Cloudflare.Env & {JYOTARA_EXTRACT_PDF: typeof extractReportPdf} = {
   ...process.env,
   JYOTARA_EXTRACT_PDF: extractReportPdf,
-  PROKERALA_ENVIRONMENT: process.env.PROKERALA_ENVIRONMENT === 'production' ? 'production' : 'test',
+  JYOTARA_CHAT_PROVIDER: 'divine',
   DB: database as unknown as D1Database,
 };

@@ -89,7 +89,7 @@ declare global {
   }
 }
 
-const PROKERALA_PUBLIC_CLIENT_ID = process.env.NEXT_PUBLIC_PROKERALA_CLIENT_ID ?? '';
+
 const categories: Array<{ id: Category; title: string; subtitle: string; icon: typeof Heart }> = [
   { id: 'Daily', title: 'My day', subtitle: 'A simple daily direction', icon: CalendarDays },
   { id: 'Education', title: 'Education', subtitle: 'Study and exam direction', icon: GraduationCap },
@@ -301,7 +301,7 @@ export default function Home() {
   const [liveAnswer, setLiveAnswer] = useState<GroundedAnswer | null>(null);
   const [answerState, setAnswerState] = useState<'idle' | 'loading' | 'error'>('idle');
   const locationInputRef = useRef<HTMLInputElement>(null);
-  const locationWidgetReady = useRef(false);
+  const [locationOptions,setLocationOptions]=useState<Array<[number,string,string,string,string,string,number,number]>>([]);
   const screenRef = useRef<Screen>('splash');
   const profileCompletedRef = useRef(false);
   const calculationRunRef = useRef(0);
@@ -384,43 +384,16 @@ export default function Home() {
   }, [screen]);
 
   useEffect(() => {
-    if (screen !== 'profile') {
-      locationWidgetReady.current = false;
-      return;
-    }
-    if (!PROKERALA_PUBLIC_CLIENT_ID || !locationInputRef.current || locationWidgetReady.current) return;
-
-    const initialise = () => {
-      if (!window.LocationSearch || !locationInputRef.current || locationWidgetReady.current) return;
-      locationWidgetReady.current = true;
-      new window.LocationSearch(
-        locationInputRef.current,
-        (data) => {
-          setBirthplace(locationInputRef.current?.value ?? '');
-          setBirthLocation({
-            latitude: Number(data.latitude),
-            longitude: Number(data.longitude),
-            timezone: data.timezone,
-          });
-        },
-        { clientId: PROKERALA_PUBLIC_CLIENT_ID, persistKey: '' },
-      );
-    };
-
-    const existing = document.querySelector<HTMLScriptElement>('script[data-prokerala-location]');
-    if (existing) {
-      if (window.LocationSearch) initialise();
-      else existing.addEventListener('load', initialise, { once: true });
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = 'https://client-api.prokerala.com/static/js/location.min.js';
-    script.async = true;
-    script.dataset.prokeralaLocation = 'true';
-    script.addEventListener('load', initialise, { once: true });
-    document.head.appendChild(script);
-  }, [screen]);
+    if(screen!=='profile'||birthLocation||birthplace.trim().length<3){setLocationOptions([]);return;}
+    const controller=new AbortController();
+    const timer=window.setTimeout(()=>{
+      fetch('/api/locations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:birthplace}),signal:controller.signal})
+        .then(r=>{if(!r.ok)throw Error('Location unavailable');return r.json();})
+        .then((data:any)=>{if(!controller.signal.aborted)setLocationOptions(Array.isArray(data.data)?data.data:[]);})
+        .catch(()=>{if(!controller.signal.aborted)setLocationOptions([]);});
+    },350);
+    return()=>{window.clearTimeout(timer);controller.abort();};
+  },[screen,birthplace,birthLocation]);
 
   function recordEvent(payload: {
     eventType: string;
@@ -603,7 +576,7 @@ export default function Home() {
     profileCompletedRef.current = false;
     setAsked([]); setSelectedQuestion(''); setQuestionDraft(''); setLiveAnswer(null); setAnswerState('idle'); setFeedback(null);
     setName(''); setBirthDate(''); setBirthTime(''); setBirthplace(''); setBirthLocation(null); setUnknownTime(false); setAgeConfirmed(false); setConsent(false); setQuestionResearchConsent(false); setSelectedInterests([]);
-    setApiState('idle'); setProfileError(''); setSandboxModules([]); setChartSummary({ yogas: [], planets: [] }); locationWidgetReady.current = false;
+    setApiState('idle'); setProfileError(''); setSandboxModules([]); setChartSummary({ yogas: [], planets: [] }); setLocationOptions([]);
     goToScreen('welcome', 'replace');
   }
 
@@ -686,7 +659,7 @@ export default function Home() {
                 <div className="space-y-2 sm:col-span-2"><Label htmlFor="name">{t('Name or nickname', 'பெயர் அல்லது அழைப்புப் பெயர்')} <span className="text-muted-foreground">{t('(optional)', '(விருப்பம்)')}</span></Label><Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder={t('How should we address you?', 'உங்களை எப்படி அழைக்க வேண்டும்?')} className="h-12 rounded-xl" /></div>
                 <div className="space-y-2"><Label htmlFor="birth-date">{t('Date of birth', 'பிறந்த தேதி')}</Label><Input id="birth-date" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} onInput={(e) => setBirthDate(e.currentTarget.value)} className="h-12 rounded-xl" /></div>
                 <div className="space-y-2"><Label htmlFor="birth-time">{t('Exact birth time', 'சரியான பிறந்த நேரம்')}</Label><Input id="birth-time" type="time" value={birthTime} onChange={(e) => setBirthTime(e.target.value)} onInput={(e) => setBirthTime(e.currentTarget.value)} disabled={unknownTime} className="h-12 rounded-xl" /><label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground"><Checkbox checked={unknownTime} onCheckedChange={(v) => setUnknownTime(Boolean(v))} /> {t('I don’t know my exact time', 'எனக்கு சரியான நேரம் தெரியாது')}</label></div>
-                <div className="space-y-2 sm:col-span-2"><Label htmlFor="birthplace">{t('Birthplace', 'பிறந்த இடம்')}</Label><Input ref={locationInputRef} id="birthplace" value={birthplace} onChange={(e) => { setBirthplace(e.target.value); setBirthLocation(null); }} placeholder={t('Type a city, then choose from the suggestions', 'நகரத்தின் பெயரை உள்ளிட்டு பரிந்துரையில் தேர்ந்தெடுக்கவும்')} autoComplete="off" className="prokerala-location-input h-12 rounded-xl" /><p className={`text-xs ${birthLocation ? 'text-emerald-400' : 'text-muted-foreground'}`}>{birthLocation ? t('Location selected — coordinates and timezone are ready.', 'இடம் தேர்ந்தெடுக்கப்பட்டது — கணக்கீட்டிற்கு தயாராக உள்ளது.') : t('Select the correct Indian birthplace from the suggestion list.', 'பரிந்துரை பட்டியலில் சரியான இந்தியப் பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.')}</p></div>
+                <div className="space-y-2 sm:col-span-2"><Label htmlFor="birthplace">{t('Birthplace', 'பிறந்த இடம்')}</Label><Input ref={locationInputRef} id="birthplace" value={birthplace} onChange={(e) => { setBirthplace(e.target.value); setBirthLocation(null); }} placeholder={t('Type a city, then choose from the suggestions', 'நகரத்தின் பெயரை உள்ளிட்டு பரிந்துரையில் தேர்ந்தெடுக்கவும்')} autoComplete="off" className="h-12 rounded-xl" />{locationOptions.map(row=><button type="button" key={row[0]} className="block w-full p-2 text-left" onClick={()=>{setBirthplace(`${row[1]}, ${row[2]}`);setBirthLocation({latitude:row[6],longitude:row[7],timezone:row[5]});setLocationOptions([]);}}>{row[1]}, {row[2]}</button>)}<p className="text-xs">Location data: <a href="https://www.geonames.org/">GeoNames</a> · CC BY 4.0</p><p className={`text-xs ${birthLocation ? 'text-emerald-400' : 'text-muted-foreground'}`}>{birthLocation ? t('Location selected — coordinates and timezone are ready.', 'இடம் தேர்ந்தெடுக்கப்பட்டது — கணக்கீட்டிற்கு தயாராக உள்ளது.') : t('Select the correct Indian birthplace from the suggestion list.', 'பரிந்துரை பட்டியலில் சரியான இந்தியப் பிறந்த இடத்தைத் தேர்ந்தெடுக்கவும்.')}</p></div>
               </div>
               {birthDate && !ageBand && <div className="mt-5 rounded-2xl border border-rose-400/25 bg-rose-400/8 p-4 text-sm text-rose-100">இந்தச் சேவையைப் பயன்படுத்த 13 வயது அல்லது அதற்கு மேல் இருக்க வேண்டும். சரியான பிறந்த தேதியைச் சரிபார்க்கவும்.</div>}
               {ageBand && <div className="mt-5 rounded-2xl border border-primary/20 bg-primary/8 p-4 text-sm text-muted-foreground">வயது குழு: <strong className="text-foreground">{ageBand}</strong>. இது அடுத்த திரையில் பரிந்துரைகளின் வரிசையை மட்டும் மாற்றும்; எந்தப் பகுதியும் மறைக்கப்படாது.</div>}

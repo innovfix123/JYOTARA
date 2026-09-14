@@ -1,0 +1,116 @@
+{
+  "success": 1,
+  "data": {
+    "data": {
+      "1": {
+        "sign_no": 8,
+        "planet": [
+          {
+            "name": "Moon",
+            "symbol": "Mo"
+          },
+          {
+            "name": "Mercury",
+            "symbol": "Me"
+          },
+          {
+            "name": "Ascendant",
+            "symbol": "As"
+          }
+        ]
+      },
+      "2": {
+        "sign_no": 9,
+        "planet": [
+          {
+            "name": "Pluto",
+            "symbol": "Pl"
+          }
+        ]
+      },
+      "3": {
+        "sign_no": 10,
+        "planet": [
+          {
+            "name": "Rahu",
+            "symbol": "Ra"
+          }
+        ]
+      },
+      "4": {
+        "sign_no": 11,
+        "planet": []
+      },
+      "5": {
+        "sign_no": 12,
+        "planet": [
+          {
+            "name": "Mars",
+            "symbol": "Ma"
+          }
+        ]
+      },
+      "6": {
+        "sign_no": 1,
+        "planet": [
+          {
+            "name": "Saturn",
+            "symbol": "Sa"
+          }
+        ]
+      },
+      "7": {
+        "sign_no": 2,
+        "planet": [
+          {
+            "name": "Neptune",
+            "symbol": "Ne"
+          }
+        ]
+      },
+      "8": {
+        "sign_no": 3,
+        "planet": []
+      },
+      "9": {
+        "sign_no": 4,
+        "planet": [
+          {
+            "name": "Venus",
+            "symbol": "Ve"
+          },
+          {
+            "name": "Ketu",
+            "symbol": "Ke"
+          }
+        ]
+      },
+      "10": {
+        "sign_no": 5,
+        "planet": []
+      },
+      "11": {
+        "sign_no": 6,
+        "planet": [
+          {
+            "name": "Sun",
+            "symbol": "Su"
+          },
+          {
+            "name": "Jupiter",
+            "symbol": "Ju"
+          }
+        ]
+      },
+      "12": {
+        "sign_no": 7,
+        "planet": [
+          {
+            "name": "Uranus",
+            "symbol": "Ur"
+          }
+        ]
+      }
+    }
+  }
+}

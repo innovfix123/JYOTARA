@@ -45,7 +45,7 @@ export type PlanetFact = {
 
 export type PeriodFact = { name: string; start: string; end: string };
 export type DashaTimeline = Array<PeriodFact & { antardasha: PeriodFact[] }>;
-export type DivisionalPlanetFact = Omit<PlanetFact, 'isRetrograde'>;
+export type DivisionalPlanetFact = Omit<PlanetFact, 'isRetrograde' | 'degree'> & {degree?:number};
 
 export type PanchangFact = {
   vaara?: string;
@@ -157,7 +157,7 @@ export function isValidChartFacts(value: unknown): value is ChartFacts {
   if (!planetList(value.planets) || (value.transits !== undefined && !planetList(value.transits))) return false;
   // D9 has no motion flag. Reuse numeric/sign validation without persisting
   // a synthetic retrograde value as evidence.
-  if (value.navamsa !== undefined && (!Array.isArray(value.navamsa) || !planetList(value.navamsa.map(p => ({ ...(object(p) ? p : {}), isRetrograde: false }))))) return false;
+  if (value.navamsa !== undefined && (!Array.isArray(value.navamsa) || !planetList(value.navamsa.map(p => ({ ...(object(p) ? p : {}), degree: object(p) ? (p.degree === undefined ? 0 : p.degree) : undefined, isRetrograde: false }))))) return false;
   const moon = (value.planets as PlanetFact[]).find(p => p.name.trim().toLocaleLowerCase() === 'moon');
   if (moon && value.rashi !== undefined && chartSignNumber(value.rashi) !== moon.position) return false;
   if (!Array.isArray(value.yogas) || value.yogas.length > 100 || value.yogas.some(y => !object(y) || !short(y.name) || typeof y.description !== 'string' || y.description.length > 8000)) return false;

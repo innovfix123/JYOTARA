@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
 const encode = source => 'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText).toString('base64');
-const client=encode(readFileSync(new URL('../lib/prokerala-client.ts',import.meta.url),'utf8'));
-const source=readFileSync(new URL('../runtime/discovery.ts',import.meta.url),'utf8').replace("'../lib/prokerala-client'",JSON.stringify(client));
+const client=encode(readFileSync(new URL('../lib/divine-calculations.ts',import.meta.url),'utf8'));
+const source=readFileSync(new URL('../runtime/discovery.ts',import.meta.url),'utf8').replace("'../lib/divine-calculations'",JSON.stringify(client));
 const {validDay,validBirth,daily,matching}=await import(encode(source));
 test('daily dates use IST and reject outside the three-day window',()=>{
  const now=Date.parse('2026-09-08T20:00:00Z');
@@ -34,11 +34,11 @@ test('daily summary preserves provider differences after shared openings and dec
 
 test('unknown-time matching uses explicit noon reference and returns a provisional Tamil comparison',async()=>{
  const original=globalThis.fetch;
- process.env.PROKERALA_CLIENT_ID='test';process.env.PROKERALA_CLIENT_SECRET='test';process.env.OPENROUTER_API_KEY='test';
+ process.env.DIVINE_API_KEY='test';process.env.DIVINE_ACCESS_TOKEN='test';process.env.OPENROUTER_API_KEY='test';
  let calculated;
  globalThis.fetch=async(url,options)=>{
   if(String(url).endsWith('/token'))return Response.json({access_token:'test',expires_in:3600});
-  if(String(url).includes('/kundli-matching')){calculated=new URL(url);return Response.json({status:'ok',data:{guna_milan:{total_points:22,maximum_points:36,guna:[1,2,3,4,5,6,7,8].map(id=>({id,maximum_points:id,obtained_points:({6:0,8:0})[id]??id}))},message:{description:'Exact report that must not be used for unknown times.'}}});}
+  if(String(url).includes('/ashtakoot-milan')){calculated=options.body;return Response.json({success:1,data:{ashtakoot_milan_result:{points_obtained:22,max_ponits:36,content:'Exact report that must not be used for unknown times.'},ashtakoot_milan:Object.fromEntries(['varna','vashya','tara','yoni','graha_maitri','gana','bhakoota','nadi'].map((k,i)=>[k,{max_ponits:i+1,points_obtained:({6:0,8:0})[i+1]??i+1}]))}});}
   const texts=JSON.parse(JSON.parse(options.body).input[1].content);
   assert.match(texts[0],/noon/);
   return Response.json({output_text:JSON.stringify(['உத்தேசப் பொருத்தம். பிறந்த நேரம் தெரியாததால் நண்பகல் பயன்படுத்தப்பட்டது.','உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.'])});
@@ -47,19 +47,19 @@ test('unknown-time matching uses explicit noon reference and returns a provision
   const birth={datetime:'2002-07-29T05:00:00+05:30',latitude:11.34,longitude:77.72,exactTime:false};
   const response=await matching(new Request('https://test',{method:'POST',body:JSON.stringify({boy:birth,girl:{...birth,exactTime:true},consent:true,language:'ta'})}));
   assert.equal(response.status,200);const result=await response.json();
-  assert.equal(result.factors.length,8);assert.equal(result.factors.reduce((n,g)=>n+g.score,0),22);assert.match(calculated.pathname,/matching\/advanced$/);assert.equal(result.provisional,true);assert.equal(result.language,'ta');
+  assert.equal(result.factors.length,8);assert.equal(result.factors.reduce((n,g)=>n+g.score,0),22);assert.equal(result.provisional,true);assert.equal(result.language,'ta');
   assert.match(result.interpretation,/உத்தேச/);
-  assert.equal(calculated.searchParams.get('boy_dob'),'2002-07-29T12:00:00+05:30');
-  assert.equal(calculated.searchParams.get('girl_dob'),'2002-07-29T05:00:00+05:30');
+  assert.equal(calculated.get('p1_hour'),'12');
+  assert.equal(calculated.get('p2_hour'),'5');
  }finally{globalThis.fetch=original;}
 });
 test('Tamil daily reading translates summary and details and keeps language caches separate',async()=>{
  const original=globalThis.fetch;let translated=0;
- process.env.PROKERALA_CLIENT_ID='test';process.env.PROKERALA_CLIENT_SECRET='test';process.env.OPENROUTER_API_KEY='test';
+ process.env.DIVINE_API_KEY='test';process.env.DIVINE_ACCESS_TOKEN='test';process.env.OPENROUTER_API_KEY='test';
  const date=new Date(Date.now()+19800000).toISOString().slice(0,10);
  globalThis.fetch=async(url,options)=>{
   if(String(url).endsWith('/token'))return Response.json({access_token:'test',expires_in:3600});
-  if(String(url).includes('/horoscope/'))return Response.json({status:'ok',data:{datetime:date+'T12:00:00+05:30',daily_predictions:[{sign:{name:'Aries'},predictions:['general','love','career'].map(type=>({type,prediction:type+' reading.'}))}]}});
+  if(String(url).includes('/daily-horoscope'))return Response.json({success:1,data:{date,sign:'Aries',prediction:{personal:'general reading.',emotions:'love reading.',profession:'career reading.',health:'health reading.'}}});
   translated++;const texts=JSON.parse(JSON.parse(options.body).input[1].content);
   return Response.json({output_text:JSON.stringify(texts.map((_,i)=>'தமிழ் பலன் '+i))});
  };

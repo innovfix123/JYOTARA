@@ -1,0 +1,275 @@
+{
+  "success": 1,
+  "data": {
+    "sunrise": "2026-09-14 05:58:02",
+    "sunset": "2026-09-14 18:11:37",
+    "nakshatras": {
+      "zodiac_point": [
+        {
+          "sign": "Libra",
+          "end_time": ""
+        }
+      ],
+      "nakshatra_list": [
+        {
+          "nak_name": "Chitra",
+          "end_time": "2026-09-14 13:55:02"
+        },
+        {
+          "nak_name": "Swati",
+          "end_time": ""
+        }
+      ],
+      "nakshatra_pada": [
+        {
+          "nak_name": "Chitra",
+          "lord": "Mars",
+          "deity": "Vishwakarma",
+          "element": "Agni",
+          "symbol": "Pearl",
+          "syllables": "पे, पो, रा, री",
+          "pursuit": "Kama",
+          "gana": "Rakshasa",
+          "direction": "West",
+          "guna": "Tamasik",
+          "body_part": "Forehead & Neck",
+          "color": "Black",
+          "nak_number": 14,
+          "nak_pada": 3,
+          "end_time": "2026-09-14 07:39:02",
+          "end_time_seprated": {
+            "day": "14",
+            "month": "09",
+            "year": "2026",
+            "hour": "07",
+            "minute": "39",
+            "second": "02"
+          }
+        },
+        {
+          "nak_name": "Chitra",
+          "lord": "Mars",
+          "deity": "Vishwakarma",
+          "element": "Agni",
+          "symbol": "Pearl",
+          "syllables": "पे, पो, रा, री",
+          "pursuit": "Kama",
+          "gana": "Rakshasa",
+          "direction": "West",
+          "guna": "Tamasik",
+          "body_part": "Forehead & Neck",
+          "color": "Black",
+          "nak_number": 14,
+          "nak_pada": 4,
+          "end_time": "2026-09-14 13:55:02",
+          "end_time_seprated": {
+            "day": "14",
+            "month": "09",
+            "year": "2026",
+            "hour": "13",
+            "minute": "55",
+            "second": "02"
+          }
+        },
+        {
+          "nak_name": "Swati",
+          "lord": "Rahu",
+          "deity": "Vayu",
+          "element": "Agni",
+          "symbol": "Shoot of a Plant",
+          "syllables": "रू, रे, रो, ता",
+          "pursuit": "Artha",
+          "gana": "Deva",
+          "direction": "North",
+          "guna": "Tamasik",
+          "body_part": "Teeth , Chest , Breathing process",
+          "color": "Black",
+          "nak_number": 15,
+          "nak_pada": 1,
+          "end_time": "2026-09-14 20:13:02",
+          "end_time_seprated": {
+            "day": "14",
+            "month": "09",
+            "year": "2026",
+            "hour": "20",
+            "minute": "13",
+            "second": "02"
+          }
+        },
+        {
+          "nak_name": "Swati",
+          "lord": "Rahu",
+          "deity": "Vayu",
+          "element": "Agni",
+          "symbol": "Shoot of a Plant",
+          "syllables": "रू, रे, रो, ता",
+          "pursuit": "Artha",
+          "gana": "Deva",
+          "direction": "North",
+          "guna": "Tamasik",
+          "body_part": "Teeth , Chest , Breathing process",
+          "color": "Black",
+          "nak_number": 15,
+          "nak_pada": 2,
+          "end_time": "2026-09-15 02:33:02",
+          "end_time_seprated": {
+            "day": "15",
+            "month": "09",
+            "year": "2026",
+            "hour": "02",
+            "minute": "33",
+            "second": "02"
+          }
+        },
+        {
+          "nak_name": "Swati",
+          "lord": "Rahu",
+          "deity": "Vayu",
+          "element": "Agni",
+          "symbol": "Shoot of a Plant",
+          "syllables": "रू, रे, रो, ता",
+          "pursuit": "Artha",
+          "gana": "Deva",
+          "direction": "North",
+          "guna": "Tamasik",
+          "body_part": "Teeth , Chest , Breathing process",
+          "color": "Black",
+          "nak_number": 15,
+          "nak_pada": 3,
+          "end_time": ""
+        }
+      ]
+    },
+    "sun_nakshatras": {
+      "zodiac_point": [
+        {
+          "sign": "Leo",
+          "end_time": ""
+        }
+      ],
+      "nakshatra_list": [
+        {
+          "nak_name": "Uttara Phalguni",
+          "end_time": ""
+        }
+      ],
+      "nakshatra_pada": [
+        {
+          "nak_name": "Uttara Phalguni",
+          "lord": "Sun",
+          "deity": "Aryaman",
+          "element": "Agni",
+          "symbol": "A Swinging Hammock",
+          "syllables": "टे, टो, पा, पी",
+          "pursuit": "Moksha",
+          "gana": "Manushya",
+          "direction": "East",
+          "guna": "Rajasik",
+          "body_part": "Sexual organs , Left hand",
+          "color": "Bright Blue",
+          "nak_number": 12,
+          "nak_pada": 1,
+          "end_time": ""
+        }
+      ]
+    },
+    "tithis": [
+      {
+        "start_time": "2026-09-13 07:09:01",
+        "end_time": "2026-09-14 07:07:01",
+        "number": "3",
+        "tithi": "Tritiya",
+        "paksha": "Shukla",
+        "type": "Jaya",
+        "deity": "Gauri",
+        "vriddhi": "false",
+        "kshaya": "false",
+        "gandanta": [],
+        "paksha_randhra": []
+      },
+      {
+        "start_time": "2026-09-14 07:08:01",
+        "end_time": "2026-09-15 05:58:01",
+        "number": "4",
+        "tithi": "Chaturthi",
+        "paksha": "Shukla",
+        "type": "Rikta",
+        "deity": "Ganesha",
+        "vriddhi": "false",
+        "kshaya": "true",
+        "gandanta": [],
+        "paksha_randhra": {
+          "start_time": "2026-09-14 07:08:01",
+          "end_time": "2026-09-14 10:20:01"
+        }
+      }
+    ],
+    "yogas": [
+      {
+        "start_time": "2026-09-13 13:44:01",
+        "end_time": "2026-09-14 12:47:01",
+        "yoga_number": "25",
+        "yoga_name": "Bhramha",
+        "visha_ghatis": []
+      }
+    ],
+    "karnas": [
+      {
+        "start_time": "2026-09-13 19:04:01",
+        "end_time": "2026-09-14 07:07:01",
+        "tithi": "Tritiya",
+        "paksha": "Shukla",
+        "karana_name": "Gar",
+        "mobility": "Moveable",
+        "rulling_planet": "Jupiter",
+        "devata": "Bhumi",
+        "nature": "Saumya",
+        "bhadra": [],
+        "bhadra_niwas": []
+      },
+      {
+        "start_time": "2026-09-14 07:08:01",
+        "end_time": "2026-09-14 19:21:01",
+        "tithi": "Chaturthi",
+        "paksha": "Shukla",
+        "karana_name": "Vanija",
+        "mobility": "Moveable",
+        "rulling_planet": "Venus",
+        "devata": "Devi",
+        "nature": "Saumya",
+        "bhadra": [],
+        "bhadra_niwas": []
+      },
+      {
+        "start_time": "2026-09-14 19:22:01",
+        "end_time": "2026-09-15 05:58:01",
+        "tithi": "Chaturthi",
+        "paksha": "Shukla",
+        "karana_name": "Vishti",
+        "mobility": "Moveable",
+        "rulling_planet": "Saturn",
+        "devata": "Yama",
+        "nature": "Kroora",
+        "bhadra": {
+          "bhadra_puccha": {
+            "start_time": "2026-09-15 04:46:01",
+            "end_time": "2026-09-15 05:58:01"
+          },
+          "bhadra_mukha": {
+            "start_time": "2026-09-14 19:22:01",
+            "end_time": "2026-09-14 21:22:01"
+          }
+        },
+        "bhadra_niwas": [
+          {
+            "start_time": "2026-09-14 19:22:01",
+            "end_time": "2026-09-15 05:58:01",
+            "zodiac_name": "Libra",
+            "bhadra_niwas": "Patala",
+            "nature": "Beneficial"
+          }
+        ]
+      }
+    ]
+  }
+}

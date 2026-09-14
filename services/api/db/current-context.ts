@@ -25,7 +25,7 @@ export async function currentContext(db: D1Database, location: ContextLocation,
   const hour = Math.floor(now / 3_600_000);
   await db.prepare('DELETE FROM current_context_cache WHERE expires_at < ?').bind(now - 30 * 86_400_000).run();
   const get = async (module: Module): Promise<{ payload: unknown; at: number } | null> => {
-    const key = `drik-lahiri-en-v1:${module}:${place}:${day}:${questionId ?? (module === 'transit' ? hour : 'day')}`;
+    const key = `divine-vedic-en-v2:${module}:${place}:${day}:${questionId ?? (module === 'transit' ? hour : 'day')}`;
     const expiry = module === 'transit' ? Math.min((hour + 1) * 3_600_000, midnight) : midnight;
     const select = () => db.prepare('SELECT status, payload_json, calculated_at, expires_at FROM current_context_cache WHERE id = ?').bind(key).first<Row>();
     const decode = (row: Row | null) => {

@@ -405,7 +405,7 @@ class _BirthFormState extends State<BirthForm> {
               label: UiText(_searching ? 'Searching…' : 'Search birthplace'),
             ),
             const UiText(
-              'Location data: astrology calculation service',
+              'Location data: GeoNames (CC BY 4.0) · geonames.org',
               style: TextStyle(fontSize: 12),
             ),
             ..._places.map(

@@ -1,4 +1,4 @@
-import { prokeralaToken } from '../lib/prokerala-client';
+import { divineData, divineMatch } from '../lib/divine-calculations';
 
 
 export function readablePrediction(value: string) {
@@ -31,16 +31,6 @@ export async function tamilTranslation(texts: string[]): Promise<string[]> {
 export const signs = ['aries','taurus','gemini','cancer','leo','virgo','libra','scorpio','sagittarius','capricorn','aquarius','pisces'];
 const cache = new Map<string, { expires: number; value: unknown }>();
 const pending = new Map<string, Promise<unknown>>();
-async function provider(path: string, params: Record<string,string>) {
-  const token = await prokeralaToken({PROKERALA_CLIENT_ID:process.env.PROKERALA_CLIENT_ID, PROKERALA_CLIENT_SECRET:process.env.PROKERALA_CLIENT_SECRET});
-  const url = new URL(`https://api.prokerala.com/v2${path}`);
-  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k,v));
-  const response = await fetch(url, {headers:{Authorization:`Bearer ${token}`}, signal:AbortSignal.timeout(15000), redirect:'error'});
-  if (!response.ok) throw Error('Provider unavailable');
-  const body: any = await response.json();
-  if (body.status !== 'ok' || !body.data) throw Error('Invalid provider response');
-  return body.data;
-}
 export function validDay(date: unknown, now = Date.now()) {
   if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const today = new Date(now+19800000).toISOString().slice(0,10);
@@ -68,17 +58,16 @@ export async function daily(request: Request) {
           cache.set(key,{expires:Date.now()+3600000,value});
           return value;
         }
-        const data = await provider('/horoscope/daily/advanced',{datetime:`${date}T12:00:00+05:30`,sign,type:'general,love,career'});
-        if (typeof data.datetime !== 'string' || data.datetime.slice(0,10) !== date) throw Error('Wrong prediction date');
-        const row = data.daily_predictions?.find((r: any) => r.sign?.name?.toLowerCase() === sign);
-        if (!row || !Array.isArray(row.predictions)) throw Error('Missing prediction');
-        const sections = ['General','Love','Career'].map(title => {
-          const item = row.predictions.find((r: any) => r.type?.toLowerCase() === title.toLowerCase());
-          const text = item?.prediction;
-          if (typeof text !== 'string' || !text.trim() || text.length > 10000) throw Error('Missing section');
-          return {title,text:readingSummary(text, item.insight),details:readablePrediction(text)};
+        const today = new Date(Date.now()+19800000).toISOString().slice(0,10);
+        const delta=(Date.parse(date)-Date.parse(today))/86400000;
+        const data=await divineData({DIVINE_API_KEY:process.env.DIVINE_API_KEY,DIVINE_ACCESS_TOKEN:process.env.DIVINE_ACCESS_TOKEN},'https://astroapi-5.divineapi.com/api/v5/daily-horoscope',{sign,h_day:delta===-1?'yesterday':delta===1?'tomorrow':'today',tzone:5.5,lan:'en'});
+        if(data.date!==date||data.sign?.toLowerCase()!==sign)throw Error('Wrong prediction date or sign');
+        const sections=[['General','personal'],['Love','emotions'],['Career','profession'],['Health','health']].map(([title,key])=>{
+          const text=data.prediction?.[key];
+          if(typeof text!=='string'||!text.trim()||text.length>10000)throw Error('Missing section');
+          return {title,text:readingSummary(text),details:readablePrediction(text)};
         });
-        const value = {language:tamil?'ta':'en',date,sign,source:'Prokerala',basis:'General zodiac reading; not a personal birth-chart forecast.',sections};
+        const value={language:'en',date,sign,source:'Divine',basis:'General zodiac reading; not a personal birth-chart forecast.',sections};
         if (cache.size >= 72) cache.delete(cache.keys().next().value!);
         cache.set(key,{expires:Date.now()+3600000,value});
         return value;
@@ -102,7 +91,7 @@ export async function matching(request: Request) {
     if (consent !== true || !validBirth(boy) || !validBirth(girl)) return Response.json({error:'Both people must be aged 13 or older and consent, with valid birth dates and Indian birthplaces for this comparison.'},{status:400});
     const provisional = !boy.exactTime || !girl.exactTime;
     const reference = (person:any) => person.exactTime ? person.datetime : person.datetime.slice(0,10)+'T12:00:00+05:30';
-    const data = await provider('/astrology/kundli-matching/advanced',{ayanamsa:'1',la:'en',boy_dob:reference(boy),girl_dob:reference(girl),boy_coordinates:`${boy.latitude},${boy.longitude}`,girl_coordinates:`${girl.latitude},${girl.longitude}`});
+    const data = await divineMatch({DIVINE_API_KEY:process.env.DIVINE_API_KEY,DIVINE_ACCESS_TOKEN:process.env.DIVINE_ACCESS_TOKEN},{...boy,datetime:reference(boy)},{...girl,datetime:reference(girl)});
     const score = data.guna_milan;
     if (!score || !Number.isFinite(score.total_points) || score.maximum_points !== 36 || score.total_points < 0 || score.total_points > 36 || typeof data.message?.description !== 'string') throw Error('Invalid matching');
     const guna = score.guna;

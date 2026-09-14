@@ -39,6 +39,22 @@ Map<String, dynamic> fixture() => {
   },
 };
 void main() {
+  test('Divine sign-only D9 retains signs without fabricated degrees', () {
+    final raw = fixture();
+    raw['provider'] = 'divine';
+    raw['degreePrecision'] = 'sign-only';
+    for (final group in raw['data']['divisional_positions']) {
+      for (final planet in group['planet_positions']) {
+        planet.remove('sign_degree');
+      }
+    }
+    final result = normalizeNavamsa(raw, true)!;
+    expect(result.length, 9);
+    expect(result.first['position'], 1);
+    expect(result.every((p) => !p.containsKey('degree')), true);
+    raw.remove('provider');
+    expect(normalizeNavamsa(raw, true), isNull);
+  });
   test('D9 preserves node IDs and sign convention without natal substitution', () {
     final result = normalizeNavamsa(fixture(), true)!;
     expect(result.length, 9);

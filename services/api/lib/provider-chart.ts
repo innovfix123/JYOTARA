@@ -55,9 +55,9 @@ export function normalizeProviderNavamsa(payload: unknown, birthTimeKnown: boole
       const p = object(entry.planet);
       const rasi = object(entry.rasi);
       const canonical = typeof p.id === 'number' ? planetNames[p.id] : undefined;
-      if (!canonical || name(p) !== canonical || seenPlanets.has(canonical) || rasi.id !== sign.id || chartSignNumber(name(rasi)) !== sign.id + 1 || typeof entry.sign_degree !== 'number' || !Number.isFinite(entry.sign_degree) || entry.sign_degree < 0 || entry.sign_degree >= 30) return undefined;
+      if (!canonical || name(p) !== canonical || seenPlanets.has(canonical) || rasi.id !== sign.id || chartSignNumber(name(rasi)) !== sign.id + 1 || !(raw.provider === 'divine' && raw.degreePrecision === 'sign-only' && entry.sign_degree === undefined) && (typeof entry.sign_degree !== 'number' || !Number.isFinite(entry.sign_degree) || entry.sign_degree < 0 || entry.sign_degree >= 30)) return undefined;
       seenPlanets.add(canonical);
-      if (p.id !== 100) result.push({ name: canonical, rasi: name(rasi)!, position: sign.id + 1, degree: entry.sign_degree });
+      if (p.id !== 100) result.push({ name: canonical, rasi: name(rasi)!, position: sign.id + 1, ...(typeof entry.sign_degree === 'number' ? {degree:entry.sign_degree} : {}) });
     }
   }
   // The divisional endpoint does not provide retrograde state. D9 records

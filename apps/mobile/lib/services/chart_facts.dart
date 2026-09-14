@@ -82,15 +82,16 @@ List<Map<String, dynamic>>? normalizeNavamsa(dynamic payload, bool known) {
       final rasi = item['rasi'] as Map;
       final name = names[planet['id']];
       final degree = item['sign_degree'];
+      final signOnly = payload['provider'] == 'divine' && payload['degreePrecision'] == 'sign-only' && degree == null;
       if (name == null ||
           planet['name'] != name ||
           !seenPlanets.add(name) ||
           rasi['id'] != id ||
           rasi['name'] != signs[id] ||
-          degree is! num ||
+          (!signOnly && (degree is! num ||
           !degree.isFinite ||
           degree < 0 ||
-          degree >= 30) {
+          degree >= 30))) {
         return null;
       }
       if (planet['id'] != 100) {
@@ -98,7 +99,7 @@ List<Map<String, dynamic>>? normalizeNavamsa(dynamic payload, bool known) {
           'name': name,
           'rasi': signs[id],
           'position': id + 1,
-          'degree': degree,
+          'degree': ?degree,
         });
       }
     }
