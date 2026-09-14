@@ -79,6 +79,11 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Wallet · ₹0  +': 'பணப்பை · ₹0  +',
+  'Unable to connect. Check your internet connection, then tap Retry.': 'இணைக்க முடியவில்லை. இணைய இணைப்பைச் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.',
+  'The reading is taking longer than expected. Please try again shortly.': 'பலன் வருவதற்குச் சற்று தாமதமாகிறது. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
+  'The reading could not be loaded. Please try again shortly.': 'பலனை ஏற்ற முடியவில்லை. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
+  'Location data: GeoNames (CC BY 4.0) · geonames.org': 'இடத் தகவல்: GeoNames (CC BY 4.0) · geonames.org',
   "Your birth details, questions and recent chat context are processed by astrology and language services. External astrology conversation deletion may still be pending after local and server deletion. Manage your saved profile from the Chart tab. Research sharing is optional.": "உங்கள் பிறந்த விவரங்கள், கேள்விகள் மற்றும் சமீபத்திய உரையாடல்கள் ஜோதிட மற்றும் மொழிச் சேவைகளில் செயலாக்கப்படுகின்றன. சாதனம் மற்றும் எங்கள் சேவையகத்தில் நீக்கிய பின்னரும் வெளிச் சேவையின் உரையாடல் நீக்கம் நிலுவையில் இருக்கலாம். ஜாதகம் பகுதியில் விவரங்களை நிர்வகிக்கலாம். ஆய்வுப் பகிர்வு உங்கள் விருப்பம்.",
   'Ashta Kuta': 'அஷ்டகூடப் பொருத்தம்',
   'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.': 'பிறந்த நேரம் தெரியாவிட்டால் நண்பகல் நேரத்தில் உத்தேசமாக ஒப்பிடுவோம். உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.',

@@ -2,6 +2,7 @@ import 'brand_mark.dart';
 import 'services/ui_language.dart';
 
 import 'dart:convert';
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -68,27 +69,40 @@ String zodiacLabel(BuildContext context, int index) =>
 
 Future<Map<String, dynamic>> discoveryRequest(
   String path,
-  Map<String, dynamic> body,
-) async {
-  final response = await http
-      .post(
-        Uri.parse(defaultApiBaseUrl).resolve(path),
-        headers: {
-          'Content-Type': 'application/json',
-          if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
-            'X-Jyotara-Phone-Auth': 'required',
-          'X-Jyotara-Tester-Code': testerAccess.code ?? '',
-          if (phoneAccess.token != null)
-            'Authorization': 'Bearer ${phoneAccess.token}',
-        },
-        body: jsonEncode(body),
-      )
-      .timeout(const Duration(seconds: 90));
-  final data = jsonDecode(response.body) as Map<String, dynamic>;
-  if (response.statusCode != 200) {
-    throw Exception(data['error'] ?? 'Please try again later.');
+  Map<String, dynamic> body, {
+  http.Client? client,
+}) async {
+  try {
+    final response = await (client?.post ?? http.post)(
+      Uri.parse(defaultApiBaseUrl).resolve(path),
+      headers: {
+        'Content-Type': 'application/json',
+        if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
+          'X-Jyotara-Phone-Auth': 'required',
+        'X-Jyotara-Tester-Code': testerAccess.code ?? '',
+        if (phoneAccess.token != null)
+          'Authorization': 'Bearer ${phoneAccess.token}',
+      },
+      body: jsonEncode(body),
+    ).timeout(const Duration(seconds: 90));
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode != 200) {
+      throw Exception(data['error'] ?? 'Please try again later.');
+    }
+    return data;
+  } on http.ClientException {
+    throw Exception(
+      'Unable to connect. Check your internet connection, then tap Retry.',
+    );
+  } on TimeoutException {
+    throw Exception(
+      'The reading is taking longer than expected. Please try again shortly.',
+    );
+  } on FormatException {
+    throw Exception(
+      'The reading could not be loaded. Please try again shortly.',
+    );
   }
-  return data;
 }
 
 class DiscoveryActions extends StatelessWidget {

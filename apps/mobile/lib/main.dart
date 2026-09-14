@@ -2088,7 +2088,7 @@ class _ChartHero extends StatelessWidget {
                   Text(
                     facts == null
                         ? uiText(context, 'Start with your\nVedic birth chart.')
-                        : '${facts['rashi']} ${uiText(context, 'Rasi')}',
+                        : '${uiText(context, facts['rashi'].toString())} ${uiText(context, 'Rasi')}',
                     style: Theme.of(context).textTheme.headlineSmall
                         ?.copyWith(fontSize: 26),
                   ),
