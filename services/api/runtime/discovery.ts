@@ -118,7 +118,7 @@ export async function matching(request: Request) {
     ];
     const factors = [...guna].sort((a:any,b:any)=>a.id-b.id).map((g:any)=>({id:g.id,name:names[g.id-1],score:g.obtained_points,maximum:g.maximum_points,description:descriptions[g.id-1]}));
     const dosha = (value:any) => typeof value?.has_dosha === 'boolean' ? {present:value.has_dosha,exception:value.has_exception===true} : null;
-    let interpretation = provisional ? 'This reference-time comparison uses noon wherever the birth time is unknown. The displayed score can change with the actual birth time; it is not a confirmed compatibility score.' : data.message.description;
+    let interpretation = provisional ? 'This reference-time comparison uses noon wherever the birth time is unknown. The displayed score can change with the actual birth time; it is not a confirmed compatibility score.' : data.message.description.replace(/the Saved profile and Saved profile/gi, 'the two selected profiles');
     let note = provisional ? 'Names do not establish birth time or compatibility. You can save this provisional comparison now and update it when the time is known. Do not use it to decide whether to marry.' : 'This is a traditional chart comparison, not a prediction of relationship success. Consent, trust and communication matter.';
     if(language==='ta') [interpretation,note]=await tamilTranslation([interpretation,note]);
     return Response.json({score:score.total_points,maximum:36,factors,boyMangal:dosha(data.boy_mangal_dosha_details),girlMangal:dosha(data.girl_mangal_dosha_details),provisional,interpretation,source:'Ashta Kuta',note,language:language==='ta'?'ta':'en'});
