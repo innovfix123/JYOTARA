@@ -79,6 +79,11 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Delete account': 'கணக்கை நீக்கு',
+  'Delete account?': 'கணக்கை நீக்க வேண்டுமா?',
+  'Delete phone account, saved profiles and chats':
+      'தொலைபேசிக் கணக்கு, சேமித்த ஜாதகங்கள் மற்றும் உரையாடல்களை நீக்கவும்',
+  'This removes your phone account and its saved profiles and chats from this device and our server. Minimal security records and backups remain temporarily. External service deletion may still be pending.': 'உங்கள் தொலைபேசிக் கணக்கு, சேமித்த ஜாதகங்கள் மற்றும் உரையாடல்கள் இந்தச் சாதனத்திலிருந்தும் எங்கள் சேவையகத்திலிருந்தும் நீக்கப்படும். குறைந்தபட்சப் பாதுகாப்புப் பதிவுகளும் காப்புப் பிரதிகளும் தற்காலிகமாக இருக்கும். வெளிச்சேவையில் உள்ள தரவை நீக்கும் பணி இன்னும் நிலுவையில் இருக்கலாம்.',
   'Payments not enabled': 'கட்டண வசதி செயல்படுத்தப்படவில்லை',
   'AI astrology guidance': 'செயற்கை நுண்ணறிவு ஜோதிட வழிகாட்டுதல்',
   'Daily limits apply to chart calculations and place searches. A failed calculation may still count toward its daily limit. Payments are not enabled; no money is deducted.': 'ஜாதகக் கணக்கீடுகளுக்கும் இடத் தேடல்களுக்கும் தினசரி வரம்புகள் உள்ளன. தோல்வியடைந்த கணக்கீடும் அந்த வரம்பில் சேரலாம். கட்டண வசதி செயல்படுத்தப்படவில்லை; பணம் பிடிக்கப்படாது.',
