@@ -32,7 +32,7 @@ export class PhoneAuth {
     const path=new URL(request.url).pathname;
     if(path==='/api/auth/config')return response({enabled:this.configured()});
     if(!this.configured())return response({error:'Phone sign-in is being configured. Please try again later.',code:'otp_not_configured'},503);
-    if(path==='/api/auth/reviewer')return reviewerLogin(request,this.db,this.settings,tester,this.now());
+    if(path==='/api/auth/reviewer' || path==='/api/auth/reviewer-delete')return reviewerLogin(request,this.db,this.settings,tester,this.now());
     if(path==='/api/auth/delete-account') {
       const body=await request.json().catch(()=>null);
       if(body?.confirm!==true)return response({error:'Confirm account deletion.'},422);

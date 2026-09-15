@@ -1,5 +1,6 @@
 import {createHash, createHmac, randomBytes, timingSafeEqual} from 'node:crypto';
 import type {PostgresDatabase} from './postgres';
+import {erasePhoneAccount} from './account-deletion';
 
 const digest = (value:string) => createHash('sha256').update(value).digest('hex');
 const reply = (value:unknown,status=200) => Response.json(value,{status,headers:{'Cache-Control':'no-store'}});
@@ -22,11 +23,23 @@ export async function reviewerLogin(request:Request,db:PostgresDatabase,settings
   if(body.username!=='jyotara-review' || !timingSafeEqual(Buffer.from(digest(body.password),'hex'),Buffer.from(expected,'hex'))) return reply({error:'Invalid review credentials.'},401);
   const phoneHash=createHmac('sha256',secret).update('review-account:play-console:v1').digest('hex');
   const token=randomBytes(32).toString('hex'),expiresAt=now+30*86400000;
+  const deletionOnly=new URL(request.url).pathname==='/api/auth/reviewer-delete';
   const accountId=await db.transaction(async tx=>{
+    if(deletionOnly) {
+      const existing=await tx.query('SELECT id FROM phone_accounts WHERE phone_hash=$1',[phoneHash]);
+      if(!existing.rows[0])return null;
+      const id=existing.rows[0].id;
+      await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,now+60000]);
+      return id;
+    }
     const user=await tx.query('INSERT INTO phone_accounts(id,phone_hash,last_four,created_at) VALUES($1,$2,$3,$4) ON CONFLICT(phone_hash) DO UPDATE SET last_four=EXCLUDED.last_four RETURNING id',[randomBytes(16).toString('hex'),phoneHash,'DEMO',now]);
     const id=user.rows[0].id;
     await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,expiresAt]);
     return id;
   });
+  if(deletionOnly) {
+    const deleted=accountId===null || await erasePhoneAccount(db,digest(token),tester,now);
+    return deleted?reply({deleted:true}):reply({error:'Deletion was not confirmed. Please retry.'},503);
+  }
   return reply({token,accountId,expiresAt});
 }

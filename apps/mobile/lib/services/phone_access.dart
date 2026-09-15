@@ -43,6 +43,9 @@ class PhoneAccess extends ChangeNotifier {
   int _expires = 0, _challengeExpires = 0;
   bool _serverDeleted = false, _deletionPending = false;
   bool _deletionOtp = false;
+  bool _reviewAccount = false;
+  bool get canVerifyReviewDeletion =>
+      _deletionPending && !_serverDeleted && _reviewAccount;
   bool get deletionPending => _deletionPending;
   bool get deletionCodeSent => _deletionPending && _deletionOtp && codeSent;
   bool get canVerifyDeletion =>
@@ -69,6 +72,7 @@ class PhoneAccess extends ChangeNotifier {
       'serverDeleted': _serverDeleted,
       'deletionPending': _deletionPending,
       'deletionOtp': _deletionOtp,
+      'reviewAccount': _reviewAccount,
       'token': _token,
       'accountId': _account,
       'expiresAt': _expires,
@@ -100,6 +104,7 @@ class PhoneAccess extends ChangeNotifier {
       }
       if (data['accountId'] is String) _account = data['accountId'];
       _serverDeleted = data['serverDeleted'] == true;
+      _reviewAccount = data['reviewAccount'] == true;
       _deletionPending = data['deletionPending'] == true || _serverDeleted;
       _deletionOtp = _deletionPending && data['deletionOtp'] == true;
       if (data['token'] is String &&
@@ -249,6 +254,7 @@ class PhoneAccess extends ChangeNotifier {
         }),
       );
       _serverDeleted = false;
+      _reviewAccount = false;
       _token = data['token'];
       _account = data['accountId'];
       _expires = data['expiresAt'];
@@ -269,15 +275,22 @@ class PhoneAccess extends ChangeNotifier {
   }
 
   Future<void> reviewerLogin(String username, String password) async {
-    if (busy || _deletionPending || authorized) return;
+    final deletionOnly = canVerifyReviewDeletion;
+    if (busy || (_deletionPending && !deletionOnly) || authorized) return;
     busy = true;
     error = null;
     notifyListeners();
     try {
-      final data = await _post('reviewer', {
+      final data = await _post(deletionOnly ? 'reviewer-delete' : 'reviewer', {
         'username': username.trim(),
         'password': password,
       });
+      if (deletionOnly) {
+        if (data['deleted'] != true) throw const FormatException();
+        _serverDeleted = true;
+        await _save();
+        return;
+      }
       if (data['token'] is! String ||
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) ||
           data['accountId'] is! String ||
@@ -294,12 +307,14 @@ class PhoneAccess extends ChangeNotifier {
       await prepareAccount?.call(data['accountId'] as String);
       await _write(
         jsonEncode({
+          'reviewAccount': true,
           'token': data['token'],
           'accountId': data['accountId'],
           'expiresAt': data['expiresAt'],
         }),
       );
       _token = data['token'];
+      _reviewAccount = true;
       _account = data['accountId'];
       _expires = data['expiresAt'];
       _mobile = null;
@@ -314,6 +329,7 @@ class PhoneAccess extends ChangeNotifier {
     } finally {
       busy = false;
       notifyListeners();
+      if (deletionOnly && _serverDeleted) await deleteAccount();
     }
   }
 
@@ -377,6 +393,7 @@ class PhoneAccess extends ChangeNotifier {
       _serverDeleted = false;
       _deletionPending = false;
       _deletionOtp = false;
+      _reviewAccount = false;
       _account = null;
       _token = null;
       _mobile = null;

@@ -6,6 +6,7 @@ import {erasePhoneAccount} from './account-deletion';
 import {reportAnswer} from './answer-reports';
 import {createHash,createHmac} from 'node:crypto';
 import {PhoneAuth} from './phone-auth';
+import {reviewerLogin} from './reviewer-auth';
 import {admitTesterRequest} from './tester-access';
 import {completeProfile} from '../db/profile-recovery';
 import {reserveProfile} from '../db/profile-reservation';
@@ -20,6 +21,20 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
   for(const file of readdirSync(dir).filter(f=>/^\d+_.*\.sql$/.test(f)).sort())
    await db.pool.query(readFileSync(dir+'/'+file,'utf8').replace(/`([a-z_]+)`/gi,'"$1"').replace(/\binteger\b/gi,'bigint'));
   const now=Date.now();
+  const reviewSettings={JYOTARA_PHONE_AUTH_KEY:'synthetic-review-key-more-than-32-characters',JYOTARA_REVIEW_PASSWORD_SHA256:createHash('sha256').update('synthetic-review-password').digest('hex')};
+  const reviewRequest=(deleting=false)=>new Request('https://example.test/api/auth/'+(deleting?'reviewer-delete':'reviewer'),{method:'POST',body:JSON.stringify({username:'jyotara-review',password:'synthetic-review-password'})});
+  const demo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json();
+  const demoAuth=new PhoneAuth(db,{});
+  assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'public-v1'),demo.accountId);
+  assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'wrong'),null);
+  assert.equal(await demoAuth.ownProfile('nirayana_pilot_session=demo-chart',demo.accountId,true),true);
+  assert.deepEqual(await (await reviewerLogin(reviewRequest(true),db,reviewSettings,'public-v1',now)).json(),{deleted:true});
+  assert.equal((await db.pool.query('SELECT id FROM phone_accounts WHERE id=$1',[demo.accountId])).rowCount,0);
+  assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'public-v1'),null);
+  const freshDemo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json();
+  assert.notEqual(freshDemo.accountId,demo.accountId);
+  assert.equal(await demoAuth.ownProfile('nirayana_pilot_session=demo-chart',freshDemo.accountId,true),false);
+  assert.deepEqual(await (await reviewerLogin(reviewRequest(true),db,reviewSettings,'public-v1',now)).json(),{deleted:true});
   for(const who of ['owner','other']) {
    await db.pool.query('INSERT INTO phone_accounts VALUES($1,$2,$3,$4)',[who,who+'-hash','0000',now]);
    await db.pool.query('INSERT INTO phone_login_sessions VALUES($1,$2,$3,$4)',[who+'-token',who,'tester',now+600000]);

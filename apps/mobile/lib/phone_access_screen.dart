@@ -112,6 +112,40 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                         ),
                       ],
                     ],
+                    if (access.canVerifyReviewDeletion) ...[
+                      const Text(
+                        'Verify review credentials to finish deletion.',
+                      ),
+                      TextField(
+                        controller: _reviewUser,
+                        enabled: !access.busy,
+                        decoration: const InputDecoration(
+                          labelText: 'Review username',
+                        ),
+                      ),
+                      TextField(
+                        controller: _reviewPassword,
+                        enabled: !access.busy,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          labelText: 'Review password',
+                        ),
+                      ),
+                      FilledButton(
+                        onPressed: access.busy
+                            ? null
+                            : () async {
+                                await access.reviewerLogin(
+                                  _reviewUser.text,
+                                  _reviewPassword.text,
+                                );
+                                _reviewPassword.clear();
+                              },
+                        child: const Text('Verify and delete review account'),
+                      ),
+                    ],
                   ],
                 ),
               ),

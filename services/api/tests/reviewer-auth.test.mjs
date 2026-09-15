@@ -8,6 +8,14 @@ const password='synthetic-review-password-for-test-only';
 const settings={JYOTARA_PHONE_AUTH_KEY:'synthetic-hmac-key-over-thirty-two-characters',JYOTARA_REVIEW_PASSWORD_SHA256:createHash('sha256').update(password).digest('hex')};
 const req=(body)=>new Request('https://example.test/api/auth/reviewer',{method:'POST',body:JSON.stringify(body)});
 const forbidden={transaction(){throw Error('Unexpected database');}};
+test('deletion retry for missing review account does not recreate it',async()=>{
+ const calls=[];
+ const db={transaction:fn=>fn({query:async(sql,args)=>{calls.push(sql);return {rows:[]};}})};
+ const r=new Request('https://example.test/api/auth/reviewer-delete',{method:'POST',body:JSON.stringify({username:'jyotara-review',password})});
+ const result=await reviewerLogin(r,db,settings,'public-v1');
+ assert.deepEqual(await result.json(),{deleted:true});
+ assert.ok(!calls.some(sql=>sql.includes('INSERT INTO phone_accounts')||sql.includes('INSERT INTO phone_login_sessions')));
+});
 test('review credentials are opt-in and restricted to public realm',async()=>{
  assert.equal((await reviewerLogin(req({}),forbidden,{},'public-v1')).status,503);
  assert.equal((await reviewerLogin(req({}),forbidden,settings,'someone-else')).status,503);
