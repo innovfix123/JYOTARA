@@ -226,29 +226,27 @@ class JyotaraApp extends StatelessWidget {
         home: LaunchIntro(
           initialization: initialization,
           child: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
-              ? TesterAccessScreen(
-                  access: testerAccess,
-                  child:
-                      const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH')
-                      ? PhoneAccessScreen(
-                          access: phoneAccess,
-                          child: AnimatedBuilder(
-                            animation: phoneAccess,
-                            builder: (context, _) => FirstProfileSetup(
-                              key: ValueKey(phoneAccess.accountId),
-                              session: profileSession,
-                              child: const IntroScreen(),
-                            ),
-                          ),
-                        )
-                      : const IntroScreen(),
-                )
-              : const IntroScreen(),
+              ? TesterAccessScreen(access: testerAccess, child: _phoneGate())
+              : _phoneGate(),
         ),
       ),
     );
   }
 }
+
+Widget _phoneGate() => const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH')
+    ? PhoneAccessScreen(
+        access: phoneAccess,
+        child: AnimatedBuilder(
+          animation: phoneAccess,
+          builder: (context, _) => FirstProfileSetup(
+            key: ValueKey(phoneAccess.accountId),
+            session: profileSession,
+            child: const IntroScreen(),
+          ),
+        ),
+      )
+    : const IntroScreen();
 
 enum ChatLanguage { auto, english, tamil, tanglish }
 
