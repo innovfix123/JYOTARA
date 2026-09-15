@@ -60,9 +60,7 @@ ProfileSession _newProfileSession() {
     preferences: languagePreferences,
     vault: LocalProfileVault(
       read: () => const FlutterSecureStorage().read(key: storageKey),
-      write: (value) => value == null
-          ? const FlutterSecureStorage().delete(key: storageKey)
-          : const FlutterSecureStorage().write(key: storageKey, value: value),
+      write: (value) => accountStorage.writeKey(storageKey, value),
     ),
   );
 }

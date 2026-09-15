@@ -479,9 +479,7 @@ class KundliLibrary {
     ),
     vault: LocalProfileVault(
       read: () => storage.read(key: storageKey),
-      write: (value) => value == null
-          ? storage.delete(key: storageKey)
-          : storage.write(key: storageKey, value: value),
+      write: (value) => accountStorage.writeKey(storageKey, value),
     ),
   );
   }
@@ -496,14 +494,15 @@ class KundliLibrary {
       16,
       (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
     ).join();
-    await storage.write(
-      key: indexKey,
-      value: jsonEncode([...rows.map((r) => r.id), id]),
+    await accountStorage.writeKey(
+      indexKey,
+      jsonEncode([...rows.map((r) => r.id), id]),
     );
     return SavedKundli(id, _session(id));
   }
 
   static Future<void> remove(SavedKundli row, List<SavedKundli> rows) async {
+    final originalIndexKey = indexKey;
     if (row.session.storageError != null) {
       throw Exception(row.session.storageError);
     }
@@ -515,9 +514,9 @@ class KundliLibrary {
     if (row.session.storageError != null) {
       throw Exception(row.session.storageError);
     }
-    await storage.write(
-      key: indexKey,
-      value: jsonEncode(
+    await accountStorage.writeKey(
+      originalIndexKey,
+      jsonEncode(
         rows.where((r) => r.id != row.id).map((r) => r.id).toList(),
       ),
     );

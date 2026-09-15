@@ -23,24 +23,55 @@ class AccountStorage {
   final Future<Map<String, String>> Function() _readAll;
   final Future<void> Function(String) _delete;
   String? account;
+  Future<void>? _writes;
+  final Set<String> _erasedOwners = {};
+
+  Future<void> _enqueue(Future<void> Function() operation) {
+    final next = (_writes ?? Future<void>.value()).then((_) => operation());
+    final settled = next.catchError((Object _) {});
+    _writes = settled;
+    settled.then((_) {
+      if (identical(_writes, settled)) _writes = null;
+    });
+    return next;
+  }
+
+  /// All profile writers share the erasure barrier, including saved Kundlis.
+  Future<void> writeKey(String key, String? value) => _enqueue(() async {
+    final owner = RegExp(r'^jyotara\.account\.([a-f0-9]{32})\.')
+        .firstMatch(key)
+        ?.group(1);
+    if (owner != null && _erasedOwners.contains(owner)) {
+      throw StateError('This account was deleted.');
+    }
+    if (value == null) {
+      await _delete(key);
+    } else {
+      await _write(key, value);
+    }
+  });
 
   /// Erase this account namespace and only its owned pre-migration copies.
   Future<void> erase(String owner) async {
     if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(owner)) {
       throw const FormatException('Invalid account');
     }
-    final records = await _readAll();
-    final legacyOwned = records['jyotara.legacy-owner.v1'] == owner;
-    for (final key in records.keys) {
-      final namespaced = key.startsWith('jyotara.account.$owner.');
-      final legacy =
-          legacyOwned &&
-          (key == 'nirayana.private-profile.v1' ||
-              key == 'jyotara.kundli.index.v1' ||
-              RegExp(r'^jyotara\.kundli\.[a-f0-9]{32}$').hasMatch(key));
-      if (namespaced || legacy) await _delete(key);
-    }
-    // Preserve ownership marker to prevent legacy data being claimed elsewhere.
+    // Close the barrier immediately, then drain any already-running write.
+    _erasedOwners.add(owner);
+    await _enqueue(() async {
+      final records = await _readAll();
+      final legacyOwned = records['jyotara.legacy-owner.v1'] == owner;
+      for (final key in records.keys) {
+        final namespaced = key.startsWith('jyotara.account.$owner.');
+        final legacy =
+            legacyOwned &&
+            (key == 'nirayana.private-profile.v1' ||
+                key == 'jyotara.kundli.index.v1' ||
+                RegExp(r'^jyotara\.kundli\.[a-f0-9]{32}$').hasMatch(key));
+        if (namespaced || legacy) await _delete(key);
+      }
+      // Preserve ownership marker to prevent legacy data being claimed elsewhere.
+    });
   }
 
   String key(String base) =>
