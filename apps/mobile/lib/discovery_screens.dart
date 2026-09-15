@@ -355,6 +355,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
                 child: Padding(
                   padding: const EdgeInsets.all(3),
                   child: ChoiceChip(
+                    showCheckmark: false,
                     label: UiText(['Yesterday', 'Today', 'Tomorrow'][d + 1]),
                     selected: day == d,
                     onSelected: (_) {
@@ -908,6 +909,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
+          useSafeArea: true,
           builder: (context) => SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24),
