@@ -21,6 +21,12 @@ export function validChatText(answer:unknown,style:string,maxWords=85):answer is
   if(/prokerala|divine\s*api|openrouter|gemini[-/ ](?:[23]|flash|model)\b|gpt[- ]?\d/i.test(answer))return false;
   return true;
 }
+// Provider reports are source material, not the final chat bubble. Markdown,
+// headings and long paragraphs are valid input for the short-answer editor.
+export function validSourceReading(answer:unknown):answer is string {
+  return typeof answer==='string' && answer.trim().length>=20 &&
+    answer.length<=24000 && /[A-Za-z\u0b80-\u0bff]/.test(answer);
+}
 export function parseEdited(raw:string,source:string,style:string) {
   try {
     const p=JSON.parse(raw.replace(/^\s*```(?:json)?\s*/i,'').replace(/\s*```\s*$/,''));
@@ -65,7 +71,7 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
     charge.status='completed';
     if(Number.isFinite(original.credits_charged))charge.credits=original.credits_charged;
     const source=original.answer;
-    if(!validChatText(source,'source',180))throw Error('Incomplete reading');
+    if(!validSourceReading(source))throw Error('Invalid reading');
     const model=config.OPENROUTER_MODEL||'google/gemini-2.5-flash';
     const modelCharge:ChatUsage={provider:'openrouter',model,status:'submitted'};calls.push(modelCharge);
     const polished=await send('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${config.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({

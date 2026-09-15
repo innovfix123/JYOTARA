@@ -10,6 +10,17 @@ const config={DIVINE_API_KEY:'test',OPENROUTER_API_KEY:'test',OPENROUTER_MODEL:'
 const reading='Venus may favour commitment. Family discussions may progress slowly.';
 const edited={answer:reading,source_quotes:['Venus may favour commitment.']};
 const db=()=>{const ops=[];return {ops,prepare(sql){return{bind(...args){return{async run(){ops.push({sql,args});}};}};}};};
+test('long formatted provider reading reaches editor while final answer stays short',async()=>{
+ const source='## Reading\n'+reading+'\n'+('Traditional chart interpretation with conditions. '.repeat(90))+'**Summary**';
+ let edits=0;
+ const result=await divineConsultation(config,input,db(),async(url,opts)=>{
+  if(opts.method==='DELETE')return Response.json({deleted:true});
+  if(url.includes('ask.divine'))return Response.json({answer:source,credits_charged:30});
+  edits++;assert.equal(JSON.parse(JSON.parse(opts.body).messages[1].content).reading,source);
+  return Response.json({choices:[{message:{content:JSON.stringify(edited)},finish_reason:'stop'}]});
+ });
+ assert.equal(edits,1);assert.equal(result.answer,reading);
+});
 test('explicit birth timezone and fractional offsets survive conversion',()=>{
  assert.equal(divineBirth(person).tzone,5.5);assert.equal(divineBirth(person).hour,6);
  assert.equal(divineBirth({...person,datetime:'2001-06-12T06:20:00-03:30'}).tzone,-3.5);
