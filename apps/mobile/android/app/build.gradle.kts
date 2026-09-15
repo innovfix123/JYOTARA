@@ -28,8 +28,8 @@ android {
     }
 
     defaultConfig {
-        // Retained for installed-app update and saved-data compatibility.
-        applicationId = "in.innovfix.nirayana"
+        // Public release identity; legacy tester installations remain separate.
+        applicationId = "in.innovfix.jyotara"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
