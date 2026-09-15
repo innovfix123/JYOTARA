@@ -32,7 +32,7 @@ if (!publicAccess && (!process.env.JYOTARA_TESTER_CODES_SHA256 || !process.env.J
 }
 const phoneAuth = new PhoneAuth(database, process.env);
 if(publicAccess && !phoneAuth.configured())throw new Error('Public access requires configured phone authentication');
-const authPaths = new Set(['/api/auth/config', '/api/auth/send', '/api/auth/verify', '/api/auth/verify-deletion', '/api/auth/session', '/api/auth/logout', '/api/auth/delete-account']);
+const authPaths = new Set(['/api/auth/config', '/api/auth/reviewer', '/api/auth/send', '/api/auth/verify', '/api/auth/verify-deletion', '/api/auth/session', '/api/auth/logout', '/api/auth/delete-account']);
 export const server = createServer(async (incoming, outgoing) => {
   outgoing.setHeader('X-Content-Type-Options', 'nosniff');
   outgoing.setHeader('Cache-Control', 'no-store');

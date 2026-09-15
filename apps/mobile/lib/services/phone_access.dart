@@ -268,6 +268,55 @@ class PhoneAccess extends ChangeNotifier {
     await send(_mobile!, deletionOnly: true);
   }
 
+  Future<void> reviewerLogin(String username, String password) async {
+    if (busy || _deletionPending || authorized) return;
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final data = await _post('reviewer', {
+        'username': username.trim(),
+        'password': password,
+      });
+      if (data['token'] is! String ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) ||
+          data['accountId'] is! String ||
+          data['expiresAt'] is! int ||
+          data['expiresAt'] <= _now().millisecondsSinceEpoch) {
+        throw const FormatException();
+      }
+      if (_account != null &&
+          _account != data['accountId'] &&
+          prepareAccount == null) {
+        await _post('logout', {}, bearer: data['token']);
+        throw _PhoneError('Unable to switch accounts safely on this device.');
+      }
+      await prepareAccount?.call(data['accountId'] as String);
+      await _write(
+        jsonEncode({
+          'token': data['token'],
+          'accountId': data['accountId'],
+          'expiresAt': data['expiresAt'],
+        }),
+      );
+      _token = data['token'];
+      _account = data['accountId'];
+      _expires = data['expiresAt'];
+      _mobile = null;
+      _challenge = null;
+      _serverDeleted = false;
+      resendAt = null;
+      notice = null;
+    } on _PhoneError catch (e) {
+      error = e.message;
+    } catch (_) {
+      error = 'Unable to sign in to the review account. Please try again.';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   Future<bool> verifyDeletionCode(String input) async {
     if (busy ||
         !deletionCodeSent ||

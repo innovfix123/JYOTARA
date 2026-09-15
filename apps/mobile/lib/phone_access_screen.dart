@@ -20,6 +20,9 @@ class PhoneAccessScreen extends StatefulWidget {
 
 class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
   final _phone = TextEditingController(), _otp = TextEditingController();
+  final _reviewUser = TextEditingController(),
+      _reviewPassword = TextEditingController();
+  bool _reviewMode = false;
   Timer? _timer;
   @override
   void initState() {
@@ -35,6 +38,8 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
     _timer?.cancel();
     _phone.dispose();
     _otp.dispose();
+    _reviewUser.dispose();
+    _reviewPassword.dispose();
     super.dispose();
   }
 
@@ -153,105 +158,157 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const PrivacyLinks(),
-                  TextField(
-                    controller: _phone,
-                    enabled: !access.busy && !access.codeSent,
-                    keyboardType: TextInputType.phone,
-                    autofillHints: const [
-                      AutofillHints.telephoneNumberNational,
-                    ],
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(10),
-                    ],
-                    decoration: const InputDecoration(
-                      labelText: 'Mobile number',
-                      prefixText: '+91 ',
+                  if (_reviewMode) ...[
+                    const Text(
+                      'Review account · use only synthetic birth profiles.',
                     ),
-                  ),
-                  if (access.codeSent) ...[
-                    const SizedBox(height: 20),
                     TextField(
-                      controller: _otp,
-                      enabled: !access.busy && !access.codeExpired,
-                      keyboardType: TextInputType.number,
-                      autofillHints: const [AutofillHints.oneTimeCode],
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
+                      controller: _reviewUser,
+                      enabled: !access.busy,
                       decoration: const InputDecoration(
-                        labelText: '6-digit OTP',
+                        labelText: 'Review username',
                       ),
-                      onSubmitted: (_) => access.verify(_otp.text),
                     ),
-                    TextButton(
+                    TextField(
+                      controller: _reviewPassword,
+                      enabled: !access.busy,
+                      obscureText: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      decoration: const InputDecoration(
+                        labelText: 'Review password',
+                      ),
+                    ),
+                    if (access.error != null) Text(access.error!),
+                    FilledButton(
                       onPressed: access.busy
                           ? null
-                          : () {
-                              _otp.clear();
-                              access.editNumber();
+                          : () async {
+                              await access.reviewerLogin(
+                                _reviewUser.text,
+                                _reviewPassword.text,
+                              );
+                              _reviewPassword.clear();
                             },
-                      child: const Text('Change number'),
+                      child: Text(
+                        access.busy
+                            ? 'Signing in…'
+                            : 'Sign in to review account',
+                      ),
                     ),
                   ],
-                  if (access.codeSent)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        access.codeExpired
-                            ? 'This code has expired. Request a new OTP below.'
-                            : 'Code expires in ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
-                      ),
-                    ),
-                  if (access.notice != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(access.notice!),
-                    ),
-                  if (access.error != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        access.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                  const SizedBox(height: 20),
-                  FilledButton(
+                  TextButton(
                     onPressed: access.busy
                         ? null
-                        : access.codeSent
-                        ? access.codeExpired
-                              ? null
-                              : () => access.verify(_otp.text)
-                        : seconds > 0
-                        ? null
-                        : () => access.send(_phone.text),
+                        : () => setState(() {
+                            _reviewMode = !_reviewMode;
+                            _reviewPassword.clear();
+                          }),
                     child: Text(
-                      access.busy
-                          ? 'Please wait…'
-                          : access.codeSent
-                          ? 'Verify & continue'
-                          : seconds > 0
-                          ? 'Wait ${seconds}s'
-                          : 'Send OTP',
+                      _reviewMode ? 'Use phone sign-in' : 'App reviewer access',
                     ),
                   ),
-                  if (access.codeSent)
-                    TextButton(
-                      onPressed: access.busy || seconds > 0
-                          ? null
-                          : () {
-                              _otp.clear();
-                              access.send(_phone.text);
-                            },
-                      child: Text(
-                        seconds > 0 ? 'Resend in ${seconds}s' : 'Resend OTP',
+                  if (!_reviewMode) ...[
+                    TextField(
+                      controller: _phone,
+                      enabled: !access.busy && !access.codeSent,
+                      keyboardType: TextInputType.phone,
+                      autofillHints: const [
+                        AutofillHints.telephoneNumberNational,
+                      ],
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(10),
+                      ],
+                      decoration: const InputDecoration(
+                        labelText: 'Mobile number',
+                        prefixText: '+91 ',
                       ),
                     ),
+                    if (access.codeSent) ...[
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _otp,
+                        enabled: !access.busy && !access.codeExpired,
+                        keyboardType: TextInputType.number,
+                        autofillHints: const [AutofillHints.oneTimeCode],
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        decoration: const InputDecoration(
+                          labelText: '6-digit OTP',
+                        ),
+                        onSubmitted: (_) => access.verify(_otp.text),
+                      ),
+                      TextButton(
+                        onPressed: access.busy
+                            ? null
+                            : () {
+                                _otp.clear();
+                                access.editNumber();
+                              },
+                        child: const Text('Change number'),
+                      ),
+                    ],
+                    if (access.codeSent)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          access.codeExpired
+                              ? 'This code has expired. Request a new OTP below.'
+                              : 'Code expires in ${remaining ~/ 60}:${(remaining % 60).toString().padLeft(2, '0')}',
+                        ),
+                      ),
+                    if (access.notice != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(access.notice!),
+                      ),
+                    if (access.error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text(
+                          access.error!,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      onPressed: access.busy
+                          ? null
+                          : access.codeSent
+                          ? access.codeExpired
+                                ? null
+                                : () => access.verify(_otp.text)
+                          : seconds > 0
+                          ? null
+                          : () => access.send(_phone.text),
+                      child: Text(
+                        access.busy
+                            ? 'Please wait…'
+                            : access.codeSent
+                            ? 'Verify & continue'
+                            : seconds > 0
+                            ? 'Wait ${seconds}s'
+                            : 'Send OTP',
+                      ),
+                    ),
+                    if (access.codeSent)
+                      TextButton(
+                        onPressed: access.busy || seconds > 0
+                            ? null
+                            : () {
+                                _otp.clear();
+                                access.send(_phone.text);
+                              },
+                        child: Text(
+                          seconds > 0 ? 'Resend in ${seconds}s' : 'Resend OTP',
+                        ),
+                      ),
+                  ],
                 ],
               ),
             ),
