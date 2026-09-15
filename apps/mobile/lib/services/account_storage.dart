@@ -8,14 +8,41 @@ class AccountStorage {
   AccountStorage({
     Future<String?> Function(String)? read,
     Future<void> Function(String, String)? write,
-  }) : _read = read ?? ((key) => const FlutterSecureStorage().read(key: key)),
+    Future<Map<String, String>> Function()? readAll,
+    Future<void> Function(String)? delete,
+  }) : _readAll = readAll ?? (() => const FlutterSecureStorage().readAll()),
+       _delete =
+           delete ?? ((key) => const FlutterSecureStorage().delete(key: key)),
+       _read = read ?? ((key) => const FlutterSecureStorage().read(key: key)),
        _write =
            write ??
            ((key, value) =>
                const FlutterSecureStorage().write(key: key, value: value));
   final Future<String?> Function(String) _read;
   final Future<void> Function(String, String) _write;
+  final Future<Map<String, String>> Function() _readAll;
+  final Future<void> Function(String) _delete;
   String? account;
+
+  /// Erase this account namespace and only its owned pre-migration copies.
+  Future<void> erase(String owner) async {
+    if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(owner)) {
+      throw const FormatException('Invalid account');
+    }
+    final records = await _readAll();
+    final legacyOwned = records['jyotara.legacy-owner.v1'] == owner;
+    for (final key in records.keys) {
+      final namespaced = key.startsWith('jyotara.account.$owner.');
+      final legacy =
+          legacyOwned &&
+          (key == 'nirayana.private-profile.v1' ||
+              key == 'jyotara.kundli.index.v1' ||
+              RegExp(r'^jyotara\.kundli\.[a-f0-9]{32}$').hasMatch(key));
+      if (namespaced || legacy) await _delete(key);
+    }
+    // Preserve ownership marker to prevent legacy data being claimed elsewhere.
+  }
+
   String key(String base) =>
       account == null ? base : 'jyotara.account.$account.$base';
 

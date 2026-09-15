@@ -8,14 +8,14 @@ export function testerIdentity(code: string | undefined, hashes: string, expiry:
   const matches = known.map(value => timingSafeEqual(digest, Buffer.from(value, 'hex')));
   if (!matches.some(Boolean)) return null;
   // Permit capability-authenticated erasure after the test period expires.
-  if (path !== '/api/profile/delete' && path !== '/api/profile/discard' && path !== '/api/pilot/events') {
+  if (!['/api/profile/delete','/api/profile/discard','/api/pilot/events','/api/auth/delete-account','/api/auth/send','/api/auth/verify-deletion'].includes(path)) {
     const expiresAt = Date.parse(expiry);
     if (!Number.isFinite(expiresAt) || now >= expiresAt) return null;
   }
   return digest.toString('hex');
 }
 
-export async function admitTesterRequest(db: PostgresDatabase, tester: string, path: string, cookie: string, now = Date.now()) {
+export async function admitTesterRequest(db: PostgresDatabase, tester: string, path: string, cookie: string, now = Date.now(), publicAccount?:string) {
   const session = cookie.split(';').map(p => p.trim()).find(p => p.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
   const needsOwner = !['/api/locations', '/api/tester/check', '/api/horoscope/daily', '/api/kundli/matching'].includes(path);
   if (needsOwner && (!session || !/^[A-Za-z0-9_-]{1,128}$/.test(session))) return 400;
@@ -28,11 +28,16 @@ export async function admitTesterRequest(db: PostgresDatabase, tester: string, p
         const inserted = await client.query('INSERT INTO tester_sessions (session_id,tester_key,created_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [session, tester, now]);
         newChartSession = inserted.rowCount === 1;
       }
-      const owner = await client.query('SELECT tester_key FROM tester_sessions WHERE session_id = $1', [session]);
-      if (owner.rows[0]?.tester_key !== tester) return 403;
+      if(publicAccount) {
+        const owner=await client.query('SELECT account_id FROM phone_profile_owners WHERE session_id=$1',[session]);
+        if(owner.rows[0]?.account_id!==publicAccount)return 403;
+      } else {
+        const owner = await client.query('SELECT tester_key FROM tester_sessions WHERE session_id = $1', [session]);
+        if (owner.rows[0]?.tester_key !== tester) return 403;
+      }
     }
     if (limit !== null && (path !== '/api/astrology/kundli' || newChartSession)) {
-      const id = `${day}:${tester}:${path}`;
+      const id = `${day}:${publicAccount ? 'account:'+publicAccount : tester}:${path}`;
       const result = await client.query(`INSERT INTO tester_daily_usage (id,day_key,requests) VALUES ($1,$2,1)
         ON CONFLICT(id) DO UPDATE SET requests = tester_daily_usage.requests + 1
         WHERE tester_daily_usage.requests < $3 RETURNING requests`, [id, day, limit]);

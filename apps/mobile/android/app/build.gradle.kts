@@ -1,7 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
+}
+
+// Play upload credentials live outside the repository.
+val uploadProperties = Properties()
+val uploadPropertiesPath = System.getenv("JYOTARA_UPLOAD_PROPERTIES")
+if (!uploadPropertiesPath.isNullOrBlank()) {
+    file(uploadPropertiesPath).inputStream().use { uploadProperties.load(it) }
+}
+val playRelease = System.getenv("JYOTARA_PLAY_RELEASE") == "true"
+if (playRelease && uploadProperties.isEmpty) {
+    throw GradleException("Play releases require JYOTARA_UPLOAD_PROPERTIES")
 }
 
 android {
@@ -29,11 +42,22 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (!uploadProperties.isEmpty) {
+            create("upload") {
+                storeFile = file(requireNotNull(uploadProperties.getProperty("storeFile")))
+                storePassword = requireNotNull(uploadProperties.getProperty("storePassword"))
+                keyAlias = requireNotNull(uploadProperties.getProperty("keyAlias"))
+                keyPassword = requireNotNull(uploadProperties.getProperty("keyPassword"))
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(
+                if (playRelease) "upload" else "debug"
+            )
         }
     }
 }

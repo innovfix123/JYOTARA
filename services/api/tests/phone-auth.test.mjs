@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import ts from 'typescript';
-const code=ts.transpileModule(readFileSync(new URL('../runtime/phone-auth.ts',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
+import {build} from 'esbuild';
+const built=await build({entryPoints:[new URL('../runtime/phone-auth.ts',import.meta.url).pathname],bundle:true,write:false,platform:'node',format:'esm',target:'node22'});
+const code=built.outputFiles[0].text;
 const {PhoneAuth}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 const config={JYOTARA_OTP_ENABLED:'true',JYOTARA_PHONE_AUTH_KEY:'synthetic-test-secret-not-production',AUTHKEY_KEY:'synthetic',AUTHKEY_SID:'123'};
 const request=(path,body={})=>new Request('https://example.test/api/auth/'+path,{method:'POST',body:JSON.stringify(body)});
@@ -43,4 +43,37 @@ test('rate limit reports the longest remaining blocked window and sends nothing'
  const result=await auth.handle(request('send',{mobile:'9000000000'}),'tester');
  assert.equal(result.status,429);
  const body=await result.json();assert.equal(body.retryAfterSeconds,900);assert.match(body.error,/15 minutes/);
+});
+
+test('account deletion requires confirmation and authenticated session',async()=>{
+ const auth=new PhoneAuth(unavailable,config);
+ assert.equal((await auth.handle(request('delete-account'),'tester')).status,422);
+ assert.equal((await auth.handle(request('delete-account',{confirm:true}),'tester')).status,401);
+});
+test('account deletion uses authenticated ownership, ignoring supplied account IDs',async()=>{
+ const calls=[];
+ const query=async(sql,args)=>{
+  calls.push([sql,args]);
+  if(sql.startsWith('SELECT account_id'))return {rows:[{account_id:'owned-account'}]};
+  if(sql.startsWith('SELECT session_id'))return {rows:[{session_id:'owned-chart'}]};
+  return {rows:[]};
+ };
+ const auth=new PhoneAuth({transaction:fn=>fn({query})},config);
+ const req=request('delete-account',{confirm:true,accountId:'victim'});
+ req.headers.set('authorization','Bearer '+'a'.repeat(64));
+ const result=await auth.handle(req,'tester');
+ assert.equal(result.status,200);
+ assert.equal((await result.json()).deleted,true);
+ assert.ok(calls.some(([sql,args])=>sql==='DELETE FROM phone_accounts WHERE id=$1'&&args[0]==='owned-account'));
+ assert.ok(calls.some(([sql])=>sql.startsWith('INSERT INTO deleted_chart_sessions')));
+ assert.ok(calls.some(([sql])=>sql.startsWith('UPDATE guide_requests')));
+ assert.ok(!JSON.stringify(calls).includes('victim'));
+});
+
+test('deletion retry receipt accepts only matching token and tester',async()=>{
+ const query=async(sql,args)=>({rows:sql.startsWith('SELECT 1 FROM account_erasure_receipts') && args[1]==='owner' ? [{ok:1}] : []});
+ const auth=new PhoneAuth({transaction:fn=>fn({query})},config);
+ const req=request('delete-account',{confirm:true});req.headers.set('authorization','Bearer '+'a'.repeat(64));
+ assert.equal((await auth.handle(req.clone(),'other')).status,401);
+ assert.equal((await auth.handle(req,'owner')).status,200);
 });

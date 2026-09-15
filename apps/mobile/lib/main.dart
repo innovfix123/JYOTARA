@@ -31,6 +31,7 @@ import 'birth_form.dart';
 import 'south_chart.dart';
 import 'navamsa_section.dart';
 import 'research_consent_dialog.dart';
+import 'privacy_links.dart';
 import 'services/tester_access.dart';
 import 'tester_access_screen.dart';
 
@@ -41,6 +42,12 @@ final accountStorage = AccountStorage();
 final phoneAccess = PhoneAccess(
   testerCode: () => testerAccess.code,
   prepareAccount: _prepareAccount,
+  eraseLocalAccount: (account) async {
+    await profileSession.flushStorage();
+    await accountStorage.erase(account);
+    // Discard the old in-memory session after its writes have settled.
+    profileSession = _newProfileSession();
+  },
 );
 ProfileSession profileSession = _newProfileSession();
 ProfileSession _newProfileSession() {
@@ -1187,6 +1194,67 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  bool _reporting = false;
+  Future<void> _reportAnswer(ChatMessage message) async {
+    if (_reporting) return;
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialog) => SimpleDialog(
+        title: const UiText('Report answer'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: UiText(
+              'Choose a reason to send this answer and the guide name to the Jyotara team for review. No other messages or separate birth-profile fields are attached.',
+            ),
+          ),
+          for (final entry in const {
+            'harmful': 'Harmful or unsafe',
+            'sexual': 'Sexual content',
+            'hateful': 'Hateful or abusive',
+            'misleading': 'Misleading answer',
+            'privacy': 'Privacy concern',
+            'other': 'Other concern',
+          }.entries)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(dialog, entry.key),
+              child: UiText(entry.value),
+            ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(dialog),
+            child: const UiText('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (reason == null || !mounted || _reporting) return;
+    setState(() => _reporting = true);
+    try {
+      await _session.reportAnswer(
+        answer: message.text,
+        guide: widget.guide.name,
+        reason: reason,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: UiText('Report sent to the Jyotara team. Thank you.'),
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: UiText('Report could not be confirmed. Please try again.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _reporting = false);
+    }
+  }
+
   Future<void> _endChat() async {
     if (_thinking) return;
     final confirmed = await showDialog<bool>(
@@ -1377,7 +1445,13 @@ class _ChatScreenState extends State<ChatScreen> {
                   if (_thinking && index == _messages.length) {
                     return const _TypingBubble();
                   }
-                  return _MessageBubble(message: _messages[index]);
+                  final message = _messages[index];
+                  return _MessageBubble(
+                    message: message,
+                    onReport: message.fromUser
+                        ? null
+                        : () => _reportAnswer(message),
+                  );
                 },
               ),
             ),
@@ -1698,6 +1772,7 @@ class AccountScreen extends StatelessWidget {
             uiText(context, 'Your account'),
             style: Theme.of(context).textTheme.headlineMedium,
           ),
+          const PrivacyLinks(),
           const SizedBox(height: 18),
           Card(
             child: Padding(
@@ -1759,6 +1834,52 @@ class AccountScreen extends StatelessWidget {
                 await phoneAccess.signOut();
                 if (!context.mounted) return;
                 if (!phoneAccess.authorized) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneAccess.error ?? 'Please try again.'),
+                    ),
+                  );
+                }
+              },
+            ),
+          if (phoneAccess.authorized)
+            ListTile(
+              leading: const Icon(Icons.delete_forever_outlined),
+              title: const UiText('Delete account'),
+              subtitle: const UiText(
+                'Delete phone account, saved profiles and chats',
+              ),
+              onTap: () async {
+                if (profileSession.calculating ||
+                    profileSession.answering ||
+                    phoneAccess.busy) {
+                  return;
+                }
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const UiText('Delete account?'),
+                    content: const UiText(
+                      'This removes your phone account and its saved profiles and chats from this device and our server. Minimal security records and backups remain temporarily. External service deletion may still be pending.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const UiText('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const UiText('Delete account'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true) return;
+                final deleted = await phoneAccess.deleteAccount();
+                if (!context.mounted) return;
+                if (deleted) {
                   Navigator.of(context).popUntil((route) => route.isFirst);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -2373,8 +2494,9 @@ class _MultilingualCard extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({required this.message, this.onReport});
   final ChatMessage message;
+  final VoidCallback? onReport;
   @override
   Widget build(BuildContext context) {
     return Align(
@@ -2418,6 +2540,12 @@ class _MessageBubble extends StatelessWidget {
                 style: const TextStyle(fontSize: 16, height: 1.45),
               ),
             ),
+            if (onReport != null)
+              TextButton.icon(
+                onPressed: onReport,
+                icon: const Icon(Icons.flag_outlined, size: 16),
+                label: const UiText('Report answer'),
+              ),
           ],
         ),
       ),

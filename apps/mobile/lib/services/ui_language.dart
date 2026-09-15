@@ -79,11 +79,27 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Privacy policy': 'தனியுரிமைக் கொள்கை',
+  'Account deletion help': 'கணக்கை நீக்க உதவி',
+  'Open in your browser': 'உலாவியில் திறக்கவும்',
+  'Report answer': 'பதிலைப் புகாரளிக்கவும்',
+  'Choose a reason to send this answer and the guide name to the Jyotara team for review. No other messages or separate birth-profile fields are attached.': 'இந்தப் பதிலையும் வழிகாட்டியின் பெயரையும் ஜோதாரா குழுவின் ஆய்வுக்கு அனுப்ப ஒரு காரணத்தைத் தேர்ந்தெடுக்கவும். மற்ற செய்திகள் அல்லது பிறப்பு விவரங்கள் தனியாக இணைக்கப்படாது.',
+  'Harmful or unsafe': 'தீங்கு விளைவிக்கும் அல்லது பாதுகாப்பற்ற பதில்',
+  'Sexual content': 'பாலியல் உள்ளடக்கம்',
+  'Hateful or abusive': 'வெறுப்பு அல்லது அவமதிப்பு',
+  'Misleading answer': 'தவறாக வழிநடத்தும் பதில்',
+  'Privacy concern': 'தனியுரிமை தொடர்பான சிக்கல்',
+  'Other concern': 'வேறு சிக்கல்',
+  'Report sent to the Jyotara team. Thank you.':
+      'புகார் ஜோதாரா குழுவுக்கு அனுப்பப்பட்டது. நன்றி.',
+  'Report could not be confirmed. Please try again.': 'புகார் அனுப்பப்பட்டதை உறுதிப்படுத்த முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
   'Wallet · ₹0  +': 'பணப்பை · ₹0  +',
   'Unable to connect. Check your internet connection, then tap Retry.': 'இணைக்க முடியவில்லை. இணைய இணைப்பைச் சரிபார்த்து, மீண்டும் முயற்சிக்கவும்.',
   'The reading is taking longer than expected. Please try again shortly.': 'பலன் வருவதற்குச் சற்று தாமதமாகிறது. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
-  'The reading could not be loaded. Please try again shortly.': 'பலனை ஏற்ற முடியவில்லை. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
-  'Location data: GeoNames (CC BY 4.0) · geonames.org': 'இடத் தகவல்: GeoNames (CC BY 4.0) · geonames.org',
+  'The reading could not be loaded. Please try again shortly.':
+      'பலனை ஏற்ற முடியவில்லை. சிறிது நேரத்தில் மீண்டும் முயற்சிக்கவும்.',
+  'Location data: GeoNames (CC BY 4.0) · geonames.org':
+      'இடத் தகவல்: GeoNames (CC BY 4.0) · geonames.org',
   "Your birth details, questions and recent chat context are processed by astrology and language services. External astrology conversation deletion may still be pending after local and server deletion. Manage your saved profile from the Chart tab. Research sharing is optional.": "உங்கள் பிறந்த விவரங்கள், கேள்விகள் மற்றும் சமீபத்திய உரையாடல்கள் ஜோதிட மற்றும் மொழிச் சேவைகளில் செயலாக்கப்படுகின்றன. சாதனம் மற்றும் எங்கள் சேவையகத்தில் நீக்கிய பின்னரும் வெளிச் சேவையின் உரையாடல் நீக்கம் நிலுவையில் இருக்கலாம். ஜாதகம் பகுதியில் விவரங்களை நிர்வகிக்கலாம். ஆய்வுப் பகிர்வு உங்கள் விருப்பம்.",
   'Ashta Kuta': 'அஷ்டகூடப் பொருத்தம்',
   'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.': 'பிறந்த நேரம் தெரியாவிட்டால் நண்பகல் நேரத்தில் உத்தேசமாக ஒப்பிடுவோம். உண்மையான நேரத்தால் மதிப்பெண் மாறலாம்.',

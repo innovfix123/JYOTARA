@@ -24,6 +24,11 @@ class ProfileSession extends ChangeNotifier {
   }) : _api = api ?? JyotaraApiClient(),
        _clock = clock ?? DateTime.now;
   final JyotaraApiClient _api;
+  Future<void> reportAnswer({
+    required String answer,
+    required String guide,
+    required String reason,
+  }) => _api.reportAnswer(answer: answer, guide: guide, reason: reason);
   Future<List<List<dynamic>>> searchLocations(String query) =>
       _api.searchLocations(query);
   final DateTime Function() _clock;

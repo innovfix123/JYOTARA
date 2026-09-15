@@ -97,6 +97,10 @@ void main() {
       await tester.ensureVisible(find.text('Open chat with Aadhirai'));
       await tester.tap(find.text('Open chat with Aadhirai'));
       await tester.pumpAndSettle();
+      // Chat opens at the latest message. Profile details remain at the top,
+      // including when report controls or enlarged text increase bubble height.
+      await tester.drag(find.byKey(const Key('chatHistoryList')), const Offset(0, 900));
+      await tester.pumpAndSettle();
       expect(find.textContaining('Name: Profile B'), findsOneWidget);
       expect(find.text('Private A question'), findsNothing);
       expect(

@@ -15,6 +15,7 @@ class PhoneAccess extends ChangeNotifier {
     Future<void> Function(String)? write,
     DateTime Function()? now,
     this.prepareAccount,
+    this.eraseLocalAccount,
   }) : _now = now ?? DateTime.now,
        _client = client ?? http.Client(),
        _base = Uri.parse(baseUrl ?? defaultApiBaseUrl),
@@ -31,6 +32,7 @@ class PhoneAccess extends ChangeNotifier {
            ));
   final String? Function() testerCode;
   final Future<void> Function(String account)? prepareAccount;
+  final Future<void> Function(String account)? eraseLocalAccount;
   String? get accountId => _account;
   final DateTime Function() _now;
   final http.Client _client;
@@ -39,11 +41,19 @@ class PhoneAccess extends ChangeNotifier {
   final Future<void> Function(String) _write;
   String? _token, _account, _challenge, _mobile;
   int _expires = 0, _challengeExpires = 0;
+  bool _serverDeleted = false, _deletionPending = false;
+  bool _deletionOtp = false;
+  bool get deletionPending => _deletionPending;
+  bool get deletionCodeSent => _deletionPending && _deletionOtp && codeSent;
+  bool get canVerifyDeletion =>
+      _deletionPending && !_serverDeleted && _mobile != null;
   bool busy = false;
   String? error, notice;
   DateTime? resendAt;
   bool get authorized =>
-      _token != null && _now().millisecondsSinceEpoch < _expires;
+      !_deletionPending &&
+      _token != null &&
+      _now().millisecondsSinceEpoch < _expires;
   String? get token => authorized ? _token : null;
   bool get codeSent => _challenge != null;
   String? get mobile => _mobile;
@@ -56,6 +66,9 @@ class PhoneAccess extends ChangeNotifier {
       );
   Future<void> _save() => _write(
     jsonEncode({
+      'serverDeleted': _serverDeleted,
+      'deletionPending': _deletionPending,
+      'deletionOtp': _deletionOtp,
       'token': _token,
       'accountId': _account,
       'expiresAt': _expires,
@@ -86,6 +99,9 @@ class PhoneAccess extends ChangeNotifier {
         notice = 'Use the latest SMS code. Reopening the app does not send another SMS.';
       }
       if (data['accountId'] is String) _account = data['accountId'];
+      _serverDeleted = data['serverDeleted'] == true;
+      _deletionPending = data['deletionPending'] == true || _serverDeleted;
+      _deletionOtp = _deletionPending && data['deletionOtp'] == true;
       if (data['token'] is String &&
           RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) &&
           data['expiresAt'] is int) {
@@ -131,8 +147,13 @@ class PhoneAccess extends ChangeNotifier {
     return data;
   }
 
-  Future<void> send(String input) async {
-    if (busy) return;
+  Future<void> send(String input, {bool deletionOnly = false}) async {
+    if (busy ||
+        (_deletionPending && !deletionOnly) ||
+        (deletionOnly && !canVerifyDeletion)) {
+      return;
+    }
+    if (deletionOnly && input != _mobile) return;
     final mobile = input.trim();
     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(mobile)) {
       error = 'Enter a valid 10-digit Indian mobile number.';
@@ -152,6 +173,7 @@ class PhoneAccess extends ChangeNotifier {
         throw const FormatException();
       }
       _challenge = data['challengeId'];
+      _deletionOtp = deletionOnly;
       _mobile = mobile;
       _challengeExpires = requestedAt
           .add(const Duration(minutes: 5))
@@ -182,7 +204,7 @@ class PhoneAccess extends ChangeNotifier {
   }
 
   Future<void> verify(String input) async {
-    if (busy || _challenge == null) return;
+    if (busy || _deletionPending || _challenge == null) return;
     if (codeExpired) {
       error = 'This code has expired. Request a new OTP when the resend timer ends.';
       notifyListeners();
@@ -226,6 +248,7 @@ class PhoneAccess extends ChangeNotifier {
           'expiresAt': data['expiresAt'],
         }),
       );
+      _serverDeleted = false;
       _token = data['token'];
       _account = data['accountId'];
       _expires = data['expiresAt'];
@@ -240,8 +263,92 @@ class PhoneAccess extends ChangeNotifier {
     }
   }
 
+  Future<void> requestDeletionCode() async {
+    if (!canVerifyDeletion) return;
+    await send(_mobile!, deletionOnly: true);
+  }
+
+  Future<bool> verifyDeletionCode(String input) async {
+    if (busy ||
+        !deletionCodeSent ||
+        codeExpired ||
+        !RegExp(r'^\d{6}$').hasMatch(input.trim())) {
+      error =
+          'Enter a current 6-digit code. Request a new one if it has expired.';
+      notifyListeners();
+      return false;
+    }
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      final result = await _post('verify-deletion', {
+        'mobile': _mobile,
+        'challengeId': _challenge,
+        'otp': input.trim(),
+      });
+      if (result['deleted'] != true) throw const FormatException();
+      _serverDeleted = true;
+      await _save();
+    } catch (_) {
+      error = 'Deletion was not confirmed. Check the code or request a new code and retry.';
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+    return deleteAccount();
+  }
+
+  Future<bool> deleteAccount() async {
+    if (busy || _account == null || (_token == null && !_serverDeleted)) {
+      return false;
+    }
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      _deletionPending = true;
+      await _save();
+      if (!_serverDeleted) {
+        final result = await _post('delete-account', {
+          'confirm': true,
+        }, bearer: _token);
+        if (result['deleted'] != true) throw const FormatException();
+        _serverDeleted = true;
+        await _save();
+      }
+      // Keep the token until cleanup completes, allowing the server's opaque
+      // deletion receipt to acknowledge a retry after a lost response.
+      if (eraseLocalAccount == null) {
+        throw StateError('Local erasure unavailable');
+      }
+      await eraseLocalAccount!(_account!);
+      await _write('{}');
+      _serverDeleted = false;
+      _deletionPending = false;
+      _deletionOtp = false;
+      _account = null;
+      _token = null;
+      _mobile = null;
+      _challenge = null;
+      _expires = 0;
+      _challengeExpires = 0;
+      resendAt = null;
+      notice =
+          'Account deleted. External service deletion may still be pending.';
+      return true;
+    } catch (_) {
+      error = 'Deletion could not be completed. Keep this app installed and try again. Contact support if it continues.';
+      return false;
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> signOut() async {
-    if (busy) return;
+    if (busy || _deletionPending) return;
     busy = true;
     error = null;
     notifyListeners();
@@ -264,7 +371,7 @@ class PhoneAccess extends ChangeNotifier {
   }
 
   Future<void> editNumber() async {
-    if (busy) return;
+    if (busy || _deletionPending) return;
     _challenge = null;
     _challengeExpires = 0;
     try {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'services/phone_access.dart';
+import 'privacy_links.dart';
 
 class PhoneAccessScreen extends StatefulWidget {
   const PhoneAccessScreen({
@@ -42,6 +43,77 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
     animation: widget.access,
     builder: (context, _) {
       final access = widget.access;
+      if (access.deletionPending) {
+        return Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(28),
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    const Text('Finish account deletion'),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Your account is locked while deletion completes. Retry to finish removing the saved data. If this continues, contact saran@innovfix.in.',
+                    ),
+                    if (access.error != null)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        child: Text(access.error!),
+                      ),
+                    FilledButton(
+                      onPressed: access.busy
+                          ? null
+                          : () => access.deleteAccount(),
+                      child: Text(access.busy ? 'Deleting…' : 'Retry deletion'),
+                    ),
+                    if (access.canVerifyDeletion) ...[
+                      const SizedBox(height: 20),
+                      const Text(
+                        'If your login expired, verify the same phone number to finish deletion. This will not open or recreate your account.',
+                      ),
+                      TextButton(
+                        onPressed:
+                            access.busy ||
+                                (access.resendAt?.isAfter(DateTime.now()) ??
+                                    false)
+                            ? null
+                            : () => access.requestDeletionCode(),
+                        child: Text(
+                          (access.resendAt?.isAfter(DateTime.now()) ?? false)
+                              ? 'Please wait before requesting another code'
+                              : 'Send deletion verification code',
+                        ),
+                      ),
+                      if (access.notice != null) Text(access.notice!),
+                      if (access.deletionCodeSent) ...[
+                        TextField(
+                          controller: _otp,
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                          ],
+                          decoration: const InputDecoration(
+                            labelText: 'Deletion verification code',
+                          ),
+                        ),
+                        FilledButton(
+                          onPressed: access.busy
+                              ? null
+                              : () => access.verifyDeletionCode(_otp.text),
+                          child: const Text('Verify and delete account'),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       if (access.authorized) return widget.child;
       if (access.codeSent && _phone.text != access.mobile) {
         _phone.text = access.mobile ?? '';
@@ -76,6 +148,11 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 28),
+                  const Text(
+                    'Your number is used for phone verification. Read how Jyotara handles your information before continuing.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const PrivacyLinks(),
                   TextField(
                     controller: _phone,
                     enabled: !access.busy && !access.codeSent,

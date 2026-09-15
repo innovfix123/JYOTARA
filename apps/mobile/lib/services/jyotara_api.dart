@@ -359,6 +359,24 @@ class JyotaraApiClient {
     }
   }
 
+  Future<void> reportAnswer({
+    required String answer,
+    required String guide,
+    required String reason,
+  }) async {
+    final result = await _post('/api/answers/report', {
+      'answer': answer,
+      'guide': guide,
+      'reason': reason,
+      'consent': true,
+    });
+    if (result['reported'] != true) {
+      throw const JyotaraApiException(
+        'Report was not confirmed. Please retry.',
+      );
+    }
+  }
+
   Future<Map<String, dynamic>> _post(
     String path,
     Map<String, dynamic> body,

@@ -1,3 +1,4 @@
+import {erasePhoneAccount} from './account-deletion';
 import { createHmac, createHash, randomInt, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { PostgresDatabase } from './postgres';
 
@@ -17,7 +18,10 @@ export class PhoneAuth {
   async ownProfile(cookie:string,account:string|null,claim=false):Promise<boolean> {
     const session=cookie.split(';').map(v=>v.trim()).find(v=>v.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
     if(!session)return true;
+    if(!/^[A-Za-z0-9_-]{1,128}$/.test(session))return false;
     return this.db.transaction(async tx=>{
+      if(account && !(await tx.query('SELECT id FROM phone_accounts WHERE id=$1',[account])).rowCount)return false;
+      if((await tx.query('SELECT session_id FROM deleted_chart_sessions WHERE session_id=$1 AND expires_at>$2',[session,this.now()])).rowCount)return false;
       if(claim && account) await tx.query('INSERT INTO phone_profile_owners(session_id,account_id) VALUES($1,$2) ON CONFLICT DO NOTHING',[session,account]);
       const owner=await tx.query('SELECT account_id FROM phone_profile_owners WHERE session_id=$1',[session]);
       return !owner.rowCount || owner.rows[0].account_id===account;
@@ -27,6 +31,15 @@ export class PhoneAuth {
     const path=new URL(request.url).pathname;
     if(path==='/api/auth/config')return response({enabled:this.configured()});
     if(!this.configured())return response({error:'Phone sign-in is being configured. Please try again later.',code:'otp_not_configured'},503);
+    if(path==='/api/auth/delete-account') {
+      const body=await request.json().catch(()=>null);
+      if(body?.confirm!==true)return response({error:'Confirm account deletion.'},422);
+      const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+      if(!token || !await erasePhoneAccount(this.db,digest(token),tester,this.now())) {
+        return response({error:'Please sign in again.',code:'phone_auth_required'},401);
+      }
+      return response({deleted:true,retained:'Minimal abuse-prevention and revocation records remain temporarily. Backups expire within eight days. External provider deletion may remain pending; this response does not confirm external erasure.'});
+    }
     if(path==='/api/auth/logout') {
       const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       if(token)await this.db.pool.query('DELETE FROM phone_login_sessions WHERE token_hash=$1 AND tester_key=$2',[digest(token),tester]);
@@ -46,7 +59,7 @@ export class PhoneAuth {
         await tx.query('DELETE FROM phone_rate_limits WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_challenges WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_login_sessions WHERE expires_at <= $1',[now]);
-        const limits:[string,number,number][]=[['cool:'+phone,1,60000],['phone:'+phone,5,3600000],['tester:'+tester,20,3600000],['global',200,86400000]];
+        const limits:[string,number,number][]=[['cool:'+phone,1,60000],['phone:'+phone,5,3600000],... (tester==='public-v1' ? [] : [['tester:'+tester,20,3600000]] as [string,number,number][]),['global',200,86400000]];
         let wait=0;
         for(const [key,limit] of limits) {
           const row=await tx.query('SELECT hits,expires_at FROM phone_rate_limits WHERE id=$1',[key]);
@@ -76,7 +89,8 @@ export class PhoneAuth {
       }
       return response({challengeId:challenge,expiresIn:300,retryAfterSeconds:60});
     }
-    if(path==='/api/auth/verify') {
+    if(path==='/api/auth/verify' || path==='/api/auth/verify-deletion') {
+      const deletionOnly=path==='/api/auth/verify-deletion';
       if(typeof body.challengeId!=='string'||! /^[a-f0-9]{48}$/.test(body.challengeId)||typeof body.otp!=='string'||!/^\d{6}$/.test(body.otp))return invalid();
       const token=randomBytes(32).toString('hex'),expires=now+30*86400000;
       const account=await this.db.transaction(async tx=>{
@@ -87,11 +101,23 @@ export class PhoneAuth {
           await tx.query('UPDATE phone_challenges SET tries=tries+1 WHERE id=$1',[body.challengeId]);return null;
         }
         await tx.query('DELETE FROM phone_challenges WHERE id=$1',[body.challengeId]);
+        if(deletionOnly) {
+          const found=await tx.query('SELECT id FROM phone_accounts WHERE phone_hash=$1',[phone]);
+          if(!found.rows[0])return 'already-deleted';
+          const id=found.rows[0].id;
+          await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,now+60000]);
+          return id;
+        }
         const user=await tx.query('INSERT INTO phone_accounts(id,phone_hash,last_four,created_at) VALUES($1,$2,$3,$4) ON CONFLICT(phone_hash) DO UPDATE SET last_four=EXCLUDED.last_four RETURNING id',[randomBytes(16).toString('hex'),phone,mobile.slice(-4),now]);
         const id=user.rows[0].id;
         await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,expires]);
         return id;
       });
+      if(deletionOnly) {
+        if(!account)return invalid();
+        const deleted=account==='already-deleted' || await erasePhoneAccount(this.db,digest(token),tester,this.now());
+        return deleted?response({deleted:true}):response({error:'Deletion was not confirmed. Request another verification code and retry.'},503);
+      }
       return account?response({token,accountId:account,expiresAt:expires}):invalid();
     }
     return response({error:'Unknown authentication endpoint.'},404);
