@@ -535,7 +535,10 @@ class _IntroScreenState extends State<IntroScreen>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         _BrandLockup(compact: true),
-                        _StatusPill(label: 'PRIVATE PREVIEW'),
+                        if (bool.fromEnvironment(
+                          'JYOTARA_REQUIRE_TESTER_ACCESS',
+                        ))
+                          _StatusPill(label: 'PRIVATE PREVIEW'),
                       ],
                     ),
                     const Spacer(),
@@ -1741,7 +1744,7 @@ class AccountScreen extends StatelessWidget {
       (
         Icons.workspace_premium_outlined,
         'Plans & question balance',
-        'Pilot limits · Payments not enabled',
+        'Payments not enabled',
       ),
       (Icons.history_rounded, 'Chat history', 'Saved privately on this device'),
       (Icons.translate_rounded, 'App language', 'English or Tamil menus'),
@@ -1755,11 +1758,7 @@ class AccountScreen extends StatelessWidget {
         'Privacy & consent',
         'Research storage is off',
       ),
-      (
-        Icons.help_outline_rounded,
-        'About this build',
-        'Internal integration test',
-      ),
+      (Icons.help_outline_rounded, 'About this build', 'AI astrology guidance'),
     ];
     return SafeArea(
       bottom: false,
@@ -1990,9 +1989,9 @@ class AccountScreen extends StatelessWidget {
                   return;
                 }
                 final detail = switch (item.$2) {
-                  'Plans & question balance' => 'Usage limits are enforced by the test service. Failed or uncertain requests may still count. Ask the test coordinator for your assigned limits. Payments are not enabled in this build.',
+                  'Plans & question balance' => 'Daily limits apply to chart calculations and place searches. A failed calculation may still count toward its daily limit. Payments are not enabled; no money is deducted.',
                   'Chat history' => 'Your profile and conversations are saved in encrypted device storage. Reopen a guide to see its history. Changing or deleting the profile removes the previous history. This is not cloud backup or cross-device account recovery. Check the Chart tab for storage errors.',
-                  _ => 'Jyotara is an internal test build, not a public release. Guides are automated, not human astrologers. Traditional interpretations are not guarantees. Do not use them as medical, legal or investment advice.',
+                  _ => 'Jyotara offers AI astrology guidance based on traditional interpretations. Guides are automated, not human astrologers. Predictions are not guarantees. Do not use them as medical, legal or investment advice.',
                 };
                 showDialog<void>(
                   context: context,

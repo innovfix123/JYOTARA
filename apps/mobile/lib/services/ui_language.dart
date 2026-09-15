@@ -79,6 +79,10 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Payments not enabled': 'கட்டண வசதி செயல்படுத்தப்படவில்லை',
+  'AI astrology guidance': 'செயற்கை நுண்ணறிவு ஜோதிட வழிகாட்டுதல்',
+  'Daily limits apply to chart calculations and place searches. A failed calculation may still count toward its daily limit. Payments are not enabled; no money is deducted.': 'ஜாதகக் கணக்கீடுகளுக்கும் இடத் தேடல்களுக்கும் தினசரி வரம்புகள் உள்ளன. தோல்வியடைந்த கணக்கீடும் அந்த வரம்பில் சேரலாம். கட்டண வசதி செயல்படுத்தப்படவில்லை; பணம் பிடிக்கப்படாது.',
+  'Jyotara offers AI astrology guidance based on traditional interpretations. Guides are automated, not human astrologers. Predictions are not guarantees. Do not use them as medical, legal or investment advice.': 'Jyotara பாரம்பரிய விளக்கங்களின் அடிப்படையில் செயற்கை நுண்ணறிவு ஜோதிட வழிகாட்டுதலை வழங்குகிறது. வழிகாட்டிகள் தானியங்கிகள்; மனித ஜோதிடர்கள் அல்ல. கணிப்புகள் உறுதியான முடிவுகள் அல்ல. அவற்றை மருத்துவ, சட்ட அல்லது முதலீட்டு ஆலோசனையாகப் பயன்படுத்த வேண்டாம்.',
   'Privacy policy': 'தனியுரிமைக் கொள்கை',
   'Account deletion help': 'கணக்கை நீக்க உதவி',
   'Open in your browser': 'உலாவியில் திறக்கவும்',
