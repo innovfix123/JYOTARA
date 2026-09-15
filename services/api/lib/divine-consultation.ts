@@ -3,7 +3,7 @@ import type {D1Database} from '@cloudflare/workers-types';
 
 export type ChatConfig = {DIVINE_API_KEY?:string; DIVINE_ACCESS_TOKEN?:string; OPENROUTER_API_KEY?:string; OPENROUTER_MODEL?:string};
 export type ChatInput = {id:string; person:ReportPerson; question:string; style:string; category:string; guide?:string; dialogue:{role:string;content:string}[]};
-export type ChatUsage = {provider:string;status:string;credits?:number;costUsd?:number;model?:string};
+export type ChatUsage = {provider:string;status:string;credits?:number;costUsd?:number;model?:string;validation?:'invalid_source'|'truncated_output'|'invalid_output'};
 const language = (style:string)=>style==='tamil'?'Tamil':style==='tanglish'?'Tanglish':'English';
 
 export function divineBirth(person:ReportPerson) {
@@ -71,7 +71,7 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
     charge.status='completed';
     if(Number.isFinite(original.credits_charged))charge.credits=original.credits_charged;
     const source=original.answer;
-    if(!validSourceReading(source))throw Error('Invalid reading');
+    if(!validSourceReading(source)){charge.validation='invalid_source';throw Error('Invalid reading');}
     const model=config.OPENROUTER_MODEL||'google/gemini-2.5-flash';
     const modelCharge:ChatUsage={provider:'openrouter',model,status:'submitted'};calls.push(modelCharge);
     const polished=await send('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${config.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({
@@ -83,8 +83,9 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
     if(!polished.ok)throw Error('Editor unavailable');
     const p=await polished.json() as {choices?:{message?:{content?:string};finish_reason?:string}[];usage?:{cost?:number}};
     modelCharge.status='completed';if(Number.isFinite(p.usage?.cost))modelCharge.costUsd=p.usage!.cost;
-    if(p.choices?.[0]?.finish_reason==='length')throw Error('Incomplete edit');
+    if(p.choices?.[0]?.finish_reason==='length'){modelCharge.validation='truncated_output';throw Error('Incomplete edit');}
     answer=parseEdited(p.choices?.[0]?.message?.content||'',source,input.style);
+    if(!answer)modelCharge.validation='invalid_output';
   }catch {
     // No automatic paid retry, including ambiguous transport failures.
     if(calls.at(-1)?.status==='submitted')calls[calls.length-1].status='delivery_uncertain';

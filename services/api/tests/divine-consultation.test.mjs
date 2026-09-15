@@ -58,3 +58,17 @@ test('ambiguous provider timeout never retries charge; cleanup failure stays que
  });
  assert.equal(reads,1);assert.equal(result.answer,null);assert.equal(result.calls[0].status,'delivery_uncertain');assert.equal(store.ops.length,1);
 });
+test('completed charges distinguish truncated and rejected editor output without storing text',async()=>{
+ for(const [finish,content,validation] of [
+  ['length','{"answer":','truncated_output'],
+  ['stop',JSON.stringify({...edited,answer:'Marriage arrives in 2029.'}),'invalid_output'],
+ ]){
+  const result=await divineConsultation(config,input,db(),async(url,opts)=>{
+   if(opts.method==='DELETE')return Response.json({deleted:true});
+   if(url.includes('ask.divine'))return Response.json({answer:reading,credits_charged:30});
+   return Response.json({choices:[{message:{content},finish_reason:finish}],usage:{cost:0.0004}});
+  });
+  assert.equal(result.answer,null);
+  assert.deepEqual(result.calls[1],{provider:'openrouter',model:config.OPENROUTER_MODEL,status:'completed',costUsd:0.0004,validation});
+ }
+});
