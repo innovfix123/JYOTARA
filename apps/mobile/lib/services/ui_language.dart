@@ -142,7 +142,7 @@ const tamilUi = <String, String>{
   "Health · everyday reminder": "உடல்நலம் · அன்றாட நினைவூட்டல்",
   "Check your available budget before spending. Give yourself time to compare options before a purchase.": "செலவு செய்வதற்கு முன் உங்கள் கையிருப்பைப் பாருங்கள். வாங்குவதற்கு முன் தேர்வுகளை ஒப்பிட நேரம் எடுத்துக்கொள்ளுங்கள்.",
   "Make room for rest, regular meals and comfortable movement today. A horoscope cannot assess your health.": "இன்று ஓய்வு, நேரத்துக்கு உணவு, உடலுக்கு ஏற்ற இயக்கம் ஆகியவற்றுக்கு இடமளியுங்கள். ராசிபலனால் உடல்நிலையை மதிப்பிட முடியாது.",
-  "General, Love and Career are daily readings. Money and Health are everyday reminders, not date-specific forecasts.": "பொது, காதல், தொழில் ஆகியவை தினசரிப் பலன்கள். பணம், உடல்நலம் ஆகியவை அன்றாட நினைவூட்டல்கள்; குறிப்பிட்ட நாளின் கணிப்புகள் அல்ல.",
+  "These daily readings are traditional astrology, not medical assessments. Money is an everyday reminder, not a date-specific forecast.": "இந்த தினசரிப் பலன்கள் பாரம்பரிய ஜோதிட விளக்கங்கள்; மருத்துவ மதிப்பீடுகள் அல்ல. பணம் குறித்த பகுதி அன்றாட நினைவூட்டல்; குறிப்பிட்ட நாளின் கணிப்பு அல்ல.",
   "Charts for the people you know": "உங்களுக்குத் தெரிந்தவர்களின் ஜாதகங்கள்",
   "Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.": "அனுமதியுடன் 10 ஜாதகங்கள் வரை சேமிக்கலாம். உங்கள் உரையாடல் சுயவிவரம் தனியாக இருக்கும். ஒரு சோதனைப் பயனர் நாளொன்றுக்கு 10 புதிய ஜாதகங்கள் வரை உருவாக்கலாம்.",
   "Search Kundli by name": "பெயரால் ஜாதகத்தைத் தேடுங்கள்",

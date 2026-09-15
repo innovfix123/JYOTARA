@@ -396,12 +396,8 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
             'Money · everyday reminder',
             'Check your available budget before spending. Give yourself time to compare options before a purchase.',
           ),
-          const _ReadingCard(
-            'Health · everyday reminder',
-            'Make room for rest, regular meals and comfortable movement today. A horoscope cannot assess your health.',
-          ),
           const UiText(
-            'General, Love and Career are daily readings. Money and Health are everyday reminders, not date-specific forecasts.',
+            'These daily readings are traditional astrology, not medical assessments. Money is an everyday reminder, not a date-specific forecast.',
             style: TextStyle(color: muted, fontSize: 12),
           ),
         ],
