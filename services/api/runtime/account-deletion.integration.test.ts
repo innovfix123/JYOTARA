@@ -7,6 +7,10 @@ import {reportAnswer} from './answer-reports';
 import {createHash,createHmac} from 'node:crypto';
 import {PhoneAuth} from './phone-auth';
 import {admitTesterRequest} from './tester-access';
+import {completeProfile} from '../db/profile-recovery';
+import {reserveProfile} from '../db/profile-reservation';
+import {completeQuestion,reserveQuestion} from '../db/guidance-requests';
+import type {D1Database} from '@cloudflare/workers-types';
 test('PostgreSQL erasure preserves other accounts and acknowledges concurrent retries',async()=>{
  const url=process.env.DATABASE_URL ?? '';
  if(!url.includes('jyotara_qa_erasure_20260915'))throw Error('Dedicated QA database required');
@@ -57,7 +61,24 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
   challenge=await (await recovery.handle(recoveryRequest('send',{}),'public-v1')).json();
   assert.deepEqual(await (await recovery.handle(recoveryRequest('verify-deletion',{challengeId:challenge.challengeId,otp}),'public-v1')).json(),{deleted:true});
   assert.equal((await db.pool.query('SELECT id FROM phone_accounts WHERE phone_hash=$1',[phoneHash])).rowCount,0);
+  // Simulate provider requests already running when account deletion commits.
+  await db.pool.query("UPDATE profile_generations SET status='started' WHERE id='owner-generation'");
+  await db.pool.query("UPDATE guide_requests SET answer_mode='pending' WHERE id='owner-reply'");
   assert.deepEqual(await Promise.all([erasePhoneAccount(db,'owner-token','tester',now),erasePhoneAccount(db,'owner-token','tester',now)]),[true,true]);
+  const compatible=db as unknown as D1Database;
+  await assert.rejects(completeProfile(compatible,'ab'.repeat(32),{
+    id:'owner-generation',session:'owner-chart',reply:{private:'late chart'},now,expiresAt:now+60000,
+  }),/could not be completed/);
+  assert.equal(await completeQuestion(compatible,{
+    id:'owner-reply',session:'owner-chart',support:'chart',mode:'chart',question:'late private question',
+    intent:'love',consent:null,ageBand:null,ciphertext:'late private answer',expiresAt:now+60000,
+  }),false);
+  assert.equal(await reserveProfile(compatible,{
+    id:'late-generation',session:'owner-chart',day:'tomorrow',now,limit:100,
+  }),'limit');
+  assert.deepEqual(await reserveQuestion(compatible,{
+    id:'late-question',hash:'late-hash',session:'owner-chart',category:'love',language:'en',now,limit:null,
+  }),{kind:'limit'});
   assert.equal((await db.pool.query("SELECT * FROM phone_accounts WHERE id='owner'")).rowCount,0);
   assert.equal((await db.pool.query('SELECT * FROM answer_reports')).rowCount,0);
   assert.equal(await auth.ownProfile('nirayana_pilot_session=new-chart','owner',true),false);
