@@ -18,7 +18,9 @@ Verified on the connected Samsung:
 Release boundaries:
 - This does not verify Firebase Authentication; existing SMS login remains unchanged.
 - FCM delivery is tested through Firebase Console. A backend for personalised/scheduled notifications is not implemented by this change.
-- The privacy-policy source includes Firebase disclosures, but needs deployment. Play Data Safety must be updated for the Firebase SDK data collection before distributing this build publicly.
-- Existing Play build 49 submission is unchanged. Build 50 is a Samsung test build, not a new Play submission.
+- Firebase privacy disclosures, including analytics-derived approximate location, were deployed on 17 September 2026. Play Data Safety was updated and submitted with the release.
+- Play production build 49 was verified live on 17 September 2026. Version 1.0.1 (50) was subsequently uploaded and submitted for a full production rollout with the updated Data Safety declaration. Console shows Changes in review, with automated quick checks still running. Managed publishing is off; publication follows approval, and was not verified at submission time.
 
 Automated validation: full mobile suite finished with 157 passing, 1 skipped and 1 failure caused by the new Account settings pushing the Tamil birth-profile row below the viewport. Updated that existing test to scroll the row into the visible area, then reran all three UI-language tests successfully. Final non-QA APK installed successfully; device reports versionCode 50. Analytics debug mode was disabled after testing.
+
+Release artifact: `Jyotara-1.0.1-build50.aab`, signed using the existing upload key, production phone authentication enabled, API endpoint unchanged. Play accepted the bundle as ready to release with no blocking errors and no reduction in supported devices. Live server privacy release: `firebase-privacy-20260917`; health check passed.
