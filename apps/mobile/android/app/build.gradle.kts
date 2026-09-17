@@ -1,6 +1,8 @@
 import java.util.Properties
 
 plugins {
+    id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")

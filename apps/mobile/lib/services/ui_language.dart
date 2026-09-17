@@ -79,6 +79,22 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Notifications & app improvements': 'அறிவிப்புகள் மற்றும் செயலி மேம்பாடுகள்',
+  'Optional services provided by Google Firebase. Birth details and chat text are not included in analytics events.': 'Google Firebase வழங்கும் விருப்பச் சேவைகள். பிறப்பு விவரங்களும் உரையாடல்களும் பயன்பாட்டுப் புள்ளிவிவரங்களில் சேர்க்கப்படாது.',
+  'Usage analytics': 'பயன்பாட்டுப் புள்ளிவிவரங்கள்',
+  'Share app usage and device information to help improve Jyotara.':
+      'Jyotara மேம்பட செயலியின் பயன்பாடு மற்றும் சாதனத் தகவல்களைப் பகிரவும்.',
+  'Crash reports': 'செயலி செயலிழப்பு அறிக்கைகள்',
+  'Share technical error and device reports to help fix crashes.': 'செயலிழப்புகளைச் சரிசெய்ய தொழில்நுட்பப் பிழை மற்றும் சாதன அறிக்கைகளைப் பகிரவும்.',
+  'App notifications': 'செயலி அறிவிப்புகள்',
+  'Receive Jyotara updates. You can turn these off at any time.':
+      'Jyotara அறிவிப்புகளைப் பெறவும். எப்போது வேண்டுமானாலும் நிறுத்தலாம்.',
+  'Allow notifications in Android settings to enable updates.':
+      'அறிவிப்புகளைப் பெற Android அமைப்புகளில் அனுமதி வழங்கவும்.',
+  'Connecting app services. If this continues, restart the app.': 'செயலிச் சேவைகள் இணைக்கப்படுகின்றன. இது தொடர்ந்தால் செயலியை மீண்டும் திறக்கவும்.',
+  'Could not save this setting. Please try again.':
+      'இந்த அமைப்பைச் சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+
   'Delete account': 'கணக்கை நீக்கு',
   'Delete account?': 'கணக்கை நீக்க வேண்டுமா?',
   'Delete phone account, saved profiles and chats':

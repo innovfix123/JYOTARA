@@ -11,7 +11,7 @@ void main() {
       final ui = UiLanguagePreferences(write: (_) async {});
       await tester.pumpWidget(JyotaraApp(uiPreferences: ui));
       await tester.pump(const Duration(milliseconds: 1900));
-    await tester.pump(const Duration(milliseconds: 1400));
+      await tester.pump(const Duration(milliseconds: 1400));
       await tester.tap(find.byKey(const Key('enterApp')));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Account'));
@@ -20,6 +20,21 @@ void main() {
       await ui.set('ta');
       await tester.pumpAndSettle();
       expect(find.text('உங்கள் கணக்கு'), findsOneWidget);
+      await tester.scrollUntilVisible(
+        find.text('பிறப்பு விவரங்கள்'),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .last,
+      );
+      await Scrollable.ensureVisible(
+        tester.element(find.text('பிறப்பு விவரங்கள்')),
+        alignment: 0.3,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('பிறப்பு விவரங்கள்'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('gender-female')));

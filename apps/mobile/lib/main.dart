@@ -1,3 +1,6 @@
+import 'services/firebase_services.dart';
+import 'firebase_preferences.dart';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'services/account_storage.dart';
@@ -35,6 +38,7 @@ import 'privacy_links.dart';
 import 'services/tester_access.dart';
 import 'tester_access_screen.dart';
 
+final firebaseMessenger = GlobalKey<ScaffoldMessengerState>();
 final languagePreferences = LanguagePreferences();
 final uiLanguagePreferences = UiLanguagePreferences();
 final testerAccess = TesterAccess();
@@ -87,6 +91,12 @@ Future<void> main() async {
     ),
   );
   runApp(JyotaraApp(initialization: _restoreApp()));
+  firebaseServices.incoming.stream.listen((_) {
+    firebaseMessenger.currentState?.showSnackBar(
+      const SnackBar(content: Text("You have a new Jyotara update.")),
+    );
+  });
+  unawaited(firebaseServices.initialize());
 }
 
 Future<void> _restoreApp() async {
@@ -155,6 +165,7 @@ class JyotaraApp extends StatelessWidget {
             UiLanguageScope(preferences: preferences, child: child!),
         debugShowCheckedModeBanner: false,
         title: 'Jyotara',
+        scaffoldMessengerKey: firebaseMessenger,
         theme: ThemeData(
           useMaterial3: true,
           brightness: Brightness.dark,
@@ -1768,6 +1779,7 @@ class AccountScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.headlineMedium,
           ),
           const PrivacyLinks(),
+          const FirebasePreferences(),
           const SizedBox(height: 18),
           Card(
             child: Padding(
