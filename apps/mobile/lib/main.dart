@@ -1,3 +1,4 @@
+import 'chat_availability.dart';
 import 'services/firebase_services.dart';
 import 'firebase_preferences.dart';
 
@@ -91,10 +92,25 @@ Future<void> main() async {
     ),
   );
   runApp(JyotaraApp(initialization: _restoreApp()));
-  firebaseServices.incoming.stream.listen((_) {
-    firebaseMessenger.currentState?.showSnackBar(
-      const SnackBar(content: Text("You have a new Jyotara update.")),
-    );
+  firebaseServices.incoming.stream.listen((message) {
+    if (!firebaseServices.notifications) return;
+    final title = message.notification?.title?.trim();
+    final body = message.notification?.body?.trim();
+    final text = [
+      if (title != null && title.isNotEmpty) title,
+      if (body != null && body.isNotEmpty) body,
+    ].join('\n');
+    if (text.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      firebaseMessenger.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(text, maxLines: 5, overflow: TextOverflow.ellipsis),
+          duration: const Duration(seconds: 8),
+          showCloseIcon: true,
+        ),
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   });
   unawaited(firebaseServices.initialize());
 }
@@ -1010,6 +1026,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _loadOverview() async {
+    if (!publicChatEnabled) return;
     if (!mounted ||
         _session.facts == null ||
         _conversation.ended ||
@@ -1102,6 +1119,7 @@ class _ChatScreenState extends State<ChatScreen> {
   );
 
   Future<void> _send([String? suggestion]) async {
+    if (!publicChatEnabled) return;
     final text = (suggestion ?? _controller.text).trim();
     if (text.isEmpty || _thinking || _conversation.ended) return;
     final detected = _detect(text);
@@ -1333,6 +1351,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (!publicChatEnabled) return const ChatUnavailableScreen();
     return PopScope(
       canPop: !_thinking,
       child: Scaffold(
@@ -2368,7 +2387,7 @@ class _FullGuideCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Free tester chat · Pricing later',
+                        'AI chat · Coming soon',
                         style: TextStyle(color: gold),
                       ),
                       const SizedBox(height: 12),

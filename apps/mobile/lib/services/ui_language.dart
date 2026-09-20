@@ -79,6 +79,12 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'AI chat': 'AI உரையாடல்',
+  'AI chat · Coming soon': 'AI உரையாடல் · விரைவில்',
+  'Something thoughtful is on its way': 'புதிய வழிகாட்டுதல் விரைவில்',
+  'AI chat is temporarily unavailable while we prepare paid access. Your saved conversations remain on this device.': 'கட்டண வசதியைத் தயார்செய்வதால் AI உரையாடல் தற்காலிகமாகக் கிடைக்காது. சேமித்த உரையாடல்கள் இந்தச் சாதனத்தில் இருக்கும்.',
+  'Daily horoscopes, Free Kundli and Kundli Matching are still available.': 'தினசரி ராசிபலன், இலவச ஜாதகம் மற்றும் ஜாதகப் பொருத்தம் தொடர்ந்து கிடைக்கும்.',
+  'Support: jyotara29@gmail.com': 'உதவி: jyotara29@gmail.com',
   'Notifications & app improvements': 'அறிவிப்புகள் மற்றும் செயலி மேம்பாடுகள்',
   'Optional services provided by Google Firebase. Birth details and chat text are not included in analytics events.': 'Google Firebase வழங்கும் விருப்பச் சேவைகள். பிறப்பு விவரங்களும் உரையாடல்களும் பயன்பாட்டுப் புள்ளிவிவரங்களில் சேர்க்கப்படாது.',
   'Usage analytics': 'பயன்பாட்டுப் புள்ளிவிவரங்கள்',

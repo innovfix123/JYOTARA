@@ -81,6 +81,13 @@ export const server = createServer(async (incoming, outgoing) => {
       outgoing.end(JSON.stringify({error:'Sign in with the phone account that owns this profile.',code:'phone_auth_required'}));
       return;
     }
+    // Block paid chat before admission, provider calls or answer recovery.
+    if (publicRequest && incoming.method === 'POST' && path === '/api/guidance'
+        && process.env.JYOTARA_PUBLIC_CHAT_ENABLED !== 'true') {
+      outgoing.writeHead(403, {'Content-Type': 'application/json'});
+      outgoing.end(JSON.stringify({code:'chat_not_available',error:'AI chat is temporarily unavailable while we prepare paid access. Free horoscopes, Kundli and matching remain available.'}));
+      return;
+    }
     const admission = isAuth || isReport ? 200 : await admitTesterRequest(database, tester, path, incoming.headers.cookie ?? '',Date.now(),publicRequest ? account! : undefined);
     if (admission !== 200) {
       outgoing.writeHead(admission, { 'Content-Type': 'application/json' });

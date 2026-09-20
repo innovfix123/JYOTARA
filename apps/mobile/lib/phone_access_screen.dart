@@ -60,7 +60,7 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
                     const Text('Finish account deletion'),
                     const SizedBox(height: 16),
                     const Text(
-                      'Your account is locked while deletion completes. Retry to finish removing the saved data. If this continues, contact saran@innovfix.in.',
+                      'Your account is locked while deletion completes. Retry to finish removing the saved data. If this continues, contact jyotara29@gmail.com.',
                     ),
                     if (access.error != null)
                       Padding(

@@ -7,6 +7,7 @@ import {once} from 'node:events';
 test('public HTTP authenticates before admission, serves policies and accepts reports',async()=>{
   if(!(process.env.DATABASE_URL ?? '').includes('jyotara_qa_http_20260915'))throw Error('Dedicated HTTP QA database required');
   Object.assign(process.env,{PORT:'0',JYOTARA_PUBLIC_ACCESS:'true',JYOTARA_OTP_ENABLED:'true',JYOTARA_PHONE_AUTH_KEY:'synthetic-http-test-secret-for-otp',AUTHKEY_KEY:'synthetic',AUTHKEY_SID:'123',JYOTARA_CHART_TICKET_KEY:'ab'.repeat(32)});
+  delete process.env.JYOTARA_PUBLIC_CHAT_ENABLED;
   delete process.env.JYOTARA_TESTER_CODES_SHA256;
   delete process.env.JYOTARA_TESTER_EXPIRES_AT;
   const {database}=await import('./env');
@@ -21,7 +22,7 @@ test('public HTTP authenticates before admission, serves policies and accepts re
     const post=(path:string,body:object={},token?:string,cookie?:string)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(cookie?{Cookie:cookie}:{})},body:JSON.stringify(body)});
     assert.equal((await fetch(base+'/privacy')).status,200);
     const deletion=await fetch(base+'/delete-account');
-    assert.match(await deletion.text(),/mailto:saran@innovfix.in/);
+    assert.match(await deletion.text(),/mailto:jyotara29@gmail.com/);
     assert.match(deletion.headers.get('content-security-policy')!,/frame-ancestors 'none'/);
     assert.deepEqual(await (await post('/api/auth/config')).json(),{enabled:true});
     for(const path of ['/api/astrology/kundli','/api/guidance','/api/locations','/api/kundli/matching','/api/horoscope/daily','/api/answers/report'])
@@ -34,6 +35,14 @@ test('public HTTP authenticates before admission, serves policies and accepts re
     await database.pool.query("INSERT INTO phone_profile_owners VALUES('other-chart','other')");
     assert.equal((await post('/api/auth/session',{},token)).status,200);
     assert.equal((await post('/api/guidance',{},token,'nirayana_pilot_session=other-chart')).status,403);
+    await database.pool.query("INSERT INTO phone_profile_owners VALUES('own-chart','owner')");
+    const locked=await post('/api/guidance',{question:'A paid question'},token,'nirayana_pilot_session=own-chart');
+    assert.equal(locked.status,403);
+    assert.equal((await locked.json()).code,'chat_not_available');
+    assert.equal((await database.pool.query('SELECT * FROM tester_daily_usage')).rowCount,0);
+    // Non-chat routes still reach their validation rather than the paid-chat gate.
+    const free=await post('/api/locations',{},token);
+    assert.notEqual((await free.json()).code,'chat_not_available');
     const report={answer:'Synthetic HTTP report',guide:'Guide',reason:'harmful',consent:true};
     assert.deepEqual(await (await post('/api/answers/report',report,token)).json(),{reported:true});
     assert.deepEqual(await (await post('/api/auth/delete-account',{confirm:true},token)).json().then(x=>({deleted:x.deleted})),{deleted:true});

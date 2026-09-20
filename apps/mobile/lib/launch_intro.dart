@@ -70,52 +70,62 @@ class _LaunchIntroState extends State<LaunchIntro>
               .85,
               curve: Curves.easeOutCubic,
             ).transform(_animation.value);
-            return Column(
-              mainAxisSize: MainAxisSize.min,
+            return Stack(
+              alignment: Alignment.center,
               children: [
-                Opacity(
-                  opacity: logo,
-                  child: Transform.scale(
-                    scale: .85 + .15 * logo,
-                    child: Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFFE6B85C), Color(0xFF974D2C)],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFE6B85C)
-                                .withValues(alpha: .22 * logo),
-                            blurRadius: 60,
-                            spreadRadius: 12,
-                          ),
-                        ],
-                      ),
-                      child: const Padding(
-                        padding: EdgeInsets.all(7),
-                        child: BrandMark(size: 86),
-                      ),
-                    ),
-                  ),
+                SizedBox(
+                  width: 280,
+                  height: 280,
+                  child: CustomPaint(painter: _LaunchOrbitPainter(logo)),
                 ),
-                const SizedBox(height: 28),
-                Opacity(
-                  opacity: name,
-                  child: Transform.translate(
-                    offset: Offset(0, 12 * (1 - name)),
-                    child: const Text(
-                      'Jyotara',
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 3,
-                        color: Color(0xFFF7E8CA),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Opacity(
+                      opacity: logo,
+                      child: Transform.scale(
+                        scale: .85 + .15 * logo,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFE6B85C), Color(0xFF974D2C)],
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFFE6B85C)
+                                    .withValues(alpha: .22 * logo),
+                                blurRadius: 60,
+                                spreadRadius: 12,
+                              ),
+                            ],
+                          ),
+                          child: const Padding(
+                            padding: EdgeInsets.all(7),
+                            child: BrandMark(size: 86),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 28),
+                    Opacity(
+                      opacity: name,
+                      child: Transform.translate(
+                        offset: Offset(0, 12 * (1 - name)),
+                        child: const Text(
+                          'Jyotara',
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 3,
+                            color: Color(0xFFF7E8CA),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             );
@@ -291,4 +301,39 @@ class _PressFeedbackState extends State<PressFeedback> {
       child: widget.child,
     ),
   );
+}
+
+/// A restrained brass halo draws in around the existing brand mark.
+class _LaunchOrbitPainter extends CustomPainter {
+  const _LaunchOrbitPainter(this.progress);
+  final double progress;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2 - 32);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = .8
+      ..color = const Color(0xFFE6B85C).withValues(alpha: .35 * progress);
+    for (final radius in [78.0, 94.0]) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        math.pi * 2 * progress,
+        false,
+        paint,
+      );
+    }
+    paint.style = PaintingStyle.fill;
+    for (var i = 0; i < 12; i++) {
+      final angle = i * math.pi / 6 - math.pi / 2;
+      canvas.drawCircle(
+        center + Offset(math.cos(angle), math.sin(angle)) * 94,
+        i % 3 == 0 ? 2.3 : 1.2,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_LaunchOrbitPainter old) => progress != old.progress;
 }

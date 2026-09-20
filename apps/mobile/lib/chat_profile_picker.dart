@@ -1,3 +1,5 @@
+import 'chat_availability.dart';
+
 import 'package:flutter/material.dart';
 
 import 'birth_form.dart';
@@ -94,90 +96,92 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Select profile')),
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(
-            'Chat with ${widget.guide.name}',
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
-          Text('${widget.guide.speciality}\nAI guide · Free tester chat'),
-          const SizedBox(height: 16),
-          const Text(
-            'Choose whose chart this conversation is about. Each profile has its own chat history.',
-          ),
-          const SizedBox(height: 16),
-          OutlinedButton.icon(
-            onPressed: busy
-                ? null
-                : () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                        builder: (_) => const KundliLibraryScreen(),
-                      ),
-                    );
-                    await _load();
-                  },
-            icon: const Icon(Icons.person_add_alt),
-            label: const Text('Add or manage profiles'),
-          ),
-          if (busy) const LinearProgressIndicator(),
-          if (error != null) ...[
-            Text(error!),
-            TextButton(onPressed: _load, child: const Text('Retry')),
-          ],
-          for (final row in profiles)
-            Card(
-              child: Column(
-                children: [
-                  ListTile(
-                    key: ValueKey('chat-profile-${row.id}'),
-                    leading: Icon(
-                      selected?.id == row.id
-                          ? Icons.radio_button_checked
-                          : Icons.radio_button_off,
-                    ),
-                    title: Text(
-                      row.session.nickname.isEmpty
-                          ? (row.id == 'personal'
-                                ? 'My profile'
-                                : 'Unfinished Kundli')
-                          : row.session.nickname,
-                    ),
-                    subtitle: Text(
-                      row.session.facts == null
-                          ? 'Complete birth details to use this profile.'
-                          : chatProfileDetails(row.session),
-                    ),
-                    onTap: busy
-                        ? null
-                        : () {
-                            if (row.session.facts == null) {
-                              _edit(row);
-                              return;
-                            }
-                            setState(() => selected = row);
-                          },
-                    trailing: IconButton(
-                      tooltip: 'Edit profile',
-                      onPressed: busy ? null : () => _edit(row),
-                      icon: const Icon(Icons.edit_outlined),
+  Widget build(BuildContext context) => !publicChatEnabled
+      ? const ChatUnavailableScreen()
+      : Scaffold(
+          appBar: AppBar(title: const Text('Select profile')),
+          body: SafeArea(
+            child: ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Text(
+                  'Chat with ${widget.guide.name}',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                Text('${widget.guide.speciality}\nAI guide'),
+                const SizedBox(height: 16),
+                const Text(
+                  'Choose whose chart this conversation is about. Each profile has its own chat history.',
+                ),
+                const SizedBox(height: 16),
+                OutlinedButton.icon(
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute<void>(
+                              builder: (_) => const KundliLibraryScreen(),
+                            ),
+                          );
+                          await _load();
+                        },
+                  icon: const Icon(Icons.person_add_alt),
+                  label: const Text('Add or manage profiles'),
+                ),
+                if (busy) const LinearProgressIndicator(),
+                if (error != null) ...[
+                  Text(error!),
+                  TextButton(onPressed: _load, child: const Text('Retry')),
+                ],
+                for (final row in profiles)
+                  Card(
+                    child: Column(
+                      children: [
+                        ListTile(
+                          key: ValueKey('chat-profile-${row.id}'),
+                          leading: Icon(
+                            selected?.id == row.id
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_off,
+                          ),
+                          title: Text(
+                            row.session.nickname.isEmpty
+                                ? (row.id == 'personal'
+                                      ? 'My profile'
+                                      : 'Unfinished Kundli')
+                                : row.session.nickname,
+                          ),
+                          subtitle: Text(
+                            row.session.facts == null
+                                ? 'Complete birth details to use this profile.'
+                                : chatProfileDetails(row.session),
+                          ),
+                          onTap: busy
+                              ? null
+                              : () {
+                                  if (row.session.facts == null) {
+                                    _edit(row);
+                                    return;
+                                  }
+                                  setState(() => selected = row);
+                                },
+                          trailing: IconButton(
+                            tooltip: 'Edit profile',
+                            onPressed: busy ? null : () => _edit(row),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: selected == null || busy ? null : _start,
+                  child: Text('Open chat with ${widget.guide.name}'),
+                ),
+              ],
             ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: selected == null || busy ? null : _start,
-            child: Text('Open chat with ${widget.guide.name}'),
           ),
-        ],
-      ),
-    ),
-  );
+        );
 }
