@@ -79,6 +79,12 @@ class UiText extends StatelessWidget {
 // Incremental catalogue. Missing strings stay visible in English; this is not
 // a claim of complete localisation until all screens and dialogs are covered.
 const tamilUi = <String, String>{
+  'Notifications': 'அறிவிப்புகள்',
+  'Notification settings': 'அறிவிப்பு அமைப்புகள்',
+  'A quieter space for updates': 'உங்கள் அறிவிப்புகள் இங்கே',
+  'Your Jyotara updates will appear here. Enable notifications in settings to receive them.': 'Jyotara அறிவிப்புகள் இங்கே தோன்றும். அவற்றைப் பெற அமைப்புகளில் அறிவிப்புகளை இயக்கவும்.',
+  'Clear updates': 'அறிவிப்புகளை நீக்கு',
+
   'AI chat': 'AI உரையாடல்',
   'AI chat · Coming soon': 'AI உரையாடல் · விரைவில்',
   'Something thoughtful is on its way': 'புதிய வழிகாட்டுதல் விரைவில்',

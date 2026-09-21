@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'notification_inbox.dart';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
@@ -43,10 +45,11 @@ class FirebaseServices extends ChangeNotifier {
         crashReports,
       );
       FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessage);
-      FirebaseMessaging.onMessage.listen(incoming.add);
-      FirebaseMessaging.onMessageOpenedApp.listen(incoming.add);
+      await notificationInbox.restore();
+      FirebaseMessaging.onMessage.listen(_receive);
+      FirebaseMessaging.onMessageOpenedApp.listen(_receive);
       final initial = await FirebaseMessaging.instance.getInitialMessage();
-      if (initial != null) incoming.add(initial);
+      if (initial != null) await _receive(initial);
       final previousHandler = FlutterError.onError;
       FlutterError.onError = (details) {
         previousHandler?.call(details);
@@ -73,6 +76,24 @@ class FirebaseServices extends ChangeNotifier {
       ready = false;
     }
     notifyListeners();
+  }
+
+  Future<void> _receive(RemoteMessage message) async {
+    if (!notifications) return;
+    final title = message.notification?.title?.trim() ?? '';
+    final body = message.notification?.body?.trim() ?? '';
+    if (title.isEmpty && body.isEmpty) return;
+    await notificationInbox.add(
+      AppNotice(
+        id:
+            message.messageId ??
+            '${message.sentTime?.millisecondsSinceEpoch}:$title:$body',
+        title: title.isEmpty ? 'Jyotara' : title,
+        body: body,
+        time: message.sentTime ?? DateTime.now(),
+      ),
+    );
+    incoming.add(message);
   }
 
   void report(Object error, StackTrace stack, {bool fatal = false}) {

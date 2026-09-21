@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import '../lib/chat_availability.dart';
+import 'package:jyotara/chat_availability.dart';
 
 void main() {
   testWidgets('public chat gate explains free access on a small screen', (

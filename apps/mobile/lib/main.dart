@@ -1,4 +1,6 @@
 import 'chat_availability.dart';
+import 'notification_center.dart';
+import 'services/notification_inbox.dart';
 import 'services/firebase_services.dart';
 import 'firebase_preferences.dart';
 
@@ -193,6 +195,35 @@ class JyotaraApp extends StatelessWidget {
             },
           ),
           fontFamily: 'sans-serif',
+          appBarTheme: const AppBarTheme(
+            backgroundColor: ink,
+            surfaceTintColor: Colors.transparent,
+            centerTitle: false,
+            elevation: 0,
+          ),
+          snackBarTheme: SnackBarThemeData(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: const Color(0xFF493126),
+            contentTextStyle: const TextStyle(color: ivory),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+          filledButtonTheme: FilledButtonThemeData(
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(48, 52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+          ),
+          dialogTheme: DialogThemeData(
+            backgroundColor: panel,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(28),
+              side: const BorderSide(color: line),
+            ),
+          ),
           textTheme: const TextTheme(
             displaySmall: TextStyle(
               fontSize: 40,
@@ -686,12 +717,26 @@ class _MainShellState extends State<MainShell>
       const AccountScreen(),
     ];
     return Scaffold(
-      body: FadeTransition(
-        opacity: CurvedAnimation(
-          parent: _tabReveal,
-          curve: Curves.easeOutCubic,
+      body: PremiumBackdrop(
+        child: FadeTransition(
+          opacity: CurvedAnimation(
+            parent: _tabReveal,
+            curve: Curves.easeOutCubic,
+          ),
+          child: SlideTransition(
+            position:
+                Tween<Offset>(
+                  begin: const Offset(0, .012),
+                  end: Offset.zero,
+                ).animate(
+                  CurvedAnimation(
+                    parent: _tabReveal,
+                    curve: Curves.easeOutCubic,
+                  ),
+                ),
+            child: IndexedStack(index: _index, children: pages),
+          ),
         ),
-        child: IndexedStack(index: _index, children: pages),
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
@@ -2128,6 +2173,22 @@ class _TopBarState extends State<_TopBar> {
     return Row(
       children: [
         const Expanded(child: _BrandLockup(compact: true)),
+        AnimatedBuilder(
+          animation: notificationInbox,
+          builder: (context, _) => IconButton(
+            tooltip: uiText(context, 'Notifications'),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationCenter(),
+              ),
+            ),
+            icon: Badge(
+              isLabelVisible: notificationInbox.unread > 0,
+              label: Text('${notificationInbox.unread}'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+          ),
+        ),
         if (widget.showAccount)
           IconButton(
             tooltip: uiText(context, 'Account'),
@@ -2192,6 +2253,7 @@ class _ChartHero extends StatelessWidget {
         final facts = profileSession.facts;
         return EntranceReveal(
           child: Container(
+            clipBehavior: Clip.antiAlias,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
@@ -2386,7 +2448,7 @@ class _FullGuideCard extends StatelessWidget {
                         style: const TextStyle(color: muted),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      const UiText(
                         'AI chat · Coming soon',
                         style: TextStyle(color: gold),
                       ),

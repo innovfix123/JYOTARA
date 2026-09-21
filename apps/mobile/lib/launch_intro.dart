@@ -337,3 +337,39 @@ class _LaunchOrbitPainter extends CustomPainter {
   @override
   bool shouldRepaint(_LaunchOrbitPainter old) => progress != old.progress;
 }
+
+/// Fixed decorative depth without an idle animation loop or input interception.
+class PremiumBackdrop extends StatelessWidget {
+  const PremiumBackdrop({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Stack(
+    fit: StackFit.expand,
+    children: [
+      const DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.topRight,
+            radius: 1.25,
+            colors: [Color(0xFF4A2821), Color(0xFF21100F)],
+            stops: [0, .78],
+          ),
+        ),
+      ),
+      const Positioned(
+        top: -145,
+        right: -110,
+        width: 350,
+        height: 350,
+        child: IgnorePointer(
+          child: ExcludeSemantics(
+            child: RepaintBoundary(
+              child: CustomPaint(painter: TemplePatternPainter(intensity: .26)),
+            ),
+          ),
+        ),
+      ),
+      child,
+    ],
+  );
+}
