@@ -12,6 +12,49 @@ final _dailyCardGradient = BoxDecoration(
   ),
 );
 
+String? dailyTimingOverlapExplanation(
+  Map? good,
+  Map? avoid, {
+  required bool tamil,
+  required String Function(dynamic) clock,
+}) {
+  if (good == null || avoid == null) return null;
+  final goodStart = DateTime.tryParse('${good['start']}');
+  final goodEnd = DateTime.tryParse('${good['end']}');
+  final avoidStart = DateTime.tryParse('${avoid['start']}');
+  final avoidEnd = DateTime.tryParse('${avoid['end']}');
+  if (goodStart == null ||
+      goodEnd == null ||
+      avoidStart == null ||
+      avoidEnd == null ||
+      !goodStart.isBefore(goodEnd) ||
+      !avoidStart.isBefore(avoidEnd) ||
+      !goodStart.isBefore(avoidEnd) ||
+      !avoidStart.isBefore(goodEnd)) {
+    return null;
+  }
+  if (goodEnd.isAfter(avoidEnd)) {
+    // Use only the existing end points; focus resumes while good time remains.
+    final until = clock(avoid['end']), focusUntil = clock(good['end']);
+    if (goodStart.isBefore(avoidStart)) {
+      final from = clock(avoid['start']);
+      return tamil
+          ? 'இந்த நேரங்கள் ஒன்றுடன் ஒன்று சேர்கின்றன. $from முதல் $until வரை நிதானமாக இருங்கள்; பிறகு $focusUntil வரை கவனமாகச் செயல்படுங்கள்.'
+          : 'These times overlap. Take it slow from $from until $until, then focus until $focusUntil.';
+    }
+    return tamil
+        ? 'இந்த நேரங்கள் ஒன்றுடன் ஒன்று சேர்கின்றன. $until வரை நிதானமாக இருங்கள்; பிறகு $focusUntil வரை கவனமாகச் செயல்படுங்கள்.'
+        : 'These times overlap. Take it slow until $until, then focus until $focusUntil.';
+  }
+  final from = clock(
+    goodStart.isAfter(avoidStart) ? good['start'] : avoid['start'],
+  );
+  final until = clock(good['end']);
+  return tamil
+      ? 'இந்த நேரங்கள் ஒன்றுடன் ஒன்று சேர்கின்றன. $from–$until நேரத்தில் நிதானமாக இருங்கள்.'
+      : 'These times overlap. Take it slow during $from–$until.';
+}
+
 extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
   String _section(String title, {bool full = false}) {
     final rows = (readings[sign]?['sections'] as List? ?? []).whereType<Map>();
@@ -68,6 +111,12 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
     }
 
     final avoid = find('Rahu Kalam'), good = find('Abhijit Muhurta');
+    final overlapExplanation = dailyTimingOverlapExplanation(
+      good,
+      avoid,
+      tamil: readingLanguage(context) == 'ta',
+      clock: _clock,
+    );
     return Scaffold(
       backgroundColor: BronzePalette.background,
       appBar: MainTabScope.contains(context)
@@ -227,6 +276,19 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
                     ),
                   ],
                 ),
+                if (overlapExplanation != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      overlapExplanation,
+                      key: const Key('dailyTimingOverlap'),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: muted,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 11),
                 SizedBox(
                   height: 14,
