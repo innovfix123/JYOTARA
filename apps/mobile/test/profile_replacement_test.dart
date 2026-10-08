@@ -109,9 +109,19 @@ void main() {
           calls++;
           if (calls == 2) {
             expect(request.url.path, '/api/profile/renew');
-            return http.Response(jsonEncode({'profileId': 'same-profile', 'chartTicket': 'renewed-same-profile',
-              'renewed': true, 'natalRecalculated': false, 'chatAuthorizedAt': now.toIso8601String(),
-              'chatExpiresAt': now.add(const Duration(hours: 24)).toIso8601String()}), 200);
+            return http.Response(
+              jsonEncode({
+                'profileId': 'same-profile',
+                'chartTicket': 'renewed-same-profile',
+                'renewed': true,
+                'natalRecalculated': false,
+                'chatAuthorizedAt': now.toIso8601String(),
+                'chatExpiresAt': now
+                    .add(const Duration(hours: 24))
+                    .toIso8601String(),
+              }),
+              200,
+            );
           }
           return chartReply('same-profile');
         }),
@@ -137,5 +147,40 @@ void main() {
       session.conversation('Arivan').messages.single.text,
       'Keep historical question',
     );
+  });
+  test('metadata-only edits save without requiring chat renewal', () async {
+    var calls = 0;
+    final session = ProfileSession(
+      api: JyotaraApiClient(
+        baseUrl: 'https://example.test',
+        client: MockClient((request) async {
+          calls++;
+          if (calls > 1) throw StateError('No API required for metadata edits');
+          return chartReply('saved');
+        }),
+      ),
+    );
+    Future<void> save({bool refreshAccess = true, String? nickname}) =>
+        session.calculate(
+          dateTime: '2002-07-29T05:00:00+05:30',
+          latitude: 11,
+          longitude: 77,
+          exactTime: true,
+          nickname: nickname,
+          refreshAccess: refreshAccess,
+        );
+    await save();
+    session
+        .conversation('Arivan')
+        .messages
+        .add(const ChatMessage(fromUser: true, text: 'Keep this chat'));
+    await save(refreshAccess: false, nickname: 'Saran Kumar');
+    expect(session.nickname, 'Saran Kumar');
+    expect(calls, 1);
+    expect(
+      session.conversation('Arivan').messages.single.text,
+      'Keep this chat',
+    );
+    session.dispose();
   });
 }

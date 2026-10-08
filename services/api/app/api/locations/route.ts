@@ -12,5 +12,5 @@ export async function POST(request:Request) {
     return rank(a)-rank(b)||Number(b.row[6])-Number(a.row[6]);
   });
   const data=matches.slice(0,20).map(({row:r})=>[r[0],r[1],r[2],'India','IN','Asia/Kolkata',r[4],r[5]]);
-  return Response.json({data,attribution:'GeoNames · CC BY 4.0',attributionUrl:'https://www.geonames.org/'},{headers:{'Cache-Control':'no-store'}});
+  return Response.json({data,attribution:'GeoNames · CC BY 4.0; OpenStreetMap contributors · ODbL',attributionUrl:'https://www.geonames.org/',additionalAttributionUrl:'https://www.openstreetmap.org/copyright'},{headers:{'Cache-Control':'no-store'}});
 }

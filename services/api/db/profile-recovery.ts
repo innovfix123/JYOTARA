@@ -17,8 +17,8 @@ export async function recoverProfile(db: D1Database, secret: string, input: {
   session: string; day: string; hash: string; now: number;
 }): Promise<Record<string, unknown> | null> {
   const row = await db.prepare(`SELECT id, status, request_hash, response_ciphertext, response_expires_at
-    FROM profile_generations WHERE session_id = ? AND day_key = ?`)
-    .bind(input.session, input.day).first<{
+    FROM profile_generations WHERE session_id = ? AND day_key = ? AND request_hash = ?`)
+    .bind(input.session, input.day, input.hash).first<{
       id: string; status: string; request_hash: string | null; response_ciphertext: string | null; response_expires_at: number | null;
     }>();
   if (!row || row.status !== 'success' || row.request_hash !== input.hash ||

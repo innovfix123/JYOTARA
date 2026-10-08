@@ -38,7 +38,7 @@ class AccountStorage {
 
   /// All profile writers share the erasure barrier, including saved Kundlis.
   Future<void> writeKey(String key, String? value) => _enqueue(() async {
-    final owner = RegExp(r'^jyotara\.account\.([a-f0-9]{32})\.')
+    final owner = RegExp(r'^jyotara\.account\.((?:office_demo_)?[a-f0-9]{32})\.')
         .firstMatch(key)
         ?.group(1);
     if (owner != null && _erasedOwners.contains(owner)) {
@@ -53,7 +53,7 @@ class AccountStorage {
 
   /// Erase this account namespace and only its owned pre-migration copies.
   Future<void> erase(String owner) async {
-    if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(owner)) {
+    if (!RegExp(r'^(?:office_demo_)?[a-f0-9]{32}$').hasMatch(owner)) {
       throw const FormatException('Invalid account');
     }
     // Close the barrier immediately, then drain any already-running write.

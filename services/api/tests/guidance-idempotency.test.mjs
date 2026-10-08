@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import ts from 'typescript';
+import {moduleFor} from './helpers/load.mjs';
 
 const compile = text => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const url = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
@@ -19,18 +20,35 @@ const { issueChartTicket, openChartTicket } = await import(tickets);
 const { sealReply, openReply } = await import(receipts);
 const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__receiptTestEnv;')
-  .replace('@/lib/chart-ticket', tickets)
+  .replace('@/lib/chat-access-window', url(compile(source('../lib/chat-access-window.ts'))))
+      .replace('@/lib/chart-ticket', tickets)
   .replace('@/db/guidance-requests', receipts)
   .replace('@/db/profile-deletion', deletion)
   .replace('@/lib/career-response', career)
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
   .replace('@/lib/divine-calculations', moduleUrl('../lib/divine-calculations.ts'))
+  .replace('@/lib/limited-birth-guidance', moduleFor('../lib/limited-birth-guidance.ts'))
   .replace('@/lib/divine-consultation', moduleUrl('../lib/divine-consultation.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
   .replace('@/lib/provider-chart', url(compile(source('../lib/provider-chart.ts')).replace('./astrology-evidence', evidence)))
   .replace('@/lib/profile-overview', url(compile(source('../lib/profile-overview.ts')))).replace('@/lib/astrology-evidence', evidence)
   .replace('@/lib/guidance-language', moduleUrl('../lib/guidance-language.ts')).replace('@/lib/consultation-writer', moduleUrl('../lib/consultation-writer.ts')));
+
+test('conversational mode rejects a Detailed purchase or upgrade before provider work',async()=>{
+ const {POST}=await import(route+'#conversation-mode-validation');
+ const originalFetch=globalThis.fetch;
+ let calls=0;
+ globalThis.fetch=async()=>{calls++;throw Error('Unexpected provider work');};
+ try {
+  for(const extra of [{depth:'detailed'},{depth:'standard',upgradeFrom:'original-reading'}]) {
+   const response=await POST(new Request('https://example.test/api/guidance',{method:'POST',body:JSON.stringify({category:'Career',question:'Help me think through my next step.',responseMode:'conversation',...extra})}));
+   assert.equal(response.status,400);
+   assert.match((await response.json()).error,/standard price.*paid upgrades/);
+  }
+  assert.equal(calls,0);
+ } finally {globalThis.fetch=originalFetch;}
+});
 
 test('actual route reserves before model work, replays encrypted result, allows continued chat and isolates identities', async () => {
   const db = new DatabaseSync(':memory:');
@@ -40,6 +58,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
   db.exec(source('../drizzle/0010_green_johnny_blaze.sql'));
   db.exec(source('../drizzle/0011_report_evidence.sql'));
   db.exec(source('../drizzle/0013_divine_cleanup.sql'));
+  for(const name of ['0012_phone_login','0017_coin_wallet','0018_coin_context','0019_live_wallet','0025_account_profile_backup'])db.exec(source(`../drizzle/${name}.sql`));
   const person={name:'QA Kavin',gender:'male',place:'Chennai',datetime:'2001-06-12T06:20:00+05:30',latitude:13.0827,longitude:80.2707};
   const secret = 'a3'.repeat(32);
   const originalFetch = globalThis.fetch;
@@ -48,7 +67,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
   let started;
   const modelStarted = new Promise(resolve => { started = resolve; });
   const modelWait = new Promise(resolve => { release = resolve; });
-  globalThis.__receiptTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, DIVINE_API_KEY:'test', OPENROUTER_API_KEY: 'TEST-ONLY', DB: {
+  globalThis.__receiptTestEnv = { NIRAYANA_CHART_TICKET_KEY: secret, DIVINE_API_KEY:'test',DIVINE_ACCESS_TOKEN:'test-token', OPENROUTER_API_KEY: 'TEST-ONLY', DB: {
     async batch(statements) {
       db.exec('BEGIN');
       try {
@@ -68,7 +87,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     },
   } };
   globalThis.fetch = async (address, options) => {
-    if(options.method==='DELETE')return Response.json({deleted:true});
+    if(String(address).endsWith('/session/delete'))return Response.json({deleted:true});
     calls++;
     started();
     if (calls === 1) await modelWait;
@@ -112,6 +131,18 @@ test('actual route reserves before model work, replays encrypted result, allows 
     assert.deepEqual(burst.map(r => r.status).sort(), [200, 200, 200, 200]);
     assert.equal(db.prepare("SELECT COUNT(*) AS n FROM guide_requests WHERE session_id = 'owner'").get().n, 5);
     for(let n=6;n<=35;n++)assert.equal((await post({...base,requestId:`continued-chat-${String(n).padStart(6,'0')}`})).status,200, 'chat continues past both old limits');
+    const unknownChart=await issueChartTicket(secret,{sessionId:'owner',profileId:'one',chart,birthTimeKnown:false});
+    const unknown={...base,requestId:'unknown-time-request-001',chartTicket:unknownChart,birthTimeKnown:true};
+    const beforeUnknown=calls;
+    const limited=await (await post(unknown)).json();
+    assert.equal(limited.answerMode,'limited_guidance');
+    assert.match(limited.answer,/What matters most/);
+    assert.equal(calls,beforeUnknown+1,'unknown time uses general guidance only, never Divine');
+    assert.equal((await (await post(unknown)).json()).replayed,true);
+    assert.equal(calls,beforeUnknown+1,'limited retry reuses encrypted receipt');
+    const unavailableRasi=await (await post({...unknown,requestId:'unknown-time-rasi-0001',question:'What is my Rasi?'})).json();
+    assert.match(unavailableRasi.answer,/can’t confirm/);
+    assert.equal(calls,beforeUnknown+1,'no invented birth time sent for Rasi');
     const after = calls;
     assert.equal((await post()).status, 200, 'replay works without new provider work');
     db.prepare('UPDATE guide_requests SET response_expires_at = 0 WHERE id = ?').run(stored.id);
@@ -127,7 +158,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     // Deleted receipts remain protected; a fresh question is tested separately below.
     assert.equal(calls, after, 'erasure and deleted retries make no new provider calls');
     const erased = db.prepare("SELECT * FROM guide_requests WHERE session_id = 'owner'").all();
-    assert.equal(erased.length, 35);
+    assert.equal(erased.length, 37);
     for (const row of erased) {
       assert.equal(row.answer_mode, 'deleted');
       for (const field of ['question_text', 'intent', 'research_consent_version', 'age_band', 'request_hash', 'response_ciphertext', 'response_expires_at']) assert.equal(row[field], null, field);
@@ -139,7 +170,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     const began = new Promise(resolve => { pendingStarted = resolve; });
     const pause = new Promise(resolve => { finishPending = resolve; });
     globalThis.fetch = async (address, options) => {
-      if(options.method==='DELETE')return Response.json({deleted:true});
+      if(String(address).endsWith('/session/delete'))return Response.json({deleted:true});
       calls++;
       pendingStarted();
       await pause;
@@ -180,11 +211,13 @@ test('actual route reserves before model work, replays encrypted result, allows 
 
     const deleteRoute = url(compile(source('../app/api/profile/delete/route.ts'))
       .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__receiptTestEnv;')
+      .replace('@/lib/chat-access-window', url(compile(source('../lib/chat-access-window.ts'))))
       .replace('@/lib/chart-ticket', tickets).replace('@/db/profile-deletion', deletion));
     const { POST: deleteProfile } = await import(deleteRoute);
     const expired = await issueChartTicket(secret, { sessionId: 'owner', profileId: 'one', chart, birthTimeKnown: true }, Date.now() - 2 * 86400000);
     const renewalRoute = url(compile(source('../app/api/profile/renew/route.ts'))
       .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__receiptTestEnv;')
+      .replace('@/lib/chat-access-window', url(compile(source('../lib/chat-access-window.ts'))))
       .replace('@/lib/chart-ticket', tickets).replace('@/db/profile-deletion', deletion));
     const { POST: renewProfile } = await import(renewalRoute);
     const renew = (chartTicket = expired, session = 'owner') => renewProfile(new Request('https://example.test/api/profile/renew', {
@@ -223,7 +256,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     assert.equal((await renew()).status, 410, 'revoked session cannot renew');
     const erasedProfile = db.prepare("SELECT * FROM profile_generations WHERE session_id = 'owner'").get();
     assert.equal(erasedProfile.status, 'deleted');
-    assert.equal(erasedProfile.request_hash, null);
+    assert.equal(erasedProfile.request_hash, 'erased:' + erasedProfile.id);
     assert.equal(erasedProfile.response_ciphertext, null);
     assert.equal(erasedProfile.credits, 320, 'operational budget is not refunded by deletion');
     assert.equal(db.prepare("SELECT status FROM profile_generations WHERE session_id = 'surviving-owner'").get().status, 'started');
@@ -257,7 +290,7 @@ test('actual route reserves before model work, replays encrypted result, allows 
     const reviewedResponse = await post(reviewedBody, 'reviewed-owner');
     assert.equal(reviewedResponse.status, 200);
     const reviewedAnswer = await reviewedResponse.json();
-    assert.equal(reviewedAnswer.answerMode, 'reading_unavailable');
+    assert.equal(reviewedAnswer.answerMode, 'limited_guidance');assert.doesNotMatch(reviewedAnswer.answer,/confirm your saved|birth time/);
     assert.equal(reviewedAnswer.profileId, 'reviewed-profile');
     assert.deepEqual(reviewedAnswer.evidence, []);
     const recoveredResponse = await post(reviewedBody, 'reviewed-owner');
@@ -289,14 +322,14 @@ test('encrypted reply is bound to request and key; corruption fails closed', asy
 
 test('Divine route verifies birth details, replays without charge and isolates provider conversations',async()=>{
  const db=new DatabaseSync(':memory:');
- for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence','0013_divine_cleanup'])db.exec(source(`../drizzle/${name}.sql`));
+ for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence','0013_divine_cleanup','0012_phone_login','0017_coin_wallet','0018_coin_context','0019_live_wallet','0025_account_profile_backup'])db.exec(source(`../drizzle/${name}.sql`));
  const secret='ef'.repeat(32);const old=globalThis.fetch;const requests=[];
- globalThis.__receiptTestEnv={NIRAYANA_CHART_TICKET_KEY:secret,JYOTARA_CHAT_PROVIDER:'divine',DIVINE_API_KEY:'test',OPENROUTER_API_KEY:'test',DB:{
+ globalThis.__receiptTestEnv={NIRAYANA_CHART_TICKET_KEY:secret,JYOTARA_CHAT_PROVIDER:'divine',DIVINE_API_KEY:'test',DIVINE_ACCESS_TOKEN:'test-token',OPENROUTER_API_KEY:'test',DB:{
   prepare(sql){let args=[];return{bind(...v){args=v;return this;},async run(){return{meta:{changes:Number(db.prepare(sql).run(...args).changes)}};},async first(){return db.prepare(sql).get(...args)||null;}};}
  }};
  const reading='Venus may favour commitment. Marriage discussions may progress slowly.';
  globalThis.fetch=async(url,opts)=>{
-  if(opts.method==='DELETE')return Response.json({deleted:true});
+  if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
   requests.push({url,payload:JSON.parse(opts.body)});
   if(url.includes('ask.divine'))return Response.json({answer:reading,credits_charged:30});
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer:reading,source_quotes:['Venus may favour commitment.']})}}]});
@@ -314,8 +347,38 @@ test('Divine route verifies birth details, replays without charge and isolates p
   await post({...base,requestId:'divine-question-0002',question:'What about family approval?',conversationHistory:[{role:'user',content:base.question},{role:'assistant',content:reading}]});
   assert.equal(requests.length,4);assert.notEqual(requests[0].payload.session_id,requests[2].payload.session_id);
   assert.ok(requests[2].payload.message.includes('family approval'));
+  const beforeEquivalent=requests.length;
+  const equivalent=await (await post({...base,requestId:'divine-equivalent-0001',reportPerson:{...person,datetime:'2001-06-12T00:50:00Z'}})).json();
+  assert.equal(equivalent.answerMode,'provider_reading');assert.equal(requests.length,beforeEquivalent+2);
+  assert.equal(requests[beforeEquivalent].payload.hour,'6','Use verified birth-location offset, not representation of the same instant');
+  const beforeMismatch=requests.length;
   const mismatch=await (await post({...base,requestId:'divine-question-0003',reportPerson:{...person,datetime:'2002-06-12T06:20:00+05:30'}})).json();
-  assert.equal(mismatch.answerMode,'reading_unavailable');assert.equal(requests.length,4,'unverified birth details must not reach provider');
+  assert.equal(mismatch.answerMode,'limited_guidance');assert.equal(requests.length,beforeMismatch+1);assert.match(requests.at(-1).url,/openrouter/,'unverified birth details must not reach Divine');assert.doesNotMatch(mismatch.answer,/confirm your saved|birth time/);
+  const conversationHistory=Array.from({length:32},(_,i)=>({role:i%2?'assistant':'user',content:`Previous relationship discussion ${i}.`}));
+  const conversationMemory=['My family already knows about us.','We agreed that I would wait for their reply.'];
+  const unified={...base,requestId:'unified-question-0001',depth:'standard',responseMode:'conversation',conversationHistory,conversationMemory};
+  const beforeUnified=requests.length;
+  const legacyTooLong=await post({...base,requestId:'legacy-history-too-long',conversationHistory});
+  assert.equal(legacyTooLong.status,400);assert.equal(requests.length,beforeUnified);
+  const unifiedReply=await (await post(unified)).json();
+  assert.equal(unifiedReply.answer,reading);assert.equal(requests.length,beforeUnified+2);
+  const sourceRequest=requests[beforeUnified].payload;
+  assert.equal(sourceRequest.depth,'standard');assert.equal(sourceRequest.length_cap,'full');
+  assert.deepEqual(JSON.parse(sourceRequest.message).conversation_context,conversationHistory);
+  assert.deepEqual(JSON.parse(sourceRequest.message).earlier_user_statements,conversationMemory);
+  const unifiedReplay=await (await post(unified)).json();
+  assert.equal(unifiedReplay.replayed,true);assert.equal(requests.length,beforeUnified+2);
+  assert.equal(unifiedReplay.providerUsage.newProviderCalls,0);
+  const changedMemory=await post({...unified,conversationMemory:['My family does not know about us.']});
+  assert.equal(changedMemory.status,409);assert.equal(requests.length,beforeUnified+2);
+  const invalidMemory=await post({...unified,requestId:'invalid-memory-0001',conversationMemory:['x'.repeat(1001)]});
+  assert.equal(invalidMemory.status,400);assert.equal(requests.length,beforeUnified+2);
+  const noContact='My relationship ended and they asked me not to contact them. '+'I want to respect that boundary while I recover. '.repeat(8);
+  assert.ok(noContact.length>240);
+  const boundary=await (await post({...unified,requestId:'long-user-boundary-01',category:'Career',question:'Should I give them another chance?',conversationMemory:[],previousUserMessages:[],conversationHistory:[{role:'user',content:noContact},{role:'assistant',content:'Try messaging from another account.'}]})).json();
+  assert.equal(boundary.answerMode,'practical_guidance');
+  assert.match(boundary.answer,/Respect the request for no contact/);
+  assert.equal(requests.length,beforeUnified+2,'a long retained boundary must avoid paid provider work');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM divine_cleanup').get().n,0);
  }finally{globalThis.fetch=old;delete globalThis.__receiptTestEnv;db.close();}
 });

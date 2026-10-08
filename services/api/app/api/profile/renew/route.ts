@@ -1,3 +1,4 @@
+import { chatAccessWindow } from '@/lib/chat-access-window';
 import { env } from 'cloudflare:workers';
 import { chartTicketConfigured, chartProviderDataFresh, openChartRenewalTicket, openBirthGuidanceTicket } from '@/lib/chart-ticket';
 import { chartSessionDeleted } from '@/db/profile-deletion';
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   if (env.JYOTARA_CHAT_PROVIDER === 'divine') {
     const access=await openBirthGuidanceTicket(chartSecret,body?.chartTicket,session??'',body?.profileId,now);
     if(access)return Response.json({profileId:ticket.profileId,chartTicket:body!.chartTicket,
-      chatAuthorizedAt:new Date(now).toISOString(),chatExpiresAt:new Date(access.expiresAt).toISOString(),
+      ...chatAccessWindow(now, access.expiresAt),
       renewed:true,natalRecalculated:false},{headers:{'Cache-Control':'no-store'}});
   }
   if (!chartProviderDataFresh(ticket, now)) return Response.json({

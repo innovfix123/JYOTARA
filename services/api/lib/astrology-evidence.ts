@@ -202,7 +202,7 @@ export type EvidencePacket = {
 };
 
 const highStakesTerms = [
-  'death', 'die', 'cancer', 'disease', 'pregnant', 'pregnancy', 'suicide', 'kill myself',
+  'death', 'die', 'cancer', 'disease', 'pregnant', 'pregnancy', 'suicide', 'suicidal', 'self harm', 'self-harm', 'kill myself',
   'court case', 'legal outcome', 'stock', 'investment return', 'lottery', 'medicine', 'medical',
   'health', 'illness', 'fertility', 'conception', 'baby eppo', 'baby epo',
   'maranam', 'noi', 'karpam', 'tharkolai', 'mudhaleedu', 'udalnalam', 'udal nalam',
@@ -218,7 +218,7 @@ function includesAny(value: string, terms: string[], wholeLatinWords = false) {
   });
 }
 
-function inferIntent(category: GuidanceCategory, question: string) {
+export function inferIntent(category: GuidanceCategory, question: string) {
   if (includesAny(question, highStakesTerms, true)) return 'high_stakes';
   // This endpoint currently carries only one chart. Never substitute it for
   // an explicitly mentioned other person or a two-person calculation.
@@ -543,7 +543,7 @@ const englishFocus: Record<GuidanceCategory, string> = {
 export function buildFallbackAnswer(packet: EvidencePacket, style?: string) {
   const copy = (en: string, ta: string, tanglish: string) => style === 'tanglish' ? tanglish : packet.language === 'ta' ? ta : en;
   if (packet.intent === 'high_stakes') {
-    if (includesAny(packet.question, ['suicide', 'kill myself', 'tharkolai', 'தற்கொலை'], true)) {
+    if (includesAny(packet.question, ['suicide', 'suicidal', 'self harm', 'self-harm', 'kill myself', 'tharkolai', 'தற்கொலை'], true)) {
       return copy(
         'Your safety matters more than a chart reading. If you might hurt yourself or are in immediate danger, contact local emergency help and someone you trust who can stay with you. Are you safe right now?',
         'ஜாதக விளக்கத்தைவிட உங்கள் பாதுகாப்பு முக்கியம். உங்களை காயப்படுத்திக்கொள்ளும் அபாயம் அல்லது உடனடி ஆபத்து இருந்தால், உள்ளூர் அவசர உதவியையும் உங்களுடன் இருக்கக்கூடிய நம்பகமான ஒருவரையும் தொடர்புகொள்ளுங்கள். இப்போது பாதுகாப்பாக இருக்கிறீர்களா?',

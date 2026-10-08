@@ -15,11 +15,27 @@ export function testerIdentity(code: string | undefined, hashes: string, expiry:
   return digest.toString('hex');
 }
 
-export async function admitTesterRequest(db: PostgresDatabase, tester: string, path: string, cookie: string, now = Date.now(), publicAccount?:string) {
+// A short office invitation is only a front-door code. Account OTP is still
+// required by the server, and the canonical identity preserves existing sessions.
+export function officeTesterIdentity(code:string|undefined,settings:Record<string,string|undefined>,path:string,now=Date.now()){
+ const hashes=settings.JYOTARA_SAMSUNG_TESTER_SHA256??'', expiry=settings.JYOTARA_SAMSUNG_TESTER_EXPIRES_AT??'';
+ const old=testerIdentity(code,hashes,expiry,path,now);if(old)return old;
+ const expected=settings.JYOTARA_OFFICE_ACCESS_SHA256??'';
+ if(!code||!/^\d{6}$/.test(code)||!/^[a-f0-9]{64}$/.test(expected))return null;
+ const digest=createHash('sha256').update(code).digest();
+ if(!timingSafeEqual(digest,Buffer.from(expected,'hex')))return null;
+ const canonical=hashes.split(',')[0];if(!/^[a-f0-9]{64}$/.test(canonical))return null;
+ if(!['/api/profile/delete','/api/profile/discard','/api/pilot/events','/api/auth/delete-account','/api/auth/send','/api/auth/verify-deletion'].includes(path)){
+  if(!Number.isFinite(Date.parse(expiry))||now>=Date.parse(expiry))return null;
+ }
+ return canonical;
+}
+
+export async function admitTesterRequest(db: PostgresDatabase, tester: string, path: string, cookie: string, now = Date.now(), publicAccount?:string, walletMeteredMatching = false) {
   const session = cookie.split(';').map(p => p.trim()).find(p => p.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
-  const needsOwner = !['/api/locations', '/api/tester/check', '/api/horoscope/daily', '/api/kundli/matching'].includes(path);
+  const needsOwner = !['/api/locations', '/api/tester/check', '/api/horoscope/daily', '/api/explore/panchang', '/api/kundli/matching'].includes(path);
   if (needsOwner && (!session || !/^[A-Za-z0-9_-]{1,128}$/.test(session))) return 400;
-  const limit = path === '/api/horoscope/daily' ? 60 : path === '/api/kundli/matching' ? 5 : path === '/api/astrology/kundli' ? 10 : path === '/api/locations' ? 100 : null;
+  const limit = path === '/api/explore/panchang' ? 30 : path === '/api/horoscope/daily' ? 240 : path === '/api/kundli/matching' ? (walletMeteredMatching ? null : 5) : path === '/api/astrology/kundli' ? 10 : path === '/api/locations' ? 100 : null;
   const day = new Date(now + 19_800_000).toISOString().slice(0, 10);
   return db.transaction(async client => {
     let newChartSession = false;

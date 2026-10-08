@@ -1,4 +1,9 @@
+import 'meta_measurement.dart';
+import 'marketing_analytics.dart';
+import 'user_journey.dart';
+
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -9,12 +14,14 @@ import 'jyotara_api.dart';
 class PhoneAccess extends ChangeNotifier {
   PhoneAccess({
     required this.testerCode,
+    this.requireRealSms = const bool.fromEnvironment('JYOTARA_REAL_SMS_ONLY'),
     http.Client? client,
     String? baseUrl,
     Future<String?> Function()? read,
     Future<void> Function(String)? write,
     DateTime Function()? now,
     this.prepareAccount,
+    this.restoreVerifiedProfile,
     this.eraseLocalAccount,
   }) : _now = now ?? DateTime.now,
        _client = client ?? http.Client(),
@@ -31,7 +38,12 @@ class PhoneAccess extends ChangeNotifier {
              value: v,
            ));
   final String? Function() testerCode;
+  final bool requireRealSms;
   final Future<void> Function(String account)? prepareAccount;
+  final Future<void> Function(String account, String token)?
+  restoreVerifiedProfile;
+  bool _profileRestorePending = false;
+  bool get profileRestorePending => _profileRestorePending;
   final Future<void> Function(String account)? eraseLocalAccount;
   String? get accountId => _account;
   final DateTime Function() _now;
@@ -41,9 +53,12 @@ class PhoneAccess extends ChangeNotifier {
   final Future<void> Function(String) _write;
   String? _token, _account, _challenge, _mobile;
   int _expires = 0, _challengeExpires = 0;
+  String? _sendRequestId, _sendRequestMobile;
   bool _serverDeleted = false, _deletionPending = false;
   bool _deletionOtp = false;
   bool _reviewAccount = false;
+  bool _officeDemoChallenge = false;
+  bool get officeDemo => _account?.startsWith('office_demo_') ?? false;
   bool get canVerifyReviewDeletion =>
       _deletionPending && !_serverDeleted && _reviewAccount;
   bool get deletionPending => _deletionPending;
@@ -53,11 +68,23 @@ class PhoneAccess extends ChangeNotifier {
   bool busy = false;
   String? error, notice;
   DateTime? resendAt;
+  int get resendSecondsRemaining => resendAt == null
+      ? 0
+      : ((resendAt!.millisecondsSinceEpoch - _now().millisecondsSinceEpoch) /
+                1000)
+            .ceil()
+            .clamp(0, 86400);
   bool get authorized =>
       !_deletionPending &&
+      !_profileRestorePending &&
       _token != null &&
       _now().millisecondsSinceEpoch < _expires;
-  String? get token => authorized ? _token : null;
+  String? get token =>
+      !_deletionPending && _now().millisecondsSinceEpoch < _expires
+      ? _token
+      : null;
+  int _verificationRevision = 0;
+  int get verificationRevision => _verificationRevision;
   bool get codeSent => _challenge != null;
   String? get mobile => _mobile;
   bool get codeExpired =>
@@ -71,8 +98,10 @@ class PhoneAccess extends ChangeNotifier {
     jsonEncode({
       'serverDeleted': _serverDeleted,
       'deletionPending': _deletionPending,
+      'profileRestorePending': _profileRestorePending,
       'deletionOtp': _deletionOtp,
       'reviewAccount': _reviewAccount,
+      'officeDemoChallenge': _officeDemoChallenge,
       'token': _token,
       'accountId': _account,
       'expiresAt': _expires,
@@ -80,6 +109,8 @@ class PhoneAccess extends ChangeNotifier {
       'challengeId': _challenge,
       'challengeExpiresAt': _challengeExpires,
       'resendAt': resendAt?.millisecondsSinceEpoch,
+      'sendRequestId': _sendRequestId,
+      'sendRequestMobile': _sendRequestMobile,
     }),
   );
   Future<void> restore() async {
@@ -87,6 +118,23 @@ class PhoneAccess extends ChangeNotifier {
       final saved = await _read();
       if (saved == null) return;
       final data = jsonDecode(saved) as Map;
+      if (requireRealSms &&
+          (data['officeDemoChallenge'] == true ||
+              data['reviewAccount'] == true ||
+              (data['accountId'] is String &&
+                  (data['accountId'] as String).startsWith('office_demo_')))) {
+        // Forget demo authentication only; retain separately stored profiles.
+        await _write('{}');
+        return;
+      }
+      if (data['sendRequestId'] is String &&
+          RegExp(r'^[a-f0-9]{32}$').hasMatch(data['sendRequestId']) &&
+          data['sendRequestMobile'] is String &&
+          RegExp(r'^[6-9][0-9]{9}$').hasMatch(data['sendRequestMobile'])) {
+        _sendRequestId = data['sendRequestId'];
+        _sendRequestMobile = data['sendRequestMobile'];
+      }
+      _officeDemoChallenge = data['officeDemoChallenge'] == true;
       if (data['mobile'] is String &&
           RegExp(r'^[6-9]\d{9}$').hasMatch(data['mobile'])) {
         _mobile = data['mobile'];
@@ -99,13 +147,16 @@ class PhoneAccess extends ChangeNotifier {
           RegExp(r'^[a-f0-9]{48}$').hasMatch(data['challengeId']) &&
           data['challengeExpiresAt'] is int) {
         _challenge = data['challengeId'];
+        _verificationRevision++;
         _challengeExpires = data['challengeExpiresAt'];
-        notice = 'Use the latest SMS code. Reopening the app does not send another SMS.';
+        notice = _officeDemoChallenge ? 'Enter your office review OTP.' : 'Use the latest SMS code. Reopening the app does not send another SMS.';
       }
       if (data['accountId'] is String) _account = data['accountId'];
       _serverDeleted = data['serverDeleted'] == true;
       _reviewAccount = data['reviewAccount'] == true;
       _deletionPending = data['deletionPending'] == true || _serverDeleted;
+      _profileRestorePending =
+          restoreVerifiedProfile != null && !_deletionPending;
       _deletionOtp = _deletionPending && data['deletionOtp'] == true;
       if (data['token'] is String &&
           RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) &&
@@ -113,6 +164,7 @@ class PhoneAccess extends ChangeNotifier {
         _token = data['token'];
         _expires = data['expiresAt'];
       }
+      if (token == null) _profileRestorePending = false;
     } catch (_) {
       error = 'Unable to restore sign-in. Please verify your phone again.';
     }
@@ -129,17 +181,55 @@ class PhoneAccess extends ChangeNotifier {
         _base.userInfo.isNotEmpty) {
       throw StateError('HTTPS required');
     }
-    final response = await _client
-        .post(
-          _base.resolve('/api/auth/$path'),
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Jyotara-Tester-Code': testerCode() ?? '',
-            if (bearer != null) 'Authorization': 'Bearer $bearer',
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(const Duration(seconds: 20));
+    final event = switch (path) {
+      'send' => 'auth.send',
+      'verify' || 'reviewer' => 'auth.verify',
+      'session' => 'auth.restore',
+      'logout' => 'auth.logout',
+      'delete-account' ||
+      'verify-deletion' ||
+      'reviewer-delete' => 'auth.delete',
+      _ => 'api.request',
+    };
+    final watch = Stopwatch()..start();
+    userJourney.event(
+      event,
+      metadata: {'feature': 'auth', 'outcome': 'started'},
+    );
+    late http.Response response;
+    try {
+      response = await _client
+          .post(
+            _base.resolve('/api/auth/$path'),
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Jyotara-Tester-Code': testerCode() ?? '',
+              if (bearer != null) 'Authorization': 'Bearer $bearer',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 20));
+    } catch (_) {
+      userJourney.event(
+        event,
+        metadata: {
+          'feature': 'auth',
+          'outcome': 'failed',
+          'error': 'network',
+          'durationMs': watch.elapsedMilliseconds,
+        },
+      );
+      rethrow;
+    }
+    userJourney.event(
+      event,
+      metadata: {
+        'feature': 'auth',
+        'outcome': response.statusCode == 200 ? 'success' : 'failed',
+        'status': response.statusCode,
+        'durationMs': watch.elapsedMilliseconds,
+      },
+    );
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode != 200) {
       throw _PhoneError(
@@ -172,19 +262,48 @@ class PhoneAccess extends ChangeNotifier {
     notifyListeners();
     try {
       final requestedAt = _now();
-      final data = await _post('send', {'mobile': mobile});
-      if (data['challengeId'] is! String ||
+      if (_sendRequestId == null || _sendRequestMobile != mobile) {
+        final random = Random.secure();
+        _sendRequestId = List.generate(
+          16,
+          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+        ).join();
+        _sendRequestMobile = mobile;
+      }
+      // Persist the retry identity before sending; never send automatically.
+      await _save();
+      final data = await _post('send', {
+        'requestId': _sendRequestId,
+        'mobile': mobile,
+        'officeDemo':
+            !requireRealSms &&
+            const bool.fromEnvironment('JYOTARA_OFFICE_DEMO_LOGIN'),
+      });
+      if ((requireRealSms && data['officeDemo'] == true) ||
+          data['challengeId'] is! String ||
           !RegExp(r'^[a-f0-9]{48}$').hasMatch(data['challengeId'])) {
         throw const FormatException();
       }
       _challenge = data['challengeId'];
+      _verificationRevision++;
       _deletionOtp = deletionOnly;
       _mobile = mobile;
+      final expiresIn = data['expiresIn'] is int
+          ? (data['expiresIn'] as int).clamp(1, 300)
+          : 300;
       _challengeExpires = requestedAt
-          .add(const Duration(minutes: 5))
+          .add(Duration(seconds: expiresIn))
           .millisecondsSinceEpoch;
-      resendAt = _now().add(const Duration(seconds: 60));
-      notice = data['deliveryUnconfirmed'] == true
+      final retryAfter = data['retryAfterSeconds'] is int
+          ? (data['retryAfterSeconds'] as int).clamp(0, 86400)
+          : 60;
+      resendAt = _now().add(Duration(seconds: retryAfter));
+      _sendRequestId = null;
+      _sendRequestMobile = null;
+      _officeDemoChallenge = data['officeDemo'] == true;
+      notice = _officeDemoChallenge
+          ? 'Enter your office review OTP.'
+          : data['deliveryUnconfirmed'] == true
           ? 'Delivery is taking longer. If your SMS arrives, enter the code here.'
           : 'SMS requested. Enter the newest code when it arrives.';
       await _save();
@@ -228,6 +347,7 @@ class PhoneAccess extends ChangeNotifier {
         'mobile': _mobile,
         'challengeId': _challenge,
         'otp': input.trim(),
+        'officeDemo': _officeDemoChallenge,
       });
       if (data['token'] is! String ||
           !RegExp(r'^[a-f0-9]{64}$').hasMatch(data['token']) ||
@@ -248,6 +368,7 @@ class PhoneAccess extends ChangeNotifier {
       await _write(
         jsonEncode({
           'mobile': _mobile,
+          'profileRestorePending': restoreVerifiedProfile != null,
           'token': data['token'],
           'accountId': data['accountId'],
           'expiresAt': data['expiresAt'],
@@ -259,10 +380,67 @@ class PhoneAccess extends ChangeNotifier {
       _account = data['accountId'];
       _expires = data['expiresAt'];
       _challenge = null;
+      userJourney.event(
+        'auth.verify',
+        metadata: {'feature': 'auth', 'outcome': 'success'},
+      );
+      _profileRestorePending = restoreVerifiedProfile != null;
+      notifyListeners();
+      await _restoreVerifiedProfile();
+      if (!_officeDemoChallenge) {
+        await marketingAnalytics.event('login_success');
+        await metaMeasurement.event('login_success');
+      }
     } on _PhoneError catch (e) {
       error = e.message;
     } catch (_) {
       error = 'Unable to verify or save sign-in. Please request a new code and try again.';
+    } finally {
+      busy = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _restoreVerifiedProfile() async {
+    if (!_profileRestorePending || _account == null || _token == null) return;
+    try {
+      await restoreVerifiedProfile?.call(_account!, _token!);
+      userJourney.event(
+        'profile.restore',
+        metadata: {'feature': 'profile', 'outcome': 'success'},
+      );
+      _profileRestorePending = false;
+      error = null;
+      await _save();
+    } catch (_) {
+      _profileRestorePending = true;
+      userJourney.event(
+        'profile.restore',
+        metadata: {
+          'feature': 'profile',
+          'outcome': 'failed',
+          'error': 'unavailable',
+        },
+      );
+      error = 'Your saved profile could not be restored. Retry without entering your details again.';
+    }
+  }
+
+  Future<void> retryProfileRestore() async {
+    if (busy || !_profileRestorePending) return;
+    if (token == null) {
+      _profileRestorePending = false;
+      _token = null;
+      _expires = 0;
+      error = 'Please verify your phone again.';
+      notifyListeners();
+      return;
+    }
+    busy = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _restoreVerifiedProfile();
     } finally {
       busy = false;
       notifyListeners();
@@ -318,6 +496,10 @@ class PhoneAccess extends ChangeNotifier {
       _account = data['accountId'];
       _expires = data['expiresAt'];
       _mobile = null;
+      userJourney.event(
+        'auth.verify',
+        metadata: {'feature': 'auth', 'outcome': 'success'},
+      );
       _challenge = null;
       _serverDeleted = false;
       resendAt = null;
@@ -351,6 +533,7 @@ class PhoneAccess extends ChangeNotifier {
         'mobile': _mobile,
         'challengeId': _challenge,
         'otp': input.trim(),
+        'officeDemo': _officeDemoChallenge,
       });
       if (result['deleted'] != true) throw const FormatException();
       _serverDeleted = true;
@@ -392,10 +575,12 @@ class PhoneAccess extends ChangeNotifier {
       await _write('{}');
       _serverDeleted = false;
       _deletionPending = false;
+      _profileRestorePending = false;
       _deletionOtp = false;
       _reviewAccount = false;
       _account = null;
       _token = null;
+      await userJourney.discardAccount();
       _mobile = null;
       _challenge = null;
       _expires = 0;
@@ -419,12 +604,19 @@ class PhoneAccess extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
+      await userJourney.beforeLogout();
       if (token != null) await _post('logout', {}, bearer: token);
       await _write(jsonEncode({'accountId': _account}));
       _token = null;
+      await userJourney.discardAccount();
+      _profileRestorePending = false;
       _expires = 0;
       _mobile = null;
       _challenge = null;
+      _verificationRevision++;
+      _sendRequestId = null;
+      _sendRequestMobile = null;
+      _officeDemoChallenge = false;
       _challengeExpires = 0;
       resendAt = null;
       notice = null;
@@ -436,9 +628,18 @@ class PhoneAccess extends ChangeNotifier {
     }
   }
 
+  void clearError() {
+    error = null;
+    notice = null;
+    notifyListeners();
+  }
+
   Future<void> editNumber() async {
     if (busy || _deletionPending) return;
     _challenge = null;
+    _verificationRevision++;
+    _sendRequestId = null;
+    _sendRequestMobile = null;
     _challengeExpires = 0;
     try {
       await _save();

@@ -41,89 +41,89 @@ List<String> chatSuggestions(
       : 0;
   // Topic-specific questions are invitations, never invented user facts.
   const followups = {
-    'Love': [
+    "Love": [
       [
-        'How can I understand whether our effort is mutual?',
-        'இருவரும் சமமாக முயற்சி செய்கிறோமா என்பதை எப்படி புரிந்துகொள்வது?',
-        'Rendu perum samama muyarchi panromanu eppadi purinjukkaradhu?',
+        "When is commitment favoured?",
+        "காதல் உறுதி பெறும் காலம் எப்போது?",
+        "Love urudhiyaaga eppo vaaippu?",
       ],
       [
-        'How can I discuss what we both want?',
-        'இருவரின் எதிர்பார்ப்புகளை எப்படி பேசுவது?',
-        'Rendu peroda edhirpaarppai eppadi pesuradhu?',
+        "Which planet affects my love life?",
+        "என் காதலை எந்த கிரகம் பாதிக்கிறது?",
+        "En love-ai endha graham paathikkudhu?",
       ],
       [
-        'What helps build trust in a relationship?',
-        'உறவில் நம்பிக்கையை வளர்க்க எது உதவும்?',
-        'Uravila nambikkai valara edhu udhavum?',
-      ],
-    ],
-    'Marriage': [
-      [
-        'What should we discuss before deciding on marriage?',
-        'திருமண முடிவுக்கு முன் எதைப் பேச வேண்டும்?',
-        'Kalyanam mudivu panna munnaadi edha pesanum?',
-      ],
-      [
-        'How can we discuss family expectations?',
-        'குடும்ப எதிர்பார்ப்புகளை எப்படி பேசலாம்?',
-        'Family edhirpaarppai eppadi pesalaam?',
-      ],
-      [
-        'What does the available chart say about partnership?',
-        'இருவர் இணைந்து வாழ்வது பற்றி உள்ள ஜாதகக் குறிப்பு என்ன?',
-        'Serndhu vaazhradhu pathi chart kurippu enna?',
+        "Does my chart show a delay?",
+        "என் ஜாதகத்தில் தாமதம் இருக்கிறதா?",
+        "En jathagathula thaamadham irukka?",
       ],
     ],
-    'Career': [
+    "Marriage": [
       [
-        'How can I compare my work options?',
-        'வேலை வாய்ப்புகளை எப்படி ஒப்பிடலாம்?',
-        'Velai vaaippugalai eppadi compare pannalaam?',
+        "When is marriage favoured?",
+        "திருமணத்திற்கு ஏற்ற காலம் எப்போது?",
+        "Kalyanam nadakka eppo vaaippu?",
       ],
       [
-        'How should I prepare for an interview?',
-        'நேர்முகத் தேர்வுக்கு எப்படி தயாராவது?',
-        'Interview-ku eppadi prepare panradhu?',
+        "What does my chart say about family support?",
+        "குடும்ப ஆதரவு பற்றி என் ஜாதகம் என்ன சொல்கிறது?",
+        "Kudumba aadharavu pathi jathagam enna solludhu?",
       ],
       [
-        'What should I consider before changing jobs?',
-        'வேலை மாறும் முன் எதை கவனிக்க வேண்டும்?',
-        'Velai maarum munnaadi edha gavanikkanum?',
-      ],
-    ],
-    'Education': [
-      [
-        'How can I choose between work and further study?',
-        'வேலை அல்லது மேற்படிப்பை எப்படி தேர்வு செய்வது?',
-        'Velai illa higher studies eppadi choose panradhu?',
-      ],
-      [
-        'How can I manage study pressure?',
-        'படிப்பு அழுத்தத்தை எப்படி சமாளிப்பது?',
-        'Padippu pressure-a eppadi samaalikkaradhu?',
-      ],
-      [
-        'What should I consider when choosing a course?',
-        'படிப்பைத் தேர்வு செய்ய எதை கவனிக்க வேண்டும்?',
-        'Course choose panna edha gavanikkanum?',
+        "What does my seventh house indicate?",
+        "என் ஏழாம் பாவம் என்ன சொல்கிறது?",
+        "En ezhaam paavam enna solludhu?",
       ],
     ],
-    'Business': [
+    "Career": [
       [
-        'What should I discuss with a business partner?',
-        'தொழில் கூட்டாளியுடன் எதைப் பேச வேண்டும்?',
-        'Business partner kitta edha pesanum?',
+        "When is a work change favoured?",
+        "வேலை மாற்றத்திற்கு ஏற்ற காலம் எப்போது?",
+        "Velai maara eppo vaaippu?",
       ],
       [
-        'How can I assess the risk before investing?',
-        'முதலீட்டுக்கு முன் ஆபத்தை எப்படி மதிப்பிடுவது?',
-        'Invest panna munnaadi risk eppadi paarkaradhu?',
+        "Which career strengths does my chart show?",
+        "எந்த வேலைக்கான பலம் என் ஜாதகத்தில் உள்ளது?",
+        "Endha velaikku en jathagathula balam irukku?",
       ],
       [
-        'How can I test my business idea on a small scale?',
-        'தொழில் யோசனையை சிறிய அளவில் எப்படி சோதிப்பது?',
-        'Business idea-va chinna alavila eppadi test panradhu?',
+        "What does my current dasha indicate for work?",
+        "தற்போதைய தசை வேலை பற்றி என்ன சொல்கிறது?",
+        "Ippodhaiya dasai velai pathi enna solludhu?",
+      ],
+    ],
+    "Education": [
+      [
+        "What does my chart suggest for higher studies?",
+        "மேற்படிப்பு பற்றி என் ஜாதகம் என்ன சொல்கிறது?",
+        "Higher studies pathi en jathagam enna solludhu?",
+      ],
+      [
+        "Which planet supports my studies?",
+        "என் படிப்புக்கு எந்த கிரகத்தின் ஆதரவு உள்ளது?",
+        "En padippukku endha graha aadharavu irukku?",
+      ],
+      [
+        "Is this a favourable study period?",
+        "இது படிப்பிற்கு சாதகமான காலமா?",
+        "Idhu padippukku saadhagamaana kaalama?",
+      ],
+    ],
+    "Business": [
+      [
+        "Is this a favourable time to start a business?",
+        "தொழில் தொடங்க இது சாதகமான காலமா?",
+        "Business aarambikka idhu saadhagamaana kaalama?",
+      ],
+      [
+        "What does my chart say about partnerships?",
+        "கூட்டுத் தொழில் பற்றி என் ஜாதகம் என்ன சொல்கிறது?",
+        "Kootu thozhil pathi en jathagam enna solludhu?",
+      ],
+      [
+        "Which period supports business growth?",
+        "தொழில் வளர்ச்சிக்கு எந்த காலம் சாதகமாக உள்ளது?",
+        "Business valarchikku endha kaalam saadhagam?",
       ],
     ],
   };

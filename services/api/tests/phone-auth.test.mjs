@@ -77,3 +77,38 @@ test('deletion retry receipt accepts only matching token and tester',async()=>{
  assert.equal((await auth.handle(req.clone(),'other')).status,401);
  assert.equal((await auth.handle(req,'owner')).status,200);
 });
+
+test('office OTP creates an isolated demo identity, never the real phone account',async()=>{
+ const {createHmac}=await import('node:crypto');
+ const hash=v=>createHmac('sha256',config.JYOTARA_PHONE_AUTH_KEY).update(v).digest('hex');
+ const mobile='9000000000',now=Date.parse('2026-09-24');
+ const settings={...config,JYOTARA_OFFICE_DEMO_ENABLED:'true',JYOTARA_SAMSUNG_TESTER_SHA256:'office',JYOTARA_OFFICE_DEMO_EXPIRES_AT:'2026-10-01',JYOTARA_OFFICE_DEMO_PHONE_HASHES:hash('phone:'+mobile),JYOTARA_OFFICE_DEMO_OTP:'011011'};
+ let challenge,createdPhone,accountId;
+ const query=async(sql,args=[])=>{
+  if(sql.startsWith('INSERT INTO phone_challenges'))challenge={id:args[0],phone_hash:args[1],tester_key:args[2],code_hash:args[3],expires_at:args[4],tries:0};
+  if(sql.startsWith('SELECT * FROM phone_challenges'))return {rows:challenge?[challenge]:[]};
+  if(sql.startsWith('UPDATE phone_challenges SET tries'))challenge.tries++;
+  if(sql==='DELETE FROM phone_challenges WHERE id=$1')challenge=null;
+  if(sql.startsWith('INSERT INTO phone_accounts')){accountId=args[0];createdPhone=args[1];return {rows:[{id:accountId}]};}
+  return {rows:[],rowCount:0};
+ };
+ const auth=new PhoneAuth({pool:{query},transaction:fn=>fn({query})},settings,()=>{throw Error('Demo must not send SMS');},()=>now);
+ const sent=await(await auth.handle(request('send',{mobile,officeDemo:true}),'office')).json();
+ assert.equal(sent.officeDemo,true);assert.equal(sent.otp,undefined);
+ const body={mobile,officeDemo:true,challengeId:sent.challengeId,otp:'999999'};
+ assert.equal((await auth.handle(request('verify',body),'office')).status,400);
+ const result=await(await auth.handle(request('verify',{...body,otp:'011011'}),'office')).json();
+ assert.equal(result.officeDemo,true);assert.match(result.accountId,/^office_demo_/);
+ assert.equal(createdPhone,hash('office-demo-phone:'+mobile));assert.notEqual(createdPhone,hash('phone:'+mobile));
+ assert.ok(result.expiresAt<=now+86400000);
+ assert.equal((await auth.handle(request('verify',{...body,otp:'011011'}),'office')).status,400);
+});
+
+for(const caseName of ['public','other-phone','expired','disabled'])test('office OTP is unavailable for '+caseName,async()=>{
+ const {createHmac}=await import('node:crypto');
+ const settings={...config,JYOTARA_OFFICE_DEMO_ENABLED:caseName==='disabled'?'false':'true',JYOTARA_SAMSUNG_TESTER_SHA256:'office',JYOTARA_OFFICE_DEMO_EXPIRES_AT:caseName==='expired'?'2020-01-01':'2030-01-01',JYOTARA_OFFICE_DEMO_PHONE_HASHES:createHmac('sha256',config.JYOTARA_PHONE_AUTH_KEY).update('phone:9000000000').digest('hex'),JYOTARA_OFFICE_DEMO_OTP:'011011'};
+ let sms=0;const query=async()=>({rows:[],rowCount:0});
+ const auth=new PhoneAuth({pool:{query},transaction:fn=>fn({query})},settings,async url=>{sms++;assert.notEqual(url.searchParams.get('otp'),'011011');return Response.json({Message:'Submitted Successfully'});});
+ const result=await(await auth.handle(request('send',{mobile:caseName==='other-phone'?'9000000001':'9000000000',officeDemo:true}),caseName==='public'?'public-v1':'office')).json();
+ assert.equal(result.officeDemo,undefined);assert.equal(sms,1);
+});

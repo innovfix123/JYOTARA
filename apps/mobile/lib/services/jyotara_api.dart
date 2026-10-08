@@ -1,3 +1,6 @@
+import 'user_journey.dart';
+import '../coin_wallet.dart';
+
 import 'dart:async';
 import 'dart:math';
 import 'dart:convert';
@@ -79,6 +82,7 @@ class GuidanceResponse {
     this.limitation,
     this.replayed = false,
     this.answeredAt,
+    this.wallet,
   });
 
   final String answer;
@@ -88,6 +92,7 @@ class GuidanceResponse {
   final String? limitation;
   final bool replayed;
   final DateTime? answeredAt;
+  final Map<String, dynamic>? wallet;
 
   factory GuidanceResponse.fromJson(Map<String, dynamic> json) {
     final answer = json['answer'];
@@ -125,6 +130,9 @@ class GuidanceResponse {
       limitation: limitation as String?,
       replayed: replayed == true,
       answeredAt: parseChartInstant(answeredAt),
+      wallet: json['wallet'] is Map
+          ? Map<String, dynamic>.from(json['wallet'])
+          : null,
     );
   }
 }
@@ -161,6 +169,12 @@ class JyotaraApiClient {
   String? _sessionCookie;
   int _sessionRevision = 0;
   String get storageOrigin => _baseUri.toString();
+  // The verified Jyotara domain routes to the same backend, ticket key and
+  // accounts as the original IP. Only this explicit one-way migration is safe.
+  bool acceptsStorageOrigin(Object? origin) =>
+      origin == storageOrigin ||
+      (storageOrigin == 'https://api.jyotara.in' &&
+          origin == 'https://168.144.64.47');
   String? get sessionForStorage => _sessionCookie;
   String ensureSession() {
     if (_sessionCookie != null) return _sessionCookie!;
@@ -219,7 +233,7 @@ class JyotaraApiClient {
     final result = await _post('/api/profile/discard', {});
     if (result['deleted'] != true) {
       throw const JyotaraApiException(
-        'Unfinished Kundli deletion was not confirmed.',
+        'Unfinished birth chart deletion was not confirmed.',
       );
     }
   }
@@ -271,8 +285,12 @@ class JyotaraApiClient {
     String? requestId,
     List<String> previousUserMessages = const [],
     List<Map<String, String>> conversationHistory = const [],
+    String? responseMode,
+    List<String> conversationMemory = const [],
     Map<String, dynamic>? reportPerson,
     String? guide,
+    String? depth,
+    String? upgradeFrom,
   }) async {
     final language = responseStyle == 'english' ? 'en' : 'ta';
     if (chartTicket == null ||
@@ -286,12 +304,17 @@ class JyotaraApiClient {
     final response = await _post('/api/guidance', {
       'category': category,
       'guide': ?guide,
+      'depth': ?depth,
+      'upgradeFrom': ?upgradeFrom,
       'question': question,
       'language': language,
       // The current pilot accepts ta/en. The mobile contract carries the
       // requested response style so the backend can add Tanglish without ever
       // exposing a model key in the app.
       'responseStyle': responseStyle,
+      'responseMode': ?responseMode,
+      if (conversationMemory.isNotEmpty)
+        'conversationMemory': conversationMemory,
       'chartTicket': chartTicket,
       'profileId': profileId,
       'researchConsent': researchConsent,
@@ -382,6 +405,37 @@ class JyotaraApiClient {
     Map<String, dynamic> body,
   ) async {
     final sessionRevision = _sessionRevision;
+    if (coinWalletEnabled &&
+        path == '/api/guidance' &&
+        body['question'] !=
+            'Show the selected profile rasi, nakshatra and current Saturn status.') {
+      try {
+        body.putIfAbsent('depth', () => 'standard');
+        body = await confirmCoins('guidance', body);
+      } catch (e) {
+        throw JyotaraApiException(e.toString());
+      }
+      if (sessionRevision != _sessionRevision) {
+        throw const JyotaraApiException(
+          'Your profile changed. Please try again.',
+        );
+      }
+    }
+    final feature = path == '/api/guidance'
+        ? 'chat'
+        : path.contains('/profile') || path == '/api/astrology/kundli'
+        ? 'profile'
+        : path.contains('matching')
+        ? 'matching'
+        : path.contains('daily')
+        ? 'daily'
+        : path.contains('locations')
+        ? 'location'
+        : 'other';
+    userJourney.event(
+      'api.request',
+      metadata: {'feature': feature, 'source': 'api', 'outcome': 'started'},
+    );
     late http.Response response;
     try {
       response = await _client
@@ -389,6 +443,10 @@ class JyotaraApiClient {
             _baseUri.resolve(path),
             headers: {
               'Content-Type': 'application/json',
+              'X-Jyotara-Wallet-Mode': const String.fromEnvironment(
+                'JYOTARA_WALLET_MODE',
+                defaultValue: 'test',
+              ),
               if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
                 'X-Jyotara-Phone-Auth': 'required',
               'Accept': 'application/json',
@@ -401,17 +459,46 @@ class JyotaraApiClient {
           )
           .timeout(Duration(seconds: path == '/api/guidance' ? 75 : 40));
     } on TimeoutException {
+      userJourney.event(
+        'api.result',
+        metadata: {
+          'feature': feature,
+          'source': 'api',
+          'outcome': 'failed',
+          'error': 'timeout',
+        },
+      );
       throw const JyotaraApiException(
         'The request timed out before an answer was received.',
         deliveryUncertain: true,
       );
     } on http.ClientException {
+      userJourney.event(
+        'api.result',
+        metadata: {
+          'feature': feature,
+          'source': 'api',
+          'outcome': 'failed',
+          'error': 'network',
+        },
+      );
       throw const JyotaraApiException(
         'Unable to connect. Check your internet connection.',
         deliveryUncertain: true,
       );
     }
 
+    userJourney.event(
+      'api.result',
+      metadata: {
+        'feature': feature,
+        'source': 'api',
+        'status': response.statusCode,
+        'outcome': response.statusCode >= 200 && response.statusCode < 300
+            ? 'success'
+            : 'failed',
+      },
+    );
     // A deleted/replaced session must not be resurrected by an old response,
     // even if the new session happens to contain the same cookie text.
     if (sessionRevision != _sessionRevision) {

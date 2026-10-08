@@ -6,7 +6,7 @@ import {moduleFor} from './helpers/load.mjs';
 const {openChartTicket}=await import(moduleFor('../lib/chart-ticket.ts'));
 test('Divine chart identity, recovery, overview and unknown-time flow stay protected',async()=>{
  const db=new DatabaseSync(':memory:');
- for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0008_damp_marvex','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence','0013_divine_cleanup'])db.exec(fs.readFileSync(new URL('../drizzle/'+name+'.sql',import.meta.url),'utf8'));
+ for(const name of ['0000_perpetual_giant_man','0001_chilly_purple_man','0002_broad_spacker_dave','0003_reflective_betty_ross','0004_powerful_juggernaut','0007_cold_inhumans','0008_damp_marvex','0009_salty_skrulls','0010_green_johnny_blaze','0011_report_evidence','0013_divine_cleanup','0022_profile_corrections'])db.exec(fs.readFileSync(new URL('../drizzle/'+name+'.sql',import.meta.url),'utf8'));
  const secret='aa'.repeat(32),old=globalThis.fetch;let calls=0;
  globalThis.__divineTestEnv={JYOTARA_CHART_TICKET_KEY:secret,DIVINE_API_KEY:'test',DIVINE_ACCESS_TOKEN:'test',DB:{prepare(sql){let args=[];return{bind(...v){args=v;return this;},async first(){return db.prepare(sql).get(...args)||null;},async run(){return{meta:{changes:Number(db.prepare(sql).run(...args).changes)}};}};}}};
  globalThis.fetch=async(url,opts)=>{
@@ -29,5 +29,22 @@ test('Divine chart identity, recovery, overview and unknown-time flow stay prote
   const intro=await chat(new Request('https://test',{method:'POST',headers:{cookie:'nirayana_pilot_session=owner'},body:JSON.stringify({requestId:'overview-valid-0001',profileId:first.profileId,chartTicket:first.chartTicket,category:'Daily',language:'en',responseStyle:'english',question:'Show the selected profile rasi, nakshatra and current Saturn status.',chart:{rashi:'Mesha'}})}));
   const reading=await intro.json();assert.equal(intro.status,200);assert.match(reading.answer,/Kumbha/);assert.doesNotMatch(reading.answer,/Mesha/);assert.equal(calls,6);
   const unknown=await (await send({...body,birthTimeKnown:false},'unknown-owner')).json();assert.ok(unknown.moduleStatus,JSON.stringify(unknown));assert.equal(unknown.moduleStatus.navamsa,'not-requested-unknown-time');assert.equal(calls,7);
+  const beforeCorrection=calls;
+  const correctedResponse=await send({...body,datetime:'2001-06-12T07:20:00+05:30'});
+  assert.equal(correctedResponse.status,200,await correctedResponse.clone().text());
+  const corrected=await correctedResponse.json();
+  assert.notEqual(corrected.profileId,first.profileId);
+  const correctedTicket=await openChartTicket(secret,corrected.chartTicket,'owner',corrected.profileId);
+  assert.equal(correctedTicket.birthDatetime,'2001-06-12T07:20:00+05:30');
+  assert.ok(calls>beforeCorrection);
+  const afterCorrection=calls;
+  const correctedRetry=await (await send({...body,datetime:'2001-06-12T07:20:00+05:30'})).json();
+  assert.equal(correctedRetry.profileRecovered,true);
+  assert.equal(correctedRetry.profileId,corrected.profileId);
+  assert.equal(calls,afterCorrection);
+  const originalRetry=await (await send(body)).json();
+  assert.equal(originalRetry.profileId,first.profileId);
+  assert.equal(calls,afterCorrection);
+
  }finally{globalThis.fetch=old;delete globalThis.__divineTestEnv;db.close();}
 });

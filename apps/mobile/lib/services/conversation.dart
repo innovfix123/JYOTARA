@@ -8,12 +8,24 @@ class GuideConversation extends ChangeNotifier {
   bool pending = false;
   bool ended = false;
   int? rating;
+  String? depth;
+  bool billingAcknowledged = false;
+  int? acceptedGeneralCoins;
+  int? acceptedRelationshipCoins;
+  DateTime? updatedAt;
+  final history = <List<ChatMessage>>[];
   void changed() => notifyListeners();
 }
 
 class ChatMessage {
-  const ChatMessage({required this.fromUser, required this.text, this.label});
+  const ChatMessage({
+    required this.fromUser,
+    required this.text,
+    this.label,
+    this.wallet,
+  });
   final bool fromUser;
   final String text;
   final String? label;
+  final Map<String, dynamic>? wallet;
 }

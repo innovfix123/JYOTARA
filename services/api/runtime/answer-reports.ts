@@ -1,3 +1,4 @@
+import {jsonObject} from './json-object';
 import {createHash, createHmac} from 'node:crypto';
 import {sealReply} from '../db/guidance-requests';
 import type {PostgresDatabase} from './postgres';
@@ -9,8 +10,8 @@ const reasons = new Set(['harmful', 'sexual', 'hateful', 'misleading', 'privacy'
 export async function reportAnswer(request:Request, db:PostgresDatabase, secret:string|undefined, tester:string, now=Date.now()) {
   const token=/^Bearer ([a-f0-9]{64})$/.exec(request.headers.get('authorization') ?? '')?.[1];
   if(!token)return Response.json({error:'Sign in to report an answer.'},{status:401});
-  const body=await request.json().catch(()=>null);
-  if(!body || body.consent!==true || !reasons.has(body.reason) || typeof body.answer!=='string' || !body.answer.trim() || body.answer.length>20000 || typeof body.guide!=='string' || body.guide.length>80)
+  const body=await jsonObject(request);
+  if(!body || body.consent!==true || typeof body.reason!=='string' || !reasons.has(body.reason) || typeof body.answer!=='string' || !body.answer.trim() || body.answer.length>20000 || typeof body.guide!=='string' || body.guide.length>80)
     return Response.json({error:'Choose a reason and confirm sending this answer.'},{status:422});
   if(!secret)return Response.json({error:'Reporting is temporarily unavailable. Please retry.'},{status:503});
   const tokenHash=createHash('sha256').update(token).digest('hex');

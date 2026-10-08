@@ -92,9 +92,22 @@ void main() {
     chat.language = 'tanglish';
     chat.pending = true;
     chat.changed();
+    // Opening multiple Explore panels plus specialists can exceed 20 keys.
+    for (var i = 0; i < 25; i++) {
+      first
+          .conversation('Saved guide $i')
+          .messages
+          .add(ChatMessage(fromUser: true, text: 'Question $i'));
+    }
+    chat.changed();
     await first.flushStorage();
     final second = ProfileSession(api: api(), vault: vault);
     await second.restore();
+    expect(second.storageError, isNull);
+    expect(
+      second.conversation('Saved guide 24').messages.first.text,
+      'Question 24',
+    );
     expect(second.facts?['rashi'], 'Meena');
     expect(second.birthTimeKnown, false);
     expect(second.conversation('Arivan').messages.first.text, 'Saved question');
@@ -114,6 +127,29 @@ void main() {
       responseStyle: 'english',
     );
     expect(calculations, 1);
+    // Corrupt optional context must not partly replace a valid profile or write
+    // over the original unreadable record.
+    final snapshot = jsonDecode(disk!) as Map<String, dynamic>;
+    snapshot['conversationContexts'] = {
+      'not-a-request': [
+        {'role': 'user', 'content': 'bad'},
+      ],
+    };
+    disk = jsonEncode(snapshot);
+    final unreadable = disk;
+    final blocked = ProfileSession(api: api(), vault: vault);
+    await blocked.restore();
+    expect(blocked.facts, isNull);
+    expect(blocked.savedReadFailed, true);
+    blocked.conversation('New guide').changed();
+    await blocked.flushStorage();
+    expect(disk, unreadable);
+    snapshot['conversationContexts'] = <String, dynamic>{};
+    disk = jsonEncode(snapshot);
+    await blocked.restore();
+    expect(blocked.savedReadFailed, false);
+    expect(blocked.storageError, isNull);
+    expect(blocked.facts?['rashi'], 'Meena');
     second.setResearchConsent(true);
     await second.ask(
       category: 'Career',

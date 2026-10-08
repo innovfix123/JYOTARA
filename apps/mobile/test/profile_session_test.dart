@@ -10,6 +10,24 @@ import 'package:jyotara/services/conversation.dart';
 import 'package:jyotara/services/profile_gender.dart';
 
 void main() {
+  test('unknown birth time sends optional context without invented provider inputs', () async {
+    Map<String, dynamic>? sent;
+    final session = ProfileSession(api: JyotaraApiClient(baseUrl:'https://example.test', client:MockClient((request) async {
+      if (request.url.path.endsWith('kundli')) { return http.Response(jsonEncode({
+        'sandbox':false,'chartTicket':'test-ticket','profileId':'unknown-profile',
+        'result':{'data':{'nakshatra_details':{'chandra_rasi':{'name':'Meena'},'nakshatra':{'name':'Revati'}}}},
+      }),200); }
+      sent=jsonDecode(request.body) as Map<String,dynamic>;
+      return http.Response('{"profileId":"unknown-profile","answer":"Useful general reply.","answerMode":"limited_guidance","evidence":[]}',200);
+    })));
+    await session.calculate(dateTime:'2000-01-01T12:00:00+05:30',latitude:11,longitude:77,exactTime:false,nickname:'Synthetic');
+    await session.saveProfilePreferences(language:'english',relationship:'Single',occupation:'Student');
+    await session.ask(category:'Career',question:'How can I prepare for a job?',responseStyle:'english');
+    expect(sent!['reportPerson'],{'relationshipStatus':'Single','profession':'Student'});
+    expect(session.birthTimeKnown,false);
+    expect(sent!['reportPerson']['datetime'],isNull);
+    session.dispose();
+  });
   test('report birth details are frozen with the question for a safe retry', () async {
     final sent = <Map<String, dynamic>>[];
     final session = ProfileSession(api: JyotaraApiClient(baseUrl: 'https://example.test', client: MockClient((request) async {
@@ -21,18 +39,22 @@ void main() {
       return http.Response('{"profileId":"test-profile","answer":"Test response","evidence":[]}', 200);
     })));
     await session.calculate(dateTime: '2000-01-01T05:00:00+05:30', latitude: 11, longitude: 77, exactTime: true, nickname: 'Synthetic', gender: ProfileGender.male, birthplaceLabel: 'Test city');
+    await session.saveProfilePreferences(language: 'english', relationship: 'Married', occupation: 'Employed');
     await session.ask(category: 'Marriage', question: 'When will I marry?', responseStyle: 'english');
     session.nickname = 'Changed';
+    await session.saveProfilePreferences(language: 'english', relationship: 'Single', occupation: 'Student');
     await session.ask(category: 'Marriage', question: 'When will I marry?', responseStyle: 'english');
     expect(sent.length, 2);
     expect(sent.first['reportPerson']['name'], 'Synthetic');
+    expect(sent.first['reportPerson']['relationshipStatus'], 'Married');
+    expect(sent.first['reportPerson']['profession'], 'Employed');
     expect(sent.last['reportPerson'], sent.first['reportPerson']);
     expect(sent.last['requestId'], sent.first['requestId']);
     session.dispose();
   });
 
   test(
-    'clock rollback is rejected; 24-hour expiry renews without natal recalculation',
+    'large clock rollback is rejected; expiry renews despite small server skew',
     () async {
       var now = DateTime.utc(2026, 9, 6, 10);
       var charts = 0;
@@ -65,8 +87,8 @@ void main() {
             if (request.url.path.endsWith('/renew')) {
               renewals++;
               return http.Response(jsonEncode({'profileId': 'test-profile', 'chartTicket': 'TEST-renewed',
-                'renewed': true, 'natalRecalculated': false, 'chatAuthorizedAt': now.toIso8601String(),
-                'chatExpiresAt': now.add(const Duration(hours: 24)).toIso8601String()}), 200);
+                'renewed': true, 'natalRecalculated': false, 'chatAuthorizedAt': now.add(const Duration(minutes: 2)).toIso8601String(),
+                'chatExpiresAt': now.add(const Duration(hours: 24, minutes: 2)).toIso8601String()}), 200);
             }
             questions++;
             return http.Response(
@@ -88,7 +110,7 @@ void main() {
         responseStyle: 'english',
       );
       await calculate();
-      now = now.subtract(const Duration(microseconds: 1));
+      now = now.subtract(const Duration(minutes: 6));
       await expectLater(ask(), throwsA(isA<JyotaraApiException>()));
       expect(questions, 0);
       await expectLater(calculate(), throwsA(isA<JyotaraApiException>()));

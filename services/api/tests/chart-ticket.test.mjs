@@ -6,7 +6,19 @@ const compile = text => ts.transpileModule(text, {compilerOptions: {target: ts.S
 const url = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const evidence = url(compile(readFileSync(new URL('../lib/astrology-evidence.ts', import.meta.url), 'utf8')));
 const ticket = url(compile(readFileSync(new URL('../lib/chart-ticket.ts', import.meta.url), 'utf8')).replace('./astrology-evidence', evidence));
-const { issueChartTicket, openBirthGuidanceTicket, openChartTicket, openChartRenewalTicket, openChartDeletionTicket, chartProviderDataFresh } = await import(ticket);
+const { issueChartTicket, openBirthGuidanceTicket, openChartTicket, openChartQuoteTicket, openChartRenewalTicket, openChartDeletionTicket, chartProviderDataFresh } = await import(ticket);
+
+test('pricing exposes only signed flags and retains profile, tamper and expiry checks', async () => {
+  const secret='ab'.repeat(32), now=Date.now();
+  const input={sessionId:'quote-owner',profileId:'quote-profile',birthTimeKnown:false,chart:{rashi:'Meena',planets:[],yogas:[]}};
+  const token=await issueChartTicket(secret,input,now);
+  assert.deepEqual(await openChartQuoteTicket(secret,token,input.profileId,now),{sessionId:input.sessionId,birthTimeKnown:false});
+  for(const [key,t,p,n] of [[secret,token,'other',now],['cd'.repeat(32),token,input.profileId,now],[secret,token+'=',input.profileId,now],[secret,token,input.profileId,now-1],[secret,token,input.profileId,now+86400000]])
+    assert.equal(await openChartQuoteTicket(key,t,p,n),null);
+  assert.equal(await openChartTicket(secret,token,'another-session',input.profileId,now),null);
+  for(const read of [openChartTicket,openChartDeletionTicket,openChartRenewalTicket])
+    assert.equal(await read(secret,token,null,input.profileId,now),null);
+});
 
 test('renewal window cannot substitute for refreshing provider data', async () => {
   const secret = 'ab'.repeat(32), now = Date.UTC(2026,8,7), day = 86400000;

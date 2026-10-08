@@ -7,6 +7,133 @@ import 'package:jyotara/services/phone_access.dart';
 
 void main() {
   test(
+    'lost send response survives restart and retry preserves request identity',
+    () async {
+      String? saved;
+      var now = DateTime(2026, 10, 7, 12);
+      final ids = <String>[];
+      final client = MockClient((r) async {
+        ids.add(jsonDecode(r.body)['requestId']);
+        if (ids.length == 1) throw http.ClientException('lost response');
+        return http.Response(
+          jsonEncode({
+            'challengeId': 'b' * 48,
+            'expiresIn': 239,
+            'retryAfterSeconds': 0,
+          }),
+          200,
+        );
+      });
+      PhoneAccess create() => PhoneAccess(
+        testerCode: () => 'test',
+        client: client,
+        now: () => now,
+        read: () async => saved,
+        write: (v) async {
+          saved = v;
+        },
+      );
+      final first = create();
+      await first.send('9000000000');
+      now = now.add(const Duration(seconds: 61));
+      final second = create();
+      await second.restore();
+      await second.send('9000000000');
+      expect(ids[0], matches(RegExp(r'^[a-f0-9]{32}$')));
+      expect(ids[1], ids[0]);
+      expect(second.codeSecondsRemaining, 239);
+      await second.send('9000000000');
+      expect(
+        ids[2],
+        isNot(ids[1]),
+        reason: 'Intentional resend is a new request',
+      );
+    },
+  );
+
+  test(
+    'real SMS build discards saved demo authentication and requests SMS',
+    () async {
+      String? saved = jsonEncode({
+        'officeDemoChallenge': true,
+        'accountId': 'office_demo_example',
+        'token': 'a' * 64,
+        'expiresAt': DateTime.now()
+            .add(const Duration(days: 1))
+            .millisecondsSinceEpoch,
+      });
+      final access = PhoneAccess(
+        requireRealSms: true,
+        testerCode: () => 'test',
+        read: () async => saved,
+        write: (value) async {
+          saved = value;
+        },
+        client: MockClient((request) async {
+          expect(jsonDecode(request.body)['officeDemo'], false);
+          return http.Response(jsonEncode({'challengeId': 'b' * 48}), 200);
+        }),
+      );
+      await access.restore();
+      expect(access.authorized, false);
+      expect(access.accountId, null);
+      expect(saved, '{}');
+      await access.send('9000000000');
+      expect(access.codeSent, true);
+      expect(access.notice, contains('SMS requested'));
+    },
+  );
+
+  test(
+    'demo challenge survives restart and remains separate from real login',
+    () async {
+      String? saved;
+      final client = MockClient((r) async {
+        final body = jsonDecode(r.body);
+        if (r.url.path.endsWith('/send')) {
+          return http.Response(
+            jsonEncode({
+              'challengeId': List.filled(48, 'b').join(),
+              'officeDemo': true,
+            }),
+            200,
+          );
+        }
+        expect(body['officeDemo'], true);
+        return http.Response(
+          jsonEncode({
+            'token': List.filled(64, 'a').join(),
+            'accountId': 'office_demo_example',
+            'expiresAt': DateTime.now()
+                .add(const Duration(hours: 1))
+                .millisecondsSinceEpoch,
+          }),
+          200,
+        );
+      });
+      PhoneAccess create() => PhoneAccess(
+        testerCode: () => 'test',
+        read: () async => saved,
+        write: (v) async {
+          saved = v;
+        },
+        client: client,
+      );
+      final first = create();
+      await first.send('9000000000');
+      final restored = create();
+      await restored.restore();
+      expect(restored.notice, 'Enter your office review OTP.');
+      await restored.verify('011011');
+      expect(restored.authorized, true);
+      expect(restored.officeDemo, true);
+      final loggedIn = create();
+      await loggedIn.restore();
+      expect(loggedIn.officeDemo, true);
+    },
+  );
+
+  test(
     'new account storage is prepared before credentials authorize access',
     () async {
       var prepared = false;
@@ -198,8 +325,8 @@ void main() {
     expect(access.authorized, false);
     expect(
       writes,
-      1,
-      reason: 'Only the pending challenge is saved, never a login token',
+      2,
+      reason: 'Retry identity and challenge are saved, never a login token',
     );
     expect(access.error, 'Invalid or expired code.');
   });
@@ -240,8 +367,8 @@ void main() {
     expect(access.authorized, false);
     expect(
       writes,
-      1,
-      reason: 'Only the pending challenge is saved, never a login token',
+      2,
+      reason: 'Retry identity and challenge are saved, never a login token',
     );
     expect(logout, true);
   });

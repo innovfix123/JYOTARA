@@ -1,16 +1,33 @@
+import 'services/user_journey.dart';
+import 'services/meta_measurement.dart';
+import 'bronze_theme.dart';
+import 'matching_art.dart';
+import 'services/profile_avatar.dart';
+import 'services/chat_delivery.dart';
+import 'services/marketing_analytics.dart';
+import 'services/remote_config.dart';
+import 'chat_wallpaper.dart';
+import 'route_nav.dart';
+import 'premium_profile.dart';
+export 'premium_profile.dart' show AccountScreen;
+import 'coin_wallet.dart';
+import 'explore_screen.dart';
+import 'payment_support.dart';
 import 'chat_availability.dart';
 import 'notification_center.dart';
 import 'services/notification_inbox.dart';
 import 'services/firebase_services.dart';
-import 'firebase_preferences.dart';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'services/account_storage.dart';
+import 'services/account_profile_session.dart';
+import 'services/profile_backup.dart';
 import 'first_profile_setup.dart';
 import 'services/phone_access.dart';
 import 'phone_access_screen.dart';
 import 'services/public_reading_text.dart';
+import 'services/name_display.dart';
 import 'brand_mark.dart';
 
 import 'dart:async';
@@ -18,6 +35,8 @@ import 'dart:async';
 import 'package:flutter/services.dart';
 
 import 'launch_intro.dart';
+import 'celestial_welcome.dart';
+import 'home_sage_art.dart';
 import 'discovery_screens.dart';
 import 'chat_profile_picker.dart';
 
@@ -41,14 +60,21 @@ import 'privacy_links.dart';
 import 'services/tester_access.dart';
 import 'tester_access_screen.dart';
 
+part 'compact_home.dart';
+part 'chat_bubbles.dart';
+
 final firebaseMessenger = GlobalKey<ScaffoldMessengerState>();
 final languagePreferences = LanguagePreferences();
 final uiLanguagePreferences = UiLanguagePreferences();
 final testerAccess = TesterAccess();
 final accountStorage = AccountStorage();
+final profileAvatarPreference = ProfileAvatarPreference(
+  storage: accountStorage,
+);
 final phoneAccess = PhoneAccess(
   testerCode: () => testerAccess.code,
   prepareAccount: _prepareAccount,
+  restoreVerifiedProfile: _restoreVerifiedProfile,
   eraseLocalAccount: (account) async {
     await profileSession.flushStorage();
     await accountStorage.erase(account);
@@ -56,8 +82,11 @@ final phoneAccess = PhoneAccess(
     profileSession = _newProfileSession();
   },
 );
+ProfileBackup? _activeBackup;
+String? _backupAccount;
 ProfileSession profileSession = _newProfileSession();
 ProfileSession _newProfileSession() {
+  final owner = accountStorage.account;
   final storageKey = accountStorage.key('nirayana.private-profile.v1');
   return ProfileSession(
     api: JyotaraApiClient(
@@ -65,6 +94,15 @@ ProfileSession _newProfileSession() {
       phoneToken: () => phoneAccess.token,
     ),
     preferences: languagePreferences,
+    onBirthProfileSaved: (record) async {
+      if (owner != null &&
+          _backupAccount == owner &&
+          phoneAccess.accountId == owner &&
+          phoneAccess.token != null &&
+          _activeBackup != null) {
+        await _activeBackup!.save(record);
+      }
+    },
     vault: LocalProfileVault(
       read: () => const FlutterSecureStorage().read(key: storageKey),
       write: (value) => accountStorage.writeKey(storageKey, value),
@@ -73,23 +111,48 @@ ProfileSession _newProfileSession() {
 }
 
 Future<void> _prepareAccount(String account) async {
-  if (accountStorage.account == account) return;
-  await profileSession.flushStorage();
-  if (profileSession.calculating || profileSession.answering) {
-    throw StateError('Finish the current request before switching accounts.');
-  }
-  accountStorage.account = account;
-  profileSession = _newProfileSession();
-  await profileSession.restore();
+  _activeBackup = null;
+  _backupAccount = null;
+  profileSession = await restoreAccountProfile(
+    account: account,
+    storage: accountStorage,
+    current: profileSession,
+    create: _newProfileSession,
+  );
+  unawaited(profileAvatarPreference.load());
+}
+
+Future<void> _restoreVerifiedProfile(String account, String token) async {
+  if (accountStorage.account != account) await _prepareAccount(account);
+  final backup = ProfileBackup(
+    token: () =>
+        phoneAccess.accountId == account ? phoneAccess.token ?? '' : '',
+    testerCode: () => testerAccess.code,
+  );
+  await restoreBirthProfile(backup: backup, session: profileSession);
+  _backupAccount = account;
+  _activeBackup = backup;
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await userJourney.initialize(
+    baseUrl: defaultApiBaseUrl,
+    account: () => phoneAccess.accountId,
+    token: () => phoneAccess.token,
+    testerCode: () => testerAccess.code,
+  );
+  officeDemoAccount = () => phoneAccess.officeDemo;
+  coinAccount = AccountService(
+    token: () => phoneAccess.token,
+    tester: () => testerAccess.code,
+    account: () => phoneAccess.accountId,
+  );
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
-      statusBarColor: ink,
+      statusBarColor: canvasColor,
       statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: ink,
+      systemNavigationBarColor: canvasColor,
       systemNavigationBarIconBrightness: Brightness.light,
     ),
   );
@@ -114,10 +177,15 @@ Future<void> main() async {
     });
     WidgetsBinding.instance.ensureVisualUpdate();
   });
-  unawaited(firebaseServices.initialize());
+  if (!const bool.fromEnvironment('JYOTARA_OFFLINE_QA')) {
+    unawaited(firebaseServices.initialize());
+    unawaited(marketingAnalytics.initialize());
+    unawaited(metaMeasurement.initialize());
+  }
 }
 
 Future<void> _restoreApp() async {
+  unawaited(remoteConfig.start());
   try {
     await languagePreferences.load();
   } catch (_) {
@@ -135,6 +203,9 @@ Future<void> _restoreApp() async {
   await accountStorage.migrateLegacy(phoneAccess.accountId);
   if (phoneAccess.accountId != null) {
     await _prepareAccount(phoneAccess.accountId!);
+    if (phoneAccess.profileRestorePending && phoneAccess.token != null) {
+      await phoneAccess.retryProfileRestore();
+    }
   } else {
     await profileSession.restore();
   }
@@ -145,13 +216,13 @@ const appBuildLabel = String.fromEnvironment(
   defaultValue: 'Development',
 );
 
-const ink = Color(0xFF21100F);
-const panel = Color(0xFF321A17);
-const line = Color(0xFF624132);
-const saffron = Color(0xFFE6B85C);
-const ivory = Color(0xFFF7E8CA);
-const muted = Color(0xFFCBB5A1);
-const gold = Color(0xFFEEC76D);
+const canvasColor = BronzePalette.background;
+const panel = BronzePalette.card;
+const line = BronzePalette.border;
+const saffron = BronzePalette.accent;
+const bodyInk = BronzePalette.ink;
+const muted = BronzePalette.muted;
+const gold = BronzePalette.gold;
 
 class JyotaraApp extends StatelessWidget {
   const JyotaraApp({super.key, this.uiPreferences, this.initialization});
@@ -167,20 +238,47 @@ class JyotaraApp extends StatelessWidget {
           brightness: Brightness.dark,
           surface: panel,
         ).copyWith(
-          primary: saffron,
-          onPrimary: ink,
+          primary: gold,
+          primaryContainer: BronzePalette.raised,
+          onPrimary: BronzePalette.onAccent,
+          onPrimaryContainer: BronzePalette.ink,
           secondary: gold,
-          onSurface: ivory,
+          secondaryContainer: BronzePalette.raised,
+          onSecondaryContainer: bodyInk,
+          surfaceContainerHighest: BronzePalette.card,
+          surfaceContainerHigh: BronzePalette.card,
+          surfaceContainer: BronzePalette.card,
+          surfaceContainerLow: BronzePalette.card,
+          surfaceContainerLowest: BronzePalette.background,
+          surfaceDim: BronzePalette.background,
+          surfaceBright: BronzePalette.raised,
+          onSurfaceVariant: BronzePalette.muted,
+          outlineVariant: BronzePalette.border,
+          onSurface: bodyInk,
           outline: line,
         );
     return AnimatedBuilder(
       animation: preferences,
       builder: (context, _) => MaterialApp(
+        navigatorKey: coinNavigator,
+        navigatorObservers: [userJourney.navigatorObserver],
         locale: Locale(preferences.value),
         supportedLocales: const [Locale('en'), Locale('ta')],
         localizationsDelegates: GlobalMaterialLocalizations.delegates,
-        builder: (context, child) =>
-            UiLanguageScope(preferences: preferences, child: child!),
+        builder: (context, child) => AnnotatedRegion<SystemUiOverlayStyle>(
+          value: const SystemUiOverlayStyle(
+            statusBarColor: canvasColor,
+            statusBarIconBrightness: Brightness.light,
+            systemNavigationBarColor: canvasColor,
+            systemNavigationBarIconBrightness: Brightness.light,
+          ),
+          child: RemoteConfigScope(
+            config: remoteConfig,
+            child: UserJourneyBoundary(
+              child: UiLanguageScope(preferences: preferences, child: child!),
+            ),
+          ),
+        ),
         debugShowCheckedModeBanner: false,
         title: 'Jyotara',
         scaffoldMessengerKey: firebaseMessenger,
@@ -188,29 +286,42 @@ class JyotaraApp extends StatelessWidget {
           useMaterial3: true,
           brightness: Brightness.dark,
           colorScheme: scheme,
-          scaffoldBackgroundColor: ink,
+          scaffoldBackgroundColor: canvasColor,
           pageTransitionsTheme: const PageTransitionsTheme(
-            builders: {
-              TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
-            },
+            builders: {TargetPlatform.android: MidnightPageTransitions()},
           ),
-          fontFamily: 'sans-serif',
+          fontFamily: 'JyotaraSans',
+          fontFamilyFallback: const ['sans-serif'],
           appBarTheme: const AppBarTheme(
-            backgroundColor: ink,
+            backgroundColor: canvasColor,
             surfaceTintColor: Colors.transparent,
+            foregroundColor: bodyInk,
+            systemOverlayStyle: SystemUiOverlayStyle(
+              statusBarColor: canvasColor,
+              statusBarIconBrightness: Brightness.light,
+              systemNavigationBarColor: canvasColor,
+              systemNavigationBarIconBrightness: Brightness.light,
+            ),
+            titleTextStyle: TextStyle(
+              fontFamily: 'JyotaraEditorial',
+              fontSize: 24,
+              color: bodyInk,
+            ),
             centerTitle: false,
             elevation: 0,
           ),
           snackBarTheme: SnackBarThemeData(
             behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF493126),
-            contentTextStyle: const TextStyle(color: ivory),
+            backgroundColor: BronzePalette.raised,
+            contentTextStyle: const TextStyle(color: bodyInk),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18),
             ),
           ),
           filledButtonTheme: FilledButtonThemeData(
             style: FilledButton.styleFrom(
+              backgroundColor: saffron,
+              foregroundColor: BronzePalette.onAccent,
               minimumSize: const Size(48, 52),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
@@ -224,42 +335,71 @@ class JyotaraApp extends StatelessWidget {
               side: const BorderSide(color: line),
             ),
           ),
+          dividerTheme: const DividerThemeData(color: line, thickness: .6),
+          bottomSheetTheme: const BottomSheetThemeData(
+            backgroundColor: panel,
+            surfaceTintColor: Colors.transparent,
+          ),
+          chipTheme: ChipThemeData(
+            backgroundColor: panel,
+            selectedColor: BronzePalette.raised,
+            side: const BorderSide(color: line),
+            labelStyle: const TextStyle(color: bodyInk),
+          ),
+          segmentedButtonTheme: SegmentedButtonThemeData(
+            style: ButtonStyle(
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (s) => s.contains(WidgetState.selected) ? canvasColor : muted,
+              ),
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (s) => s.contains(WidgetState.selected) ? gold : panel,
+              ),
+              side: const WidgetStatePropertyAll(BorderSide(color: line)),
+            ),
+          ),
           textTheme: const TextTheme(
             displaySmall: TextStyle(
               fontSize: 40,
               height: 1.02,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -1.4,
+              fontFamily: 'JyotaraEditorial',
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.4,
             ),
             headlineMedium: TextStyle(
               fontSize: 28,
+              fontFamily: 'JyotaraEditorial',
               height: 1.08,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.7,
+              fontWeight: FontWeight.w400,
+              letterSpacing: -0.4,
             ),
             headlineSmall: TextStyle(
               fontSize: 22,
+              fontFamily: 'JyotaraEditorial',
               height: 1.12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.35,
+              fontWeight: FontWeight.w400,
+              letterSpacing: -0.2,
             ),
-            titleLarge: TextStyle(fontWeight: FontWeight.w700),
-            titleMedium: TextStyle(fontWeight: FontWeight.w700),
+            titleLarge: TextStyle(
+              fontFamily: 'JyotaraEditorial',
+              fontWeight: FontWeight.w500,
+            ),
+            titleMedium: TextStyle(fontWeight: FontWeight.w500),
             bodyLarge: TextStyle(height: 1.48),
             bodyMedium: TextStyle(height: 1.42),
           ),
           cardTheme: CardThemeData(
             color: panel,
+            surfaceTintColor: Colors.transparent,
             margin: EdgeInsets.zero,
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(16),
               side: const BorderSide(color: line),
             ),
           ),
           inputDecorationTheme: InputDecorationTheme(
             filled: true,
-            fillColor: const Color(0xFF291411),
+            fillColor: BronzePalette.card,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(18),
               borderSide: const BorderSide(color: line),
@@ -273,17 +413,31 @@ class JyotaraApp extends StatelessWidget {
               borderSide: const BorderSide(color: saffron, width: 1.4),
             ),
           ),
-          navigationBarTheme: const NavigationBarThemeData(
-            backgroundColor: Color(0xFF281310),
-            indicatorColor: Color(0xFF66402C),
-            labelTextStyle: WidgetStatePropertyAll(
-              TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          navigationBarTheme: NavigationBarThemeData(
+            backgroundColor: canvasColor,
+            indicatorColor: BronzePalette.raised,
+            iconTheme: WidgetStateProperty.resolveWith(
+              (states) => IconThemeData(
+                color: states.contains(WidgetState.selected) ? gold : muted,
+                size: 24,
+              ),
+            ),
+            labelTextStyle: WidgetStateProperty.resolveWith(
+              (states) => TextStyle(
+                color: states.contains(WidgetState.selected) ? gold : muted,
+                fontSize: 11,
+                fontWeight: states.contains(WidgetState.selected)
+                    ? FontWeight.w600
+                    : FontWeight.w400,
+              ),
             ),
           ),
         ),
-        home: LaunchIntro(
+        home: CelestialWelcome(
           initialization: initialization,
-          child: const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS')
+          child:
+              const bool.fromEnvironment('JYOTARA_REQUIRE_TESTER_ACCESS') &&
+                  officeAccessCode.isEmpty
               ? TesterAccessScreen(access: testerAccess, child: _phoneGate())
               : _phoneGate(),
         ),
@@ -313,6 +467,8 @@ class Guide {
     required this.name,
     required this.speciality,
     this.category = 'Daily',
+    this.portraitIndex,
+    this.historyKey,
     required this.description,
     required this.asset,
     required this.icon,
@@ -320,6 +476,15 @@ class Guide {
     required this.prompts,
   });
 
+  final int? portraitIndex;
+  final String? historyKey;
+  String get conversationKey => historyKey ?? name;
+  String get group => switch (category) {
+    'Love' || 'Relationships' || 'Marriage' => 'Love & Marriage',
+    'Education' => 'Education & Hobbies',
+    'Career' || 'Business' => 'Career & Business',
+    _ => 'Family & Personal Life',
+  };
   final String name;
   final String speciality;
   final String category;
@@ -331,6 +496,120 @@ class Guide {
 }
 
 const guides = <Guide>[
+  Guide(
+    name: "Meera",
+    category: "Love",
+    speciality: "Your Love Life",
+    description: "Dating, new relationships and communication.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 0,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Nila",
+    category: "Relationships",
+    speciality: "Love & Trust",
+    description: "Mixed signals, trust concerns and healthy boundaries.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 1,
+    historyKey: "NilaTrust",
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Janaki",
+    category: "Marriage",
+    speciality: "Your Marriage",
+    description: "Marriage, compatibility and commitment.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 2,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Harini",
+    category: "Marriage",
+    speciality: "Love to Marriage",
+    description: "Commitment, family acceptance and married life.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 3,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Aravind",
+    category: "Education",
+    speciality: "Your Future",
+    description: "Learning, exams, college and higher studies.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 4,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Kavya",
+    category: "Education",
+    speciality: "Your Passions",
+    description: "Hobbies, creativity and personal interests.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 5,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Adithya",
+    category: "Career",
+    speciality: "Your Career",
+    description: "Jobs, promotions and career changes.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 6,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Raghavan",
+    category: "Business",
+    speciality: "Your Business",
+    description: "Business direction and partnerships.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 7,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Revathi",
+    category: "Family",
+    speciality: "Your Family",
+    description: "Family relationships, parenting and responsibilities.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 8,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+  Guide(
+    name: "Karthik",
+    category: "Spiritual",
+    speciality: "Your Journey",
+    description: "Personal growth, confidence and life direction.",
+    asset: "assets/images/guides_portraits97.png",
+    portraitIndex: 9,
+    icon: Icons.auto_awesome_outlined,
+    colors: [BronzePalette.gold, Color(0xFF493021)],
+    prompts: [],
+  ),
+];
+
+const legacyGuides = <Guide>[
   Guide(
     name: 'Aadhirai',
     category: 'Love',
@@ -411,7 +690,7 @@ const guides = <Guide>[
     asset: 'assets/images/iniya.png',
     icon: Icons.favorite_rounded,
     colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
-    prompts: ['What does my Kundli say about relationships?'],
+    prompts: ['What does my birth chart say about relationships?'],
   ),
   Guide(
     name: 'Nila',
@@ -441,7 +720,7 @@ const guides = <Guide>[
     asset: 'assets/images/valan.png',
     icon: Icons.storefront_rounded,
     colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
-    prompts: ['What business themes appear in my Kundli?'],
+    prompts: ['What business themes appear in my birth chart?'],
   ),
   Guide(
     name: 'Oli',
@@ -471,16 +750,17 @@ const guides = <Guide>[
     asset: 'assets/images/arul.png',
     icon: Icons.auto_awesome_rounded,
     colors: [Color(0xFF9C723E), Color(0xFF4B3222)],
-    prompts: ['Explain the Yogas in my Kundli.'],
+    prompts: ['Explain the Yogas in my birth chart.'],
   ),
 ];
 
 String guideWelcome(Guide guide, String name, String language) {
-  final person = name.trim().isEmpty ? '' : ' ${name.trim()}';
+  final custom = remoteConfig.welcome(language);
+  if (custom.isNotEmpty) return custom.replaceAll('{guide}', guide.name);
   final topics = <String, List<String>>{
-    'Love': ['love', 'காதல்', 'love'],
+    'Love': ['love', 'காதல்', 'kaadhal'],
     'Relationships': ['your relationship', 'உங்கள் உறவு', 'unga relationship'],
-    'Marriage': ['marriage', 'திருமணம்', 'marriage'],
+    'Marriage': ['marriage', 'திருமணம்', 'thirumanam'],
     'Family': ['family', 'குடும்பம்', 'family'],
     'Career': [
       guide.name == 'Vetri' ? 'your job search' : 'your career',
@@ -503,12 +783,12 @@ String guideWelcome(Guide guide, String name, String language) {
   };
   final topic = topics[guide.category] ?? topics['Daily']!;
   if (language == 'tamil') {
-    return 'வணக்கம்$person! நான் ${guide.name}. ${topic[1]} பற்றி எதைப் பேச விரும்புகிறீர்கள்? உங்கள் நிலையைச் சொல்லுங்கள்; ஒன்றாகப் பார்ப்போம்.';
+    return 'வணக்கம்! நான் ${guide.name}.\n\n${topic[1]} அல்லது உங்கள் மனதில் உள்ளதை என்னிடம் கேட்கலாம்.';
   }
   if (language == 'tanglish') {
-    return 'Vanakkam$person! Naan ${guide.name}. ${topic[2]} pathi enna pesa virumbureenga? Unga nilaimaiyai sollunga; serndhu paarkalaam.';
+    return 'Vanakkam! Naan ${guide.name}.\n\n${topic[2]} pathi illa unga manasula irukkuradha enkitta ketkalaam.';
   }
-  return 'Hi$person, I’m ${guide.name}. What’s on your mind about ${topic[0]}? Tell me a little about what’s happening, and we’ll take it from there.';
+  return 'Welcome! I’m ${guide.name}.\n\nYou can ask about ${topic[0]} or anything on your mind.';
 }
 
 class IntroScreen extends StatefulWidget {
@@ -518,155 +798,17 @@ class IntroScreen extends StatefulWidget {
   State<IntroScreen> createState() => _IntroScreenState();
 }
 
-class _IntroScreenState extends State<IntroScreen>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _fade;
-  late final Animation<double> _rise;
-
+class _IntroScreenState extends State<IntroScreen> {
   @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1350),
-    )..forward();
-    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
-    _rise = Tween<double>(
-      begin: 24,
-      end: 0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
-  }
+  Widget build(BuildContext context) => const MainShell();
+}
 
+class MainTabScope extends InheritedWidget {
+  const MainTabScope({super.key, required super.child});
+  static bool contains(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<MainTabScope>() != null;
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  bool _entered = false;
-  void _enter() => setState(() => _entered = true);
-
-  @override
-  Widget build(BuildContext context) {
-    if (_entered) return const MainShell();
-    return Scaffold(
-      body: Stack(
-        fit: StackFit.expand,
-        children: [
-          const WelcomeMotion(),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x2A21100F),
-                  Color(0x4421100F),
-                  Color(0xF221100F),
-                ],
-                stops: [0, 0.48, 0.84],
-              ),
-            ),
-          ),
-          const Positioned.fill(child: IgnorePointer(child: _StarField())),
-          SafeArea(
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (context, child) => Opacity(
-                opacity: _fade.value,
-                child: Transform.translate(
-                  offset: Offset(0, _rise.value),
-                  child: child,
-                ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _BrandLockup(compact: true),
-                        if (bool.fromEnvironment(
-                          'JYOTARA_REQUIRE_TESTER_ACCESS',
-                        ))
-                          _StatusPill(label: 'PRIVATE PREVIEW'),
-                      ],
-                    ),
-                    const Spacer(),
-                    Container(
-                      width: 54,
-                      height: 54,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .1),
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: .18),
-                        ),
-                      ),
-                      child: const BrandMark(size: 44),
-                    ),
-                    const SizedBox(height: 22),
-                    Text(
-                      'Your chart.\nYour time.',
-                      style: Theme.of(context).textTheme.displaySmall,
-                    ),
-                    const SizedBox(height: 14),
-                    Text(
-                      'Personal Vedic guidance, explained clearly for the decisions that matter to you.',
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xFFE8D6BD),
-                        fontSize: 17,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    const Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        _LanguageBadge(label: 'English UI'),
-                        _LanguageBadge(label: 'Tamil chat'),
-                        _LanguageBadge(label: 'Tanglish chat'),
-                      ],
-                    ),
-                    const SizedBox(height: 30),
-                    FilledButton(
-                      key: const Key('enterApp'),
-                      onPressed: _enter,
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(58),
-                        backgroundColor: const Color(0xFFF7E8CA),
-                        foregroundColor: const Color(0xFF442119),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      child: const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Explore Jyotara',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          SizedBox(width: 10),
-                          Icon(Icons.arrow_forward_rounded),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  bool updateShouldNotify(MainTabScope oldWidget) => false;
 }
 
 class MainShell extends StatefulWidget {
@@ -684,14 +826,35 @@ class _MainShellState extends State<MainShell>
     value: 1,
   );
   @override
+  void initState() {
+    super.initState();
+    requestedMainTab.addListener(_routeTab);
+  }
+
+  void _routeTab() {
+    final index = requestedMainTab.value;
+    if (index == null) return;
+    requestedMainTab.value = null;
+    _selectTab(index);
+  }
+
+  @override
   void dispose() {
+    requestedMainTab.removeListener(_routeTab);
     _tabReveal.dispose();
     super.dispose();
   }
 
   void _selectTab(int value) {
+    unawaited(remoteConfig.refresh());
     if (value == _index) return;
-    setState(() => _index = value);
+    userJourney.event('navigation.tab', metadata: {'control': 'tab'});
+    userJourney.screen(['home', 'daily', 'explore', 'ask', 'profile'][value]);
+    setState(() {
+      _index = value;
+      _visitedTabs.add(value);
+    });
+    if (value == 0) coinWalletRevision.value++;
     if (MediaQuery.disableAnimationsOf(context)) {
       _tabReveal.value = 1;
     } else {
@@ -700,8 +863,13 @@ class _MainShellState extends State<MainShell>
   }
 
   int _index = 0;
+  final Set<int> _visitedTabs = {0};
 
   void _openChat(Guide guide) {
+    if (!remoteConfig.enabled('chat') ||
+        !remoteConfig.guideEnabled(guide.name)) {
+      return;
+    }
     Navigator.of(context).push(
       MaterialPageRoute<void>(builder: (_) => ChatProfilePicker(guide: guide)),
     );
@@ -709,65 +877,122 @@ class _MainShellState extends State<MainShell>
 
   @override
   Widget build(BuildContext context) {
+    RemoteConfigScope.watch(context);
     final pages = [
       HomeScreen(onOpenChat: _openChat),
-      GuidesScreen(onOpenChat: _openChat),
+      _visitedTabs.contains(1)
+          ? const FeatureGate(feature: 'daily', child: DailyHoroscopeScreen())
+          : const SizedBox.shrink(),
+      const FeatureGate(feature: 'explore', child: ExploreScreen()),
       QuickAskScreen(onOpenChat: _openChat),
-      const ChartScreen(),
       const AccountScreen(),
     ];
     return Scaffold(
-      body: PremiumBackdrop(
-        child: FadeTransition(
-          opacity: CurvedAnimation(
-            parent: _tabReveal,
-            curve: Curves.easeOutCubic,
+      appBar: AppBar(
+        centerTitle: false,
+        titleSpacing: 0,
+        title: const Text(
+          'Jyotara',
+          style: TextStyle(
+            fontFamily: 'JyotaraEditorial',
+            fontSize: 29,
+            color: gold,
           ),
-          child: SlideTransition(
-            position:
-                Tween<Offset>(
-                  begin: const Offset(0, .012),
-                  end: Offset.zero,
-                ).animate(
-                  CurvedAnimation(
-                    parent: _tabReveal,
-                    curve: Curves.easeOutCubic,
-                  ),
+        ),
+        leading: IconButton(
+          tooltip: uiText(context, 'Account'),
+          icon: const Icon(Icons.menu),
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (_) => const Scaffold(body: AccountScreen()),
+            ),
+          ),
+        ),
+        actions: [
+          if (coinWalletEnabled) const HomeCoinCard(compact: true),
+          const SizedBox(width: 4),
+          IconButton(
+            tooltip: uiText(context, 'Notifications'),
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationCenter(),
+              ),
+            ),
+          ),
+        ],
+        bottom: _index == 0
+            ? null
+            : const PreferredSize(
+                preferredSize: Size.fromHeight(34),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: CompactLanguageSwitch(),
                 ),
-            child: IndexedStack(index: _index, children: pages),
+              ),
+      ),
+      body: MainTabScope(
+        child: PremiumBackdrop(
+          showPattern: _index != 0,
+          child: FadeTransition(
+            opacity: CurvedAnimation(
+              parent: _tabReveal,
+              curve: Curves.easeOutCubic,
+            ),
+            child: SlideTransition(
+              position:
+                  Tween<Offset>(
+                    begin: const Offset(0, .012),
+                    end: Offset.zero,
+                  ).animate(
+                    CurvedAnimation(
+                      parent: _tabReveal,
+                      curve: Curves.easeOutCubic,
+                    ),
+                  ),
+              child: IndexedStack(index: _index, children: pages),
+            ),
           ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: _selectTab,
-        destinations: [
-          NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: uiText(context, 'Home'),
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_outlined),
-            selectedIcon: Icon(Icons.auto_awesome_rounded),
-            label: uiText(context, 'Guides'),
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.chat_bubble_outline_rounded),
-            selectedIcon: Icon(Icons.chat_bubble_rounded),
-            label: uiText(context, 'Ask'),
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.grid_view_outlined),
-            selectedIcon: Icon(Icons.grid_view_rounded),
-            label: uiText(context, 'Chart'),
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.person_outline_rounded),
-            selectedIcon: Icon(Icons.person_rounded),
-            label: uiText(context, 'Account'),
-          ),
-        ],
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          border: Border(top: BorderSide(color: line, width: .6)),
+        ),
+        child: NavigationBar(
+          height: 68,
+          selectedIndex: _index,
+          onDestinationSelected: _selectTab,
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.home_outlined),
+              selectedIcon: const Icon(Icons.home_rounded),
+              label: uiText(context, 'Home'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.wb_sunny_outlined),
+              selectedIcon: const Icon(Icons.wb_sunny_rounded),
+              label: ex(context, 'Daily', 'தினசரி'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.explore_outlined),
+              selectedIcon: const Icon(Icons.explore),
+              label: ex(context, 'Explore', 'அறியுங்கள்'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.chat_bubble_outline_rounded),
+              selectedIcon: const Icon(Icons.chat_bubble_rounded),
+              label: uiText(context, 'Ask'),
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.person_outline_rounded),
+              selectedIcon: const Icon(Icons.person_rounded),
+              label: ex(context, 'Profile', 'சுயவிவரம்'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -775,103 +1000,18 @@ class _MainShellState extends State<MainShell>
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({required this.onOpenChat, super.key});
-
   final ValueChanged<Guide> onOpenChat;
-
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: CustomScrollView(
-        key: const Key('homeScroll'),
-        slivers: [
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-            sliver: SliverList.list(
-              children: [
-                const _TopBar(),
-                const SizedBox(height: 16),
-                const DiscoveryActions(),
-                const SizedBox(height: 28),
-                Text(
-                  uiText(context, 'Welcome'),
-                  style: Theme.of(context).textTheme.bodyLarge
-                      ?.copyWith(color: muted),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  uiText(context, 'What would you like\nguidance about?'),
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: 22),
-                _ChartHero(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => profileSession.facts == null
-                          ? const BirthProfileScreen()
-                          : Scaffold(
-                              appBar: AppBar(
-                                title: Text(uiText(context, 'Your chart')),
-                              ),
-                              body: const ChartScreen(),
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 26),
-                _SectionHeader(
-                  title: 'Your AI Vedic Guides',
-                  action: 'View all',
-                  onAction: () => Navigator.of(context).push(
-                    MaterialPageRoute<void>(
-                      builder: (_) => Scaffold(
-                        appBar: AppBar(
-                          title: Text(uiText(context, 'Your AI Vedic Guides')),
-                        ),
-                        body: GuidesScreen(onOpenChat: onOpenChat),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-              ],
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 130 + MediaQuery.textScalerOf(context).scale(180),
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                scrollDirection: Axis.horizontal,
-                itemCount: guides.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (_, index) => _CompactGuideCard(
-                  guide: guides[index],
-                  onTap: () => onOpenChat(guides[index]),
-                ),
-              ),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 28, 20, 36),
-            sliver: SliverList.list(
-              children: [
-                const _SectionHeader(title: 'Daily tools'),
-                const SizedBox(height: 14),
-                const _PanchangCard(),
-                const SizedBox(height: 14),
-                const _MultilingualCard(),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => CompactHome(onOpenChat: onOpenChat);
 }
 
 class GuidesScreen extends StatefulWidget {
-  const GuidesScreen({required this.onOpenChat, super.key});
+  const GuidesScreen({
+    required this.onOpenChat,
+    super.key,
+    this.initialFilter = 'All',
+  });
+  final String initialFilter;
 
   final ValueChanged<Guide> onOpenChat;
 
@@ -880,61 +1020,98 @@ class GuidesScreen extends StatefulWidget {
 }
 
 class _GuidesScreenState extends State<GuidesScreen> {
-  String _filter = 'All';
+  late String _filter;
+  @override
+  void initState() {
+    super.initState();
+    _filter = widget.initialFilter;
+    userJourney.screen('ask');
+  }
 
   @override
   Widget build(BuildContext context) {
+    RemoteConfigScope.watch(context);
     final visibleGuides = guides
-        .where(
-          (guide) => _filter == 'All' || guide.speciality.contains(_filter),
-        )
+        .where((guide) => remoteConfig.guideEnabled(guide.name))
+        .where((guide) => _filter == 'All' || guide.group == _filter)
         .toList();
     return SafeArea(
       bottom: false,
       child: CustomScrollView(
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 18),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
             sliver: SliverList.list(
               children: [
                 const _TopBar(),
-                const SizedBox(height: 30),
+                if (!MainTabScope.contains(context)) const AppLanguageSwitch(),
+                const SizedBox(height: 10),
                 UiText(
-                  'Specialist guides',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                  'Ask your guide',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 5),
                 const UiText(
-                  'Choose a profile. Twelve focused guides for your questions.',
-                  style: TextStyle(color: muted),
+                  'Choose someone to talk to.',
+                  style: TextStyle(color: muted, fontSize: 13),
                 ),
-                const SizedBox(height: 18),
-                Wrap(
-                  runSpacing: 8,
-                  children: [
-                    for (final label in [
-                      'All',
-                      'Love',
-                      'Career',
-                      'Education',
-                      'Marriage',
-                      'Daily',
-                      'Relationships',
-                      'Jobs',
-                      'Business',
-                      'Family',
-                      'Property',
-                      'Spiritual',
-                    ])
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: UiText(label),
-                          selected: _filter == label,
-                          onSelected: (_) => setState(() => _filter = label),
+                if (legacyGuides.any(
+                  (g) => profileSession
+                      .conversation(g.conversationKey)
+                      .messages
+                      .isNotEmpty,
+                ))
+                  ExpansionTile(
+                    title: const UiText('Previous guide chats'),
+                    children: [
+                      for (final old in legacyGuides.where(
+                        (g) => profileSession
+                            .conversation(g.conversationKey)
+                            .messages
+                            .isNotEmpty,
+                      ))
+                        ListTile(
+                          title: Text(old.name),
+                          subtitle: UiText(old.speciality),
+                          onTap: () => widget.onOpenChat(old),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
+                const SizedBox(height: 12),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final label in [
+                        'All',
+                        'Love & Marriage',
+                        'Education & Hobbies',
+                        'Career & Business',
+                        'Family & Personal Life',
+                      ])
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            visualDensity: VisualDensity.compact,
+                            label: UiText(label),
+                            selected: _filter == label,
+                            onSelected: (_) {
+                              userJourney.event(
+                                'interaction.tap',
+                                metadata: {
+                                  'control': 'category',
+                                  'feature': 'chat',
+                                },
+                              );
+                              setState(() => _filter = label);
+                            },
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -943,7 +1120,7 @@ class _GuidesScreenState extends State<GuidesScreen> {
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 36),
             sliver: SliverList.separated(
               itemCount: visibleGuides.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
+              separatorBuilder: (_, _) => const SizedBox(height: 8),
               itemBuilder: (_, index) => _FullGuideCard(
                 guide: visibleGuides[index],
                 onTap: () => widget.onOpenChat(visibleGuides[index]),
@@ -958,55 +1135,16 @@ class _GuidesScreenState extends State<GuidesScreen> {
 
 class QuickAskScreen extends StatelessWidget {
   const QuickAskScreen({required this.onOpenChat, super.key});
-
   final ValueChanged<Guide> onOpenChat;
-
   @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      bottom: false,
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 34),
-        children: [
-          const _TopBar(),
-          const SizedBox(height: 30),
-          UiText(
-            'Ask naturally.',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: 8),
-          const UiText(
-            'Choose a guide, then type in English, Tamil or Tanglish. The reply follows your language.',
-            style: TextStyle(color: muted),
-          ),
-          const SizedBox(height: 24),
-          ...guides.map(
-            (guide) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: ListTile(
-                onTap: () => onOpenChat(guide),
-                tileColor: panel,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: line),
-                ),
-                leading: _GuideAvatar(guide: guide, radius: 25),
-                title: UiText(
-                  guide.name,
-                  style: const TextStyle(fontWeight: FontWeight.w800),
-                ),
-                subtitle: UiText(
-                  guide.speciality,
-                  style: const TextStyle(color: muted),
-                ),
-                trailing: const Icon(Icons.arrow_forward_rounded, color: ivory),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => ValueListenableBuilder<String>(
+    valueListenable: requestedAskGroup,
+    builder: (context, group, _) => GuidesScreen(
+      key: ValueKey(group),
+      onOpenChat: onOpenChat,
+      initialFilter: group,
+    ),
+  );
 }
 
 class ChatScreen extends StatefulWidget {
@@ -1025,23 +1163,38 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> {
+class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   ProfileSession get _session => widget.session ?? profileSession;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final _inputFocus = FocusNode();
   late GuideConversation _conversation;
   List<ChatMessage> get _messages => _conversation.messages;
   int _boundRevision = -1;
   ChatLanguage _language = ChatLanguage.auto;
-  bool get _thinking => _conversation.pending;
+  String _depth = 'standard';
+  bool _choosingDepth = false;
+  bool _canExit = false;
+  bool _ending = false;
+  bool _controlsExpanded = false;
+  CoinChatConsent? _coinConsent;
+  final _knownMessages = <ChatMessage>{};
+  ChatMessage? _deliveryMessage;
+  bool get _thinking =>
+      _ending || _conversation.pending || _deliveryMessage != null;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _bindConversation();
     _session.addListener(_profileChanged);
+    userJourney.screen('chat');
+    userJourney.event(
+      'chat.start',
+      metadata: {'feature': 'chat', 'outcome': 'started'},
+    );
     if (_messages.length > 1) _scrollToLatest();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverview());
   }
 
   void _bindConversation() {
@@ -1049,12 +1202,53 @@ class _ChatScreenState extends State<ChatScreen> {
       _conversation.removeListener(_conversationChanged);
     }
     _boundRevision = _session.revision;
-    _conversation = _session.conversation(widget.guide.name);
+    _coinConsent = null;
+    _conversation = _session.conversation(widget.guide.conversationKey);
     _conversation.addListener(_conversationChanged);
+    _conversation.messages.removeWhere((m) => m.label == 'PROFILE OVERVIEW');
+    if (_conversation.language == 'auto') {
+      _conversation.language = _session.preferredChatLanguage == 'auto'
+          ? 'english'
+          : _session.preferredChatLanguage;
+    }
+    if (_conversation.ended) {
+      _session.startNewConversation(widget.guide.conversationKey);
+    }
+    // One customer-facing conversation mode. Existing pending request receipts
+    // retain their original depth in ProfileSession for recovery.
+    _depth = 'standard';
+    if (_conversation.depth == 'standard' &&
+        _conversation.billingAcknowledged &&
+        _conversation.acceptedGeneralCoins != null &&
+        _conversation.acceptedRelationshipCoins != null) {
+      _coinConsent = CoinChatConsent(
+        coinAccount?.account(),
+        'standard',
+        _conversation.acceptedGeneralCoins! >
+                _conversation.acceptedRelationshipCoins!
+            ? _conversation.acceptedGeneralCoins!
+            : _conversation.acceptedRelationshipCoins!,
+        generalCoins: _conversation.acceptedGeneralCoins,
+        relationshipCoins: _conversation.acceptedRelationshipCoins,
+      );
+    }
+    _conversation.depth = 'standard';
+    _controlsExpanded = false;
     _language = ChatLanguage.values.firstWhere(
       (value) => value.name == _conversation.language,
       orElse: () => ChatLanguage.auto,
     );
+    // A cached welcome with no user question should follow the saved language.
+    // Never rewrite an actual conversation when its language changes.
+    if (_messages.length == 1 &&
+        !_messages.single.fromUser &&
+        ['english', 'tamil', 'tanglish'].any(
+          (lang) =>
+              _messages.single.text ==
+              guideWelcome(widget.guide, _session.nickname, lang),
+        )) {
+      _messages.clear();
+    }
     if (_messages.isEmpty) {
       _messages.add(
         ChatMessage(
@@ -1064,68 +1258,85 @@ class _ChatScreenState extends State<ChatScreen> {
             _session.nickname,
             _language == ChatLanguage.auto ? 'english' : _language.name,
           ),
-          label: 'AI VEDIC GUIDE',
         ),
       );
     }
+    _restoreRetryDraft();
+    _deliveryMessage = null;
+    _knownMessages
+      ..clear()
+      ..addAll(_messages);
   }
 
-  Future<void> _loadOverview() async {
-    if (!publicChatEnabled) return;
-    if (!mounted ||
-        _session.facts == null ||
+  void _restoreRetryDraft() {
+    if (_conversation.pending ||
         _conversation.ended ||
-        _thinking ||
-        _messages.any((m) => m.fromUser || m.label == 'PROFILE OVERVIEW')) {
+        _controller.text.isNotEmpty ||
+        _messages.isEmpty) {
       return;
     }
-    final target = _conversation;
-    final revision = _session.revision;
-    final language = _language == ChatLanguage.auto
-        ? (uiText(context, 'Rasi') == 'ராசி' ? 'tamil' : 'english')
-        : _language.name;
-    target.pending = true;
-    target.changed();
-    try {
-      final result = await _session.ask(
-        category: 'Daily',
-        question: 'Show the selected profile rasi, nakshatra and current Saturn status.',
-        responseStyle: language,
-        guide: widget.guide.name,
-      );
-      if (revision != _session.revision) return;
-      target.messages.add(
-        ChatMessage(
-          fromUser: false,
-          text: '${_session.nickname}: ${result.answer}',
-          label: 'PROFILE OVERVIEW',
-        ),
-      );
-    } catch (_) {
-      // Leave the overview retryable on the next open; ordinary chat stays usable.
-    } finally {
-      target.pending = false;
-      target.changed();
-      await _session.flushStorage();
+    const retryLabels = {
+      'ANSWER NOT CONFIRMED',
+      'REQUEST NOT COMPLETED',
+      'INTERRUPTED REQUEST',
+      'SERVICE ERROR',
+    };
+    if (!retryLabels.contains(_messages.last.label) &&
+        _messages.last.wallet?['status'] != 'failed') {
+      return;
     }
+    final question = _messages.where((message) => message.fromUser).lastOrNull;
+    if (question != null) _controller.text = question.text;
   }
 
   void _conversationChanged() {
     if (mounted) {
       setState(() {
+        final fresh = _messages
+            .where((m) => !m.fromUser && !_knownMessages.contains(m))
+            .toList();
+        _knownMessages.addAll(_messages);
+        if (fresh.isNotEmpty) {
+          final message = fresh.last;
+          // Errors and saved history stay immediately readable. Presentation
+          // never changes the stored answer or the coin receipt.
+          if (!const {
+                'ANSWER NOT CONFIRMED',
+                'REQUEST NOT COMPLETED',
+                'INTERRUPTED REQUEST',
+                'SERVICE ERROR',
+              }.contains(message.label) &&
+              message.wallet?['status'] != 'failed' &&
+              chatReplyParts(message.text).isNotEmpty) {
+            _deliveryMessage = message;
+          }
+        }
+        _restoreRetryDraft();
         _language = ChatLanguage.values.firstWhere(
           (v) => v.name == _conversation.language,
           orElse: () => ChatLanguage.auto,
         );
       });
       _scrollToLatest();
+      _session.conversationUpdated();
     }
   }
+
+  @override
+  void didChangeMetrics() => _scrollToLatest();
 
   void _scrollToLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        if (MediaQuery.disableAnimationsOf(context)) {
+          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        } else {
+          _scrollController.animateTo(
+            _scrollController.position.maxScrollExtent,
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+          );
+        }
       }
     });
   }
@@ -1133,19 +1344,45 @@ class _ChatScreenState extends State<ChatScreen> {
   void _profileChanged() {
     if (!mounted || _boundRevision == _session.revision) return;
     setState(() {
-      _bindConversation();
       _controller.clear();
+      _bindConversation();
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadOverview());
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _inputFocus.dispose();
     _session.removeListener(_profileChanged);
     _conversation.removeListener(_conversationChanged);
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _setReplyLanguage(ChatLanguage language) async {
+    try {
+      await _session.setChatLanguage(language.name);
+      if (!_messages.any((m) => m.fromUser)) {
+        _messages.clear();
+        _messages.add(
+          ChatMessage(
+            fromUser: false,
+            text: guideWelcome(widget.guide, _session.nickname, language.name),
+          ),
+        );
+        _conversation.changed();
+        await _session.flushStorage();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Language could not be saved. Please retry.'),
+          ),
+        );
+      }
+    }
   }
 
   ChatLanguage _detect(String text) {
@@ -1163,17 +1400,94 @@ class _ChatScreenState extends State<ChatScreen> {
     lastReply: _messages.where((m) => !m.fromUser).lastOrNull?.text,
   );
 
-  Future<void> _send([String? suggestion]) async {
-    if (!publicChatEnabled) return;
+  Future<void> _send([
+    String? suggestion,
+    Map<String, dynamic>? upgrade,
+  ]) async {
+    if (!publicChatEnabled || !remoteConfig.enabled('chat')) return;
+    if (upgrade != null) return;
+    _depth = 'standard';
+    if (!remoteConfig.languageEnabled(_language.name)) {
+      _setReplyLanguage(
+        ChatLanguage.values.byName(remoteConfig.list('languages').first),
+      );
+    }
     final text = (suggestion ?? _controller.text).trim();
-    if (text.isEmpty || _thinking || _conversation.ended) return;
-    final detected = _detect(text);
+    if (text.isEmpty || _thinking || _choosingDepth || _conversation.ended) {
+      return;
+    }
+    final detected = upgrade?['style'] is String
+        ? ChatLanguage.values.byName(upgrade!['style'])
+        : _detect(text);
+    final pendingRequest = _session.pendingGuidanceRequest(
+      category: widget.guide.category,
+      question: text,
+      responseStyle: detected.name,
+      guide: widget.guide.name,
+    );
+    if (pendingRequest == null &&
+        coinWalletEnabled &&
+        !RegExp(
+          r'^(hi|hello|hey|vanakkam|வணக்கம்)[!.,\s]*$',
+          caseSensitive: false,
+        ).hasMatch(text) &&
+        upgrade == null &&
+        (_coinConsent == null ||
+            _coinConsent!.account != coinAccount?.account())) {
+      _choosingDepth = true;
+      final account = coinAccount?.account();
+      final generalCoins = remoteConfig.cost('generalStandard', 10);
+      final relationshipCoins = remoteConfig.cost('relationshipStandard', 15);
+      final selected = await showChatDepthPicker(
+        context,
+        generalCoins: generalCoins,
+        relationshipCoins: relationshipCoins,
+      );
+      _choosingDepth = false;
+      if (!mounted ||
+          selected == null ||
+          _conversation.ended ||
+          account != coinAccount?.account()) {
+        return;
+      }
+      setState(() {
+        _controlsExpanded = false;
+        _depth = selected;
+        _conversation.depth = selected;
+        _conversation.billingAcknowledged = true;
+        _conversation.acceptedGeneralCoins = generalCoins;
+        _conversation.acceptedRelationshipCoins = relationshipCoins;
+        _conversation.changed();
+        _coinConsent = CoinChatConsent(
+          account,
+          selected,
+          generalCoins > relationshipCoins ? generalCoins : relationshipCoins,
+          generalCoins: generalCoins,
+          relationshipCoins: relationshipCoins,
+        );
+      });
+    }
+    userJourney.event(
+      'chat.send',
+      metadata: {
+        'feature': 'chat',
+        'control': 'send',
+        'language': detected == ChatLanguage.tamil
+            ? 'ta'
+            : detected == ChatLanguage.tanglish
+            ? 'tanglish'
+            : 'en',
+      },
+    );
     final sentRevision = _session.revision;
     final sentConversation = _conversation;
     setState(() {
+      _controlsExpanded = false;
+      _inputFocus.requestFocus();
       _messages.add(ChatMessage(fromUser: true, text: text));
       _controller.clear();
       sentConversation.pending = true;
+      sentConversation.updatedAt = DateTime.now();
     });
     sentConversation.changed();
     if (RegExp(
@@ -1183,8 +1497,11 @@ class _ChatScreenState extends State<ChatScreen> {
       _messages.add(
         ChatMessage(
           fromUser: false,
-          text: guideWelcome(widget.guide, _session.nickname, detected.name),
-          label: 'AI VEDIC GUIDE',
+          text: detected == ChatLanguage.tamil
+              ? 'வணக்கம்! எதைப் பற்றிப் பேச விரும்புகிறீர்கள்?'
+              : detected == ChatLanguage.tanglish
+              ? 'Vanakkam! Edha pathi pesa virumbureenga?'
+              : 'Hi! What would you like to talk about?',
         ),
       );
       sentConversation.pending = false;
@@ -1194,19 +1511,64 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     try {
       final category = widget.guide.category;
-      final result = await _session.ask(
-        category: category,
-        question: text,
-        responseStyle: detected.name,
-        guide: widget.guide.name,
+      final consent = upgrade == null
+          ? (pendingRequest == null ? _coinConsent : null)
+          : CoinChatConsent(
+              coinAccount!.account(),
+              'detailed',
+              (upgrade['upgradeCost'] as num).toInt(),
+              upgrade: upgrade['id'] as String,
+            );
+      final result = await withCoinChatConsent(
+        consent,
+        () => _session.ask(
+          category: category,
+          question: text,
+          responseStyle: detected.name,
+          guide: widget.guide.name,
+          conversationKey: widget.guide.conversationKey,
+          depth: pendingRequest != null
+              ? pendingRequest.depth
+              : coinWalletEnabled
+              ? _depth
+              : null,
+          upgradeFrom: pendingRequest?.upgrade,
+        ),
       );
+      userJourney.event(
+        'chat.answer',
+        metadata: {
+          'feature': 'chat',
+          'outcome': result.wallet?['status'] == 'failed'
+              ? 'unavailable'
+              : 'success',
+        },
+      );
+      coinWalletRevision.value++;
+      if (!result.replayed && result.wallet?['status'] == 'complete') {
+        unawaited(marketingAnalytics.event('chat_completed'));
+        unawaited(metaMeasurement.event('chat_completed'));
+      }
       if (sentRevision != _session.revision) return;
+      if (upgrade != null && result.wallet?['status'] == 'complete') {
+        for (final m in sentConversation.messages) {
+          if (m.wallet?['id'] == upgrade['id']) m.wallet!['canUpgrade'] = false;
+        }
+      }
       await _session.recordGuidanceResponse(
         result,
         sentConversation,
         detected.name,
       );
     } on JyotaraApiException catch (error) {
+      userJourney.event(
+        'chat.answer',
+        metadata: {
+          'feature': 'chat',
+          'outcome': 'failed',
+          'error': error.deliveryUncertain ? 'network' : 'provider',
+        },
+      );
       if (sentRevision != _session.revision) return;
       if (!mounted) {
         sentConversation.messages.add(
@@ -1330,299 +1692,509 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _endChat() async {
     if (_thinking) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('End chat?'),
-        content: const Text(
-          'Your conversation stays saved for this profile and guide. You can read or continue it later.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep chatting'),
+    setState(() => _ending = true);
+    try {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('End chat?'),
+          content: const Text(
+            'Your conversation stays saved for this profile and guide. You can read or continue it later.',
           ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('End chat'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-    _conversation.ended = true;
-    _conversation.changed();
-    await _session.flushStorage();
-    if (!mounted) return;
-    if (_session.storageError != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(_session.storageError!)));
-      return;
-    }
-    final rating = await showDialog<int>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Rate ${widget.guide.name}'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Optional feedback saved privately on this device.'),
-            Wrap(
-              children: List.generate(
-                5,
-                (i) => IconButton(
-                  tooltip: '${i + 1} stars',
-                  onPressed: () => Navigator.pop(context, i + 1),
-                  icon: const Icon(Icons.star_outline),
-                ),
-              ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep chatting'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('End chat'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Skip'),
-          ),
-        ],
-      ),
-    );
-    if (rating != null) {
-      _conversation.rating = rating;
+      );
+      if (confirmed != true || !mounted) return;
+      _conversation.ended = true;
       _conversation.changed();
       await _session.flushStorage();
+      if (!mounted) return;
+      if (_session.storageError != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_session.storageError!)));
+        return;
+      }
+      userJourney.event(
+        'chat.end',
+        metadata: {
+          'feature': 'chat',
+          'control': 'end_chat',
+          'outcome': 'success',
+        },
+      );
+      unawaited(userJourney.flush());
+      int selectedRating = 0;
+      final rating = await showDialog<int>(
+        context: context,
+        builder: (dialog) => StatefulBuilder(
+          builder: (dialog, update) => AlertDialog(
+            title: Text('${uiText(dialog, 'Rate')} ${widget.guide.name}'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const UiText(
+                  'Optional feedback saved privately on this device.',
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: List.generate(
+                    5,
+                    (i) => Expanded(
+                      child: IconButton(
+                        tooltip: '${i + 1} stars',
+                        onPressed: () => update(() => selectedRating = i + 1),
+                        icon: Icon(
+                          i < selectedRating ? Icons.star : Icons.star_outline,
+                          color: gold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialog),
+                child: const UiText('Skip'),
+              ),
+              FilledButton(
+                onPressed: selectedRating == 0
+                    ? null
+                    : () => Navigator.pop(dialog, selectedRating),
+                child: const UiText('Submit'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (rating != null) {
+        _conversation.rating = rating;
+        _conversation.changed();
+        await _session.flushStorage();
+      }
+      if (!mounted) return;
+      setState(() => _canExit = true);
+      // Let PopScope observe the confirmed end before requesting navigation.
+      await WidgetsBinding.instance.endOfFrame;
+      if (mounted) Navigator.of(context).maybePop();
+    } finally {
+      if (mounted) setState(() => _ending = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!publicChatEnabled) return const ChatUnavailableScreen();
+    RemoteConfigScope.watch(context);
+    if (!publicChatEnabled ||
+        !remoteConfig.enabled('chat') ||
+        !remoteConfig.guideEnabled(widget.guide.name)) {
+      return const ChatUnavailableScreen();
+    }
     return PopScope(
-      canPop: !_thinking,
+      canPop: _canExit,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && mounted) {
+          userJourney.event(
+            'chat.back',
+            metadata: {
+              'feature': 'chat',
+              'control': 'back',
+              'outcome': 'blocked',
+            },
+          );
+          FocusManager.instance.primaryFocus?.unfocus();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: UiText('Use End chat to finish your conversation.'),
+            ),
+          );
+        }
+      },
       child: Scaffold(
         appBar: AppBar(
-          toolbarHeight: 28 + MediaQuery.textScalerOf(context).scale(44),
+          centerTitle: false,
           titleSpacing: 0,
           title: Row(
             children: [
-              _GuideAvatar(guide: widget.guide, radius: 20),
-              const SizedBox(width: 10),
+              _GuideAvatar(guide: widget.guide, radius: 17),
+              const SizedBox(width: 9),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    UiText(
+                    Text(
                       widget.guide.name,
                       style: const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     Text(
-                      '${_session.nickname.isEmpty ? 'My profile' : _session.nickname} · AI guide',
+                      uiText(context, widget.guide.speciality),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: muted),
+                      style: const TextStyle(fontSize: 11, color: muted),
                     ),
                   ],
                 ),
               ),
             ],
           ),
+          automaticallyImplyLeading: false,
           actions: [
-            if (widget.allowProfileSwitch)
-              IconButton(
-                tooltip: 'Change profile',
-                onPressed: _thinking ? null : () => Navigator.pop(context),
-                icon: const Icon(Icons.switch_account_outlined),
-              ),
             TextButton(
-              onPressed: _thinking || _conversation.ended ? null : _endChat,
-              child: Text(_conversation.ended ? 'Ended' : 'End'),
+              key: const Key('end-chat'),
+              onPressed: _thinking ? null : _endChat,
+              child: const UiText('End chat'),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Chat options',
+              onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
+              enabled: !_thinking,
+              itemBuilder: (_) => [
+                const PopupMenuItem(
+                  value: 'edit-birth',
+                  child: UiText('Edit birth details'),
+                ),
+                if (widget.allowProfileSwitch)
+                  const PopupMenuItem(
+                    value: 'profile',
+                    child: UiText('Change Birth Chart'),
+                  ),
+                if (_conversation.history.isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'history',
+                    child: UiText('View old chats'),
+                  ),
+                PopupMenuItem(
+                  value: 'end',
+                  enabled: !_conversation.ended,
+                  child: const Text('End chat'),
+                ),
+              ],
+              onSelected: (value) {
+                if (value == 'edit-birth') {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          BirthForm(session: _session, onboarding: true),
+                    ),
+                  );
+                } else if (value == 'profile') {
+                  _endChat();
+                } else if (value == 'history') {
+                  showDialog<void>(
+                    context: context,
+                    builder: (dialog) => AlertDialog(
+                      title: const UiText('Chat history'),
+                      content: SizedBox(
+                        width: double.maxFinite,
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: [
+                            for (final chat
+                                in _conversation.history.reversed) ...[
+                              const Divider(),
+                              for (final m in chat)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    '${m.fromUser ? _session.nickname : widget.guide.name}: ${m.text}',
+                                  ),
+                                ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialog),
+                          child: const UiText('Close'),
+                        ),
+                      ],
+                    ),
+                  );
+                } else {
+                  _endChat();
+                }
+              },
             ),
           ],
         ),
-        body: Column(
-          children: [
-            SizedBox(
-              height: 24 + MediaQuery.textScalerOf(context).scale(24),
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 5,
-                ),
-                children: ChatLanguage.values.map((language) {
-                  final labels = {
-                    ChatLanguage.auto: 'Auto',
-                    ChatLanguage.english: 'English',
-                    ChatLanguage.tamil: 'Tamil',
-                    ChatLanguage.tanglish: 'Tanglish',
-                  };
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: UiText(labels[language]!),
-                      selected: _language == language,
-                      onSelected: (_) async {
-                        try {
-                          await _session.setChatLanguage(language.name);
-                        } catch (_) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: UiText(
-                                  'Language could not be saved. Please try again.',
-                                ),
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                controller: _scrollController,
-                key: const Key('chatHistoryList'),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-                itemCount: 1 + _messages.length + (_thinking ? 1 : 0),
-                itemBuilder: (_, index) {
-                  if (index == 0) {
-                    return _session.facts == null
-                        ? ListTile(
-                            title: const UiText('Create your chart to start'),
-                            subtitle: const UiText(
-                              'Create the selected profile’s chart to ask a guide.',
-                            ),
-                            trailing: const Icon(Icons.chevron_right),
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => BirthForm(session: _session),
-                              ),
-                            ),
-                          )
-                        : Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Text(
-                                'PROFILE FOR THIS CHAT\n${chatProfileDetails(_session)}',
-                                key: const Key('chatProfileDetails'),
-                              ),
-                            ),
-                          );
-                  }
-                  index -= 1;
-                  if (_thinking && index == _messages.length) {
-                    return const _TypingBubble();
-                  }
-                  final message = _messages[index];
-                  return _MessageBubble(
-                    message: message,
-                    onReport: message.fromUser
-                        ? null
-                        : () => _reportAnswer(message),
-                  );
-                },
-              ),
-            ),
-            if (!_conversation.ended && !_thinking && _suggestions.isNotEmpty)
-              SizedBox(
-                height: 46,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 3,
-                  ),
-                  itemCount: _suggestions.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 8),
-                  itemBuilder: (_, index) => ActionChip(
-                    label: Text(_suggestions[index]),
+        body: ChatWallpaper(
+          child: Column(
+            children: [
+              if (MediaQuery.viewInsetsOf(context).bottom == 0)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    key: const Key('chat-settings-toggle'),
                     onPressed: _thinking
                         ? null
-                        : () => _send(_suggestions[index]),
+                        : () => setState(
+                            () => _controlsExpanded = !_controlsExpanded,
+                          ),
+                    icon: Icon(
+                      _controlsExpanded ? Icons.expand_less : Icons.tune,
+                      size: 16,
+                    ),
+                    label: Text(
+                      _language == ChatLanguage.tamil
+                          ? 'தமிழ்'
+                          : _language == ChatLanguage.tanglish
+                          ? 'Tanglish'
+                          : 'English',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ),
                 ),
+              if (_controlsExpanded &&
+                  MediaQuery.viewInsetsOf(context).bottom == 0)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 5, 16, 8),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ChatLanguage>(
+                      expandedInsets: EdgeInsets.zero,
+                      showSelectedIcon: false,
+                      style: ButtonStyle(
+                        backgroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? gold
+                              : panel,
+                        ),
+                        foregroundColor: WidgetStateProperty.resolveWith(
+                          (states) => states.contains(WidgetState.selected)
+                              ? BronzePalette.background
+                              : bodyInk,
+                        ),
+                      ),
+                      segments: [
+                        for (final option
+                            in [
+                              (ChatLanguage.english, 'English'),
+                              (ChatLanguage.tamil, 'தமிழ்'),
+                              (ChatLanguage.tanglish, 'Tanglish'),
+                            ].where(
+                              (option) =>
+                                  remoteConfig.languageEnabled(option.$1.name),
+                            ))
+                          ButtonSegment(
+                            value: option.$1,
+                            label: Text(
+                              option.$2,
+                              key: ValueKey('reply-${option.$1.name}'),
+                            ),
+                            enabled: !_thinking,
+                          ),
+                      ],
+                      selected: {_language},
+                      onSelectionChanged: _thinking
+                          ? null
+                          : (values) => _setReplyLanguage(values.first),
+                    ),
+                  ),
+                ),
+              Expanded(
+                child: ListView.builder(
+                  controller: _scrollController,
+                  key: const Key('chatHistoryList'),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  itemCount:
+                      1 +
+                      _messages.length +
+                      (_conversation.pending && _deliveryMessage == null
+                          ? 1
+                          : 0),
+                  itemBuilder: (_, index) {
+                    if (index == 0) {
+                      return _session.facts == null
+                          ? ListTile(
+                              title: const UiText('Create your chart to start'),
+                              subtitle: const UiText(
+                                'Create the selected profile’s chart to ask a guide.',
+                              ),
+                              trailing: const Icon(Icons.chevron_right),
+                              onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute<void>(
+                                  builder: (_) => BirthForm(
+                                    session: _session,
+                                    onboarding: true,
+                                  ),
+                                ),
+                              ),
+                            )
+                          : const SizedBox.shrink();
+                    }
+                    index -= 1;
+                    if (index == _messages.length) {
+                      return const _TypingBubble();
+                    }
+                    final message = _messages[index];
+                    return Column(
+                      key: ObjectKey(message),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MessageBubble(
+                          message: message,
+                          animate: identical(message, _deliveryMessage),
+                          onPart: _scrollToLatest,
+                          onDelivered: () {
+                            if (mounted &&
+                                identical(message, _deliveryMessage)) {
+                              setState(() => _deliveryMessage = null);
+                              _scrollToLatest();
+                            }
+                          },
+                          onReport: message.fromUser
+                              ? null
+                              : () => _reportAnswer(message),
+                        ),
+                        if (message.wallet?['status'] == 'failed' &&
+                            index == _messages.length - 1 &&
+                            !_thinking &&
+                            !_conversation.ended)
+                          TextButton(
+                            onPressed: () {
+                              final question = _messages
+                                  .take(index)
+                                  .where((m) => m.fromUser)
+                                  .lastOrNull;
+                              if (question != null) _send(question.text);
+                            },
+                            child: Text(
+                              _language == ChatLanguage.tamil
+                                  ? 'மீண்டும் முயற்சி'
+                                  : _language == ChatLanguage.tanglish
+                                  ? 'Meendum muyarchi'
+                                  : 'Retry',
+                            ),
+                          ),
+                      ],
+                    );
+                  },
+                ),
               ),
-            if (_conversation.ended)
-              SafeArea(
-                top: false,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
+              if (!_conversation.ended &&
+                  !_thinking &&
+                  !_messages.any((message) => message.fromUser) &&
+                  _suggestions.isNotEmpty)
+                SizedBox(
+                  height: 46,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 3,
+                    ),
+                    itemCount: _suggestions.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 8),
+                    itemBuilder: (_, index) => ActionChip(
+                      label: Text(_suggestions[index]),
+                      onPressed: _thinking
+                          ? null
+                          : () => _send(_suggestions[index]),
+                    ),
+                  ),
+                ),
+              if (_conversation.ended)
+                SafeArea(
+                  top: false,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Text(
+                          'Chat ended · History saved for this profile',
+                        ),
+                        if (_conversation.rating != null)
+                          Text(
+                            'Your private rating: ${_conversation.rating}/5',
+                          ),
+                        FilledButton(
+                          onPressed: () async {
+                            _conversation.ended = false;
+                            _conversation.changed();
+                            await _session.flushStorage();
+                          },
+                          child: const Text('Continue this chat'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Container(
+                  padding: EdgeInsets.fromLTRB(
+                    8,
+                    5,
+                    8,
+                    5 + MediaQuery.paddingOf(context).bottom,
+                  ),
+                  decoration: const BoxDecoration(
+                    color: BronzePalette.background,
+                    border: Border(top: BorderSide(color: line)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      const Text('Chat ended · History saved for this profile'),
-                      if (_conversation.rating != null)
-                        Text('Your private rating: ${_conversation.rating}/5'),
-                      FilledButton(
-                        onPressed: () async {
-                          _conversation.ended = false;
-                          _conversation.changed();
-                          await _session.flushStorage();
-                        },
-                        child: const Text('Continue this chat'),
+                      Expanded(
+                        child: TextField(
+                          key: const Key('chatInput'),
+                          focusNode: _inputFocus,
+                          controller: _controller,
+                          maxLength: 240,
+                          style: const TextStyle(fontSize: 15),
+                          minLines: 1,
+                          maxLines: 4,
+                          textInputAction: TextInputAction.send,
+                          onSubmitted: (_) => _send(),
+                          decoration: InputDecoration(
+                            hintText: _language == ChatLanguage.tamil
+                                ? 'உங்கள் கேள்வி…'
+                                : _language == ChatLanguage.tanglish
+                                ? 'Unga kelvi…'
+                                : 'Your question…',
+                            hintMaxLines: 1,
+                            isDense: true,
+                            counterText: '',
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      IconButton.filled(
+                        key: const Key('sendMessage'),
+                        tooltip: uiText(context, 'Send question'),
+                        onPressed: _thinking ? null : _send,
+                        icon: const Icon(Icons.send_rounded),
+                        style: IconButton.styleFrom(
+                          backgroundColor: panel,
+                          foregroundColor: gold,
+                          minimumSize: const Size(44, 44),
+                        ),
                       ),
                     ],
                   ),
                 ),
-              )
-            else
-              Container(
-                padding: EdgeInsets.fromLTRB(
-                  14,
-                  10,
-                  14,
-                  10 + MediaQuery.paddingOf(context).bottom,
-                ),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF281310),
-                  border: Border(top: BorderSide(color: line)),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        key: const Key('chatInput'),
-                        controller: _controller,
-                        maxLength: 240,
-                        minLines: 1,
-                        maxLines: 4,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: (_) => _send(),
-                        decoration: InputDecoration(
-                          hintText: uiText(
-                            context,
-                            'Ask in English, Tamil or Tanglish…',
-                          ),
-                          hintMaxLines: 1,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    IconButton.filled(
-                      key: const Key('sendMessage'),
-                      tooltip: uiText(context, 'Send question'),
-                      onPressed: _thinking ? null : _send,
-                      icon: const Icon(Icons.arrow_upward_rounded),
-                      style: IconButton.styleFrom(
-                        backgroundColor: saffron,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(50, 50),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1649,6 +2221,7 @@ class ChartScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               if (active.storageError != null) UiText(active.storageError!),
+              if (active.backupError != null) UiText(active.backupError!),
               if (active.profileRecovered)
                 const UiText(
                   'Recovered the earlier chart without a new calculation. The calculation time below is the original time.',
@@ -1801,8 +2374,8 @@ class ChartScreen extends StatelessWidget {
   }
 }
 
-class AccountScreen extends StatelessWidget {
-  const AccountScreen({super.key});
+class AccountSettingsScreen extends StatelessWidget {
+  const AccountSettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -1812,11 +2385,12 @@ class AccountScreen extends StatelessWidget {
         'Birth profile',
         'View or change your details',
       ),
-      (
-        Icons.workspace_premium_outlined,
-        'Plans & question balance',
-        'Payments not enabled',
-      ),
+      if (!coinWalletEnabled)
+        (
+          Icons.workspace_premium_outlined,
+          'Plans & question balance',
+          'Payments not enabled',
+        ),
       (Icons.history_rounded, 'Chat history', 'Saved privately on this device'),
       (Icons.translate_rounded, 'App language', 'English or Tamil menus'),
       (
@@ -1842,8 +2416,6 @@ class AccountScreen extends StatelessWidget {
             uiText(context, 'Your account'),
             style: Theme.of(context).textTheme.headlineMedium,
           ),
-          const PrivacyLinks(),
-          const FirebasePreferences(),
           const SizedBox(height: 18),
           Card(
             child: Padding(
@@ -1859,7 +2431,10 @@ class AccountScreen extends StatelessWidget {
                         colors: [saffron, Color(0xFF8F452C)],
                       ),
                     ),
-                    child: const Icon(Icons.person_rounded),
+                    child: const Icon(
+                      Icons.person_rounded,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -1890,77 +2465,6 @@ class AccountScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
-          if (phoneAccess.authorized)
-            ListTile(
-              leading: const Icon(Icons.logout_rounded),
-              title: const UiText('Sign out'),
-              subtitle: const UiText(
-                'Your saved profiles stay with this account',
-              ),
-              onTap: () async {
-                if (profileSession.calculating || profileSession.answering) {
-                  return;
-                }
-                await profileSession.flushStorage();
-                await phoneAccess.signOut();
-                if (!context.mounted) return;
-                if (!phoneAccess.authorized) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(phoneAccess.error ?? 'Please try again.'),
-                    ),
-                  );
-                }
-              },
-            ),
-          if (phoneAccess.authorized)
-            ListTile(
-              leading: const Icon(Icons.delete_forever_outlined),
-              title: const UiText('Delete account'),
-              subtitle: const UiText(
-                'Delete phone account, saved profiles and chats',
-              ),
-              onTap: () async {
-                if (profileSession.calculating ||
-                    profileSession.answering ||
-                    phoneAccess.busy) {
-                  return;
-                }
-                final confirmed = await showDialog<bool>(
-                  context: context,
-                  builder: (dialogContext) => AlertDialog(
-                    title: const UiText('Delete account?'),
-                    content: const UiText(
-                      'This removes your phone account and its saved profiles and chats from this device and our server. Minimal security records and backups remain temporarily. External service deletion may still be pending.',
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext, false),
-                        child: const UiText('Cancel'),
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(dialogContext, true),
-                        child: const UiText('Delete account'),
-                      ),
-                    ],
-                  ),
-                );
-                if (confirmed != true) return;
-                final deleted = await phoneAccess.deleteAccount();
-                if (!context.mounted) return;
-                if (deleted) {
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(phoneAccess.error ?? 'Please try again.'),
-                    ),
-                  );
-                }
-              },
-            ),
           ...items.map(
             (item) => ListTile(
               onTap: () async {
@@ -2099,10 +2603,10 @@ class AccountScreen extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF48281F),
+                  color: BronzePalette.raised,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(item.$1, color: ivory),
+                child: Icon(item.$1, color: bodyInk),
               ),
               title: Text(
                 uiText(context, item.$2),
@@ -2128,8 +2632,149 @@ class AccountScreen extends StatelessWidget {
               trailing: const Icon(Icons.chevron_right_rounded, color: muted),
             ),
           ),
+          const PrivacyLinks(),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const UiText('Notification settings'),
+            subtitle: const UiText('Manage notifications and app improvements'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => const NotificationSettingsScreen(),
+              ),
+            ),
+          ),
+          ListTile(
+            leading: const Icon(Icons.support_agent),
+            title: const Text('Help & Support'),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(
+                builder: (_) => SupportScreen(
+                  api: AccountService(
+                    token: () => phoneAccess.token,
+                    tester: () => testerAccess.code,
+                    account: () => phoneAccess.accountId,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (coinWalletEnabled)
+            ListTile(
+              leading: const RupeeCoinIcon(),
+              title: const Text('Coin wallet'),
+              subtitle: const Text('Packs, prices and coin activity'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => CoinWalletScreen(api: coinAccount!),
+                ),
+              ),
+            ),
+          if (paymentQaEnabled && !coinWalletEnabled)
+            ListTile(
+              leading: const Icon(Icons.science_outlined),
+              title: const Text('Test payments'),
+              subtitle: const Text('Sandbox only — no real money'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => TestPaymentScreen(
+                    api: AccountService(
+                      token: () => phoneAccess.token,
+                      tester: () => testerAccess.code,
+                      account: () => phoneAccess.accountId,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (phoneAccess.authorized)
+            ListTile(
+              leading: const Icon(Icons.delete_forever_outlined),
+              title: const UiText('Delete account'),
+              subtitle: const UiText(
+                'Delete phone account, saved profiles and chats',
+              ),
+              onTap: () async {
+                if (profileSession.calculating ||
+                    profileSession.answering ||
+                    phoneAccess.busy) {
+                  return;
+                }
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const UiText('Delete account?'),
+                    content: const UiText(
+                      'This removes your phone account and its saved profiles and chats from this device and our server. Minimal security records and backups remain temporarily. External service deletion may still be pending.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: const UiText('Cancel'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, true),
+                        child: const UiText('Delete account'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed != true) return;
+                final deleted = await phoneAccess.deleteAccount();
+                if (!context.mounted) return;
+                if (deleted) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneAccess.error ?? 'Please try again.'),
+                    ),
+                  );
+                }
+              },
+            ),
           const SizedBox(height: 14),
           const _DisclosureCard(),
+          if (phoneAccess.authorized)
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const UiText('Sign out'),
+              subtitle: const UiText(
+                'Your saved profiles stay with this account',
+              ),
+              onTap: () async {
+                if (profileSession.calculating || profileSession.answering) {
+                  return;
+                }
+                if (!await confirmSignOut(context) || !context.mounted) return;
+                await profileSession.flushStorage();
+                if (profileSession.storageError != null) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(profileSession.storageError!)),
+                    );
+                  }
+                  return;
+                }
+                await phoneAccess.signOut();
+                if (!phoneAccess.authorized) {
+                  await uiLanguagePreferences.set('en');
+                }
+                if (!context.mounted) return;
+                if (!phoneAccess.authorized) {
+                  Navigator.of(context).popUntil((route) => route.isFirst);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(phoneAccess.error ?? 'Please try again.'),
+                    ),
+                  );
+                }
+              },
+            ),
         ],
       ),
     );
@@ -2139,12 +2784,14 @@ class AccountScreen extends StatelessWidget {
 class BirthProfileScreen extends StatelessWidget {
   const BirthProfileScreen({super.key});
   @override
-  Widget build(BuildContext context) => BirthForm(session: profileSession);
+  Widget build(BuildContext context) =>
+      BirthForm(session: profileSession, onboarding: true);
 }
 
 class _TopBar extends StatefulWidget {
   const _TopBar({this.showAccount = true});
   final bool showAccount;
+  final bool editorial = false;
   @override
   State<_TopBar> createState() => _TopBarState();
 }
@@ -2157,10 +2804,7 @@ class _TopBarState extends State<_TopBar> {
     try {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            appBar: AppBar(title: Text(uiText(context, 'Account'))),
-            body: const AccountScreen(),
-          ),
+          builder: (_) => const Scaffold(body: AccountScreen()),
         ),
       );
     } finally {
@@ -2170,9 +2814,20 @@ class _TopBarState extends State<_TopBar> {
 
   @override
   Widget build(BuildContext context) {
+    if (MainTabScope.contains(context)) return const SizedBox.shrink();
     return Row(
       children: [
-        const Expanded(child: _BrandLockup(compact: true)),
+        if (widget.editorial && widget.showAccount)
+          IconButton(
+            tooltip: uiText(context, 'Account'),
+            onPressed: _openAccount,
+            icon: const Icon(Icons.menu_rounded, size: 20, color: gold),
+          ),
+        Expanded(
+          child: widget.editorial
+              ? const Center(child: _EditorialBrand())
+              : const _BrandLockup(compact: true),
+        ),
         AnimatedBuilder(
           animation: notificationInbox,
           builder: (context, _) => IconButton(
@@ -2189,7 +2844,7 @@ class _TopBarState extends State<_TopBar> {
             ),
           ),
         ),
-        if (widget.showAccount)
+        if (widget.showAccount && !widget.editorial)
           IconButton(
             tooltip: uiText(context, 'Account'),
             onPressed: _openAccount,
@@ -2242,160 +2897,18 @@ class _BrandLockup extends StatelessWidget {
   }
 }
 
-class _ChartHero extends StatelessWidget {
-  const _ChartHero({required this.onPressed});
-  final VoidCallback onPressed;
+class _EditorialBrand extends StatelessWidget {
+  const _EditorialBrand();
   @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: profileSession,
-      builder: (context, _) {
-        final facts = profileSession.facts;
-        return EntranceReveal(
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(28),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF7C352C), Color(0xFF3C2018)],
-              ),
-              border: Border.all(color: const Color(0xFFB6884C)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x30642D20),
-                  blurRadius: 28,
-                  offset: Offset(0, 14),
-                ),
-              ],
-            ),
-            child: CustomPaint(
-              painter: const TemplePatternPainter(intensity: .22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.auto_awesome_rounded, color: gold, size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: UiText(
-                          'YOUR PERSONAL CONTEXT',
-                          style: TextStyle(
-                            color: gold,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.1,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    facts == null
-                        ? uiText(context, 'Start with your\nVedic birth chart.')
-                        : '${uiText(context, facts['rashi'].toString())} ${uiText(context, 'Rasi')}',
-                    style: Theme.of(context).textTheme.headlineSmall
-                        ?.copyWith(fontSize: 26),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    facts == null
-                        ? uiText(
-                            context,
-                            'Add your date, time and birthplace. Every guide uses this profile.',
-                          )
-                        : '${facts['nakshatra']} · ${uiText(context, 'Your chart is available. Open it to check details, freshness and storage status.')}',
-                    style: const TextStyle(
-                      color: Color(0xFFEBD8BC),
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  FilledButton.tonalIcon(
-                    onPressed: onPressed,
-                    icon: Icon(
-                      facts == null
-                          ? Icons.add_rounded
-                          : Icons.grid_view_rounded,
-                    ),
-                    label: Text(
-                      uiText(
-                        context,
-                        facts == null
-                            ? 'Create birth profile'
-                            : 'View my chart',
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _CompactGuideCard extends StatelessWidget {
-  const _CompactGuideCard({required this.guide, required this.onTap});
-  final Guide guide;
-  final VoidCallback onTap;
-  @override
-  Widget build(BuildContext context) {
-    return PressFeedback(
-      child: SizedBox(
-        width: 176,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Ink(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: guide.colors,
-              ),
-              border: Border.all(color: Colors.white.withValues(alpha: .12)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _GuideAvatar(guide: guide, radius: 35),
-                  const Spacer(),
-                  const _AiBadge(),
-                  const SizedBox(height: 8),
-                  UiText(
-                    guide.name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  UiText(
-                    guide.speciality,
-                    style: const TextStyle(
-                      color: Color(0xFFF5E7D1),
-                      fontSize: 12,
-                      height: 1.25,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const Text(
+    'Jyotara',
+    style: TextStyle(
+      fontFamily: 'JyotaraEditorial',
+      fontSize: 34,
+      color: bodyInk,
+      letterSpacing: .3,
+    ),
+  );
 }
 
 class _FullGuideCard extends StatelessWidget {
@@ -2403,84 +2916,72 @@ class _FullGuideCard extends StatelessWidget {
   final Guide guide;
   final VoidCallback onTap;
   @override
-  Widget build(BuildContext context) {
-    return PressFeedback(
-      child: Card(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _GuideAvatar(guide: guide, radius: 34),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          UiText(
-                            guide.name,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const _AiBadge(),
-                        ],
+  Widget build(BuildContext context) => PressFeedback(
+    child: Card(
+      key: ValueKey('guide-card-${guide.name}'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: BronzePalette.border),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          child: Row(
+            children: [
+              _GuideAvatar(guide: guide, radius: 26),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    UiText(
+                      guide.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        height: 1.3,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 3),
-                      UiText(
-                        guide.speciality,
-                        style: const TextStyle(
-                          color: ivory,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    ),
+                    const SizedBox(height: 2),
+                    UiText(
+                      guide.speciality,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: gold,
                       ),
-                      const SizedBox(height: 8),
-                      UiText(
+                    ),
+                    const SizedBox(height: 2),
+                    UiText(
+                      remoteConfig.guideDescription(
+                        guide.name,
                         guide.description,
-                        style: const TextStyle(color: muted),
                       ),
-                      const SizedBox(height: 8),
-                      const UiText(
-                        'AI chat · Coming soon',
-                        style: TextStyle(color: gold),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: muted,
                       ),
-                      const SizedBox(height: 12),
-                      const Row(
-                        children: [
-                          Icon(Icons.translate_rounded, color: gold, size: 16),
-                          SizedBox(width: 6),
-                          Expanded(
-                            child: UiText(
-                              'English · Tamil · Tanglish',
-                              style: TextStyle(
-                                color: gold,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.arrow_forward_rounded, color: muted),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right, size: 20, color: gold),
+            ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 class _GuideAvatar extends StatelessWidget {
@@ -2500,157 +3001,38 @@ class _GuideAvatar extends StatelessWidget {
         ),
       ),
       child: ClipOval(
-        child: Image.asset(
-          guide.asset,
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-        ),
-      ),
-    );
-  }
-}
-
-class _PanchangCard extends StatelessWidget {
-  const _PanchangCard();
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Row(
-              children: [
-                Icon(Icons.wb_twilight_rounded, color: gold),
-                SizedBox(width: 10),
-                Expanded(
-                  child: UiText(
-                    'Daily Panchangam',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            const UiText(
-              'Daily timings are not connected on this screen yet. Your birth chart is not today’s Panchangam. No daily timings are being shown.',
-              style: TextStyle(color: muted),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MultilingualCard extends StatelessWidget {
-  const _MultilingualCard();
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: const Color(0xFF273329),
-        border: Border.all(color: const Color(0xFF495D41)),
-      ),
-      child: const Row(
-        children: [
-          Icon(Icons.translate_rounded, color: Color(0xFFCBD8A0), size: 30),
-          SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                UiText(
-                  'Ask in your natural language',
-                  style: TextStyle(fontWeight: FontWeight.w800),
-                ),
-                SizedBox(height: 4),
-                UiText(
-                  'Choose English or Tamil menus in Account. Chat in English, Tamil or Tanglish; set your reply language separately.',
-                  style: TextStyle(color: Color(0xFFCAD3B5), height: 1.4),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, this.onReport});
-  final ChatMessage message;
-  final VoidCallback? onReport;
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: message.fromUser
-          ? Alignment.centerRight
-          : Alignment.centerLeft,
-      child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * .82,
-        ),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: message.fromUser ? const Color(0xFF874035) : panel,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(20),
-            topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(message.fromUser ? 20 : 5),
-            bottomRight: Radius.circular(message.fromUser ? 5 : 20),
-          ),
-          border: message.fromUser ? null : Border.all(color: line),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (message.label != null) ...[
-              Text(
-                publicReadingText(message.label!),
-                style: const TextStyle(
-                  color: gold,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: .7,
-                ),
+        child: guide.portraitIndex == null
+            ? Image.asset(
+                guide.asset,
+                fit: BoxFit.cover,
+                alignment: Alignment.topCenter,
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final i = guide.portraitIndex!;
+                  // Source is a 5x2 sheet, each portrait 4:5. Crop its top square,
+                  // keeping the built-in name strip outside the circular avatar.
+                  return Stack(
+                    children: [
+                      Positioned(
+                        left: -(i % 5) * width,
+                        top: -(i ~/ 5) * width * 1.25,
+                        width: width * 5,
+                        height: width * 2.5,
+                        child: Image.asset(
+                          guide.asset,
+                          fit: BoxFit.fill,
+                          filterQuality: FilterQuality.high,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 7),
-            ],
-            SelectionArea(
-              child: Text(
-                publicReadingText(message.text),
-                style: const TextStyle(fontSize: 16, height: 1.45),
-              ),
-            ),
-            if (onReport != null)
-              TextButton.icon(
-                onPressed: onReport,
-                icon: const Icon(Icons.flag_outlined, size: 16),
-                label: const UiText('Report answer'),
-              ),
-          ],
-        ),
       ),
     );
   }
-}
-
-class _TypingBubble extends StatelessWidget {
-  const _TypingBubble();
-  @override
-  Widget build(BuildContext context) => const Align(
-    alignment: Alignment.centerLeft,
-    child: Padding(
-      padding: EdgeInsets.only(bottom: 12),
-      child: _StatusPill(label: 'READING YOUR LANGUAGE…'),
-    ),
-  );
 }
 
 class _DisclosureCard extends StatelessWidget {
@@ -2659,14 +3041,14 @@ class _DisclosureCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: const Color(0xFF301A16),
+      color: BronzePalette.card,
       borderRadius: BorderRadius.circular(20),
       border: Border.all(color: line),
     ),
     child: const Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(Icons.shield_outlined, color: ivory, size: 20),
+        Icon(Icons.shield_outlined, color: bodyInk, size: 20),
         SizedBox(width: 11),
         Expanded(
           child: UiText(
@@ -2679,148 +3061,53 @@ class _DisclosureCard extends StatelessWidget {
   );
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader({required this.title, this.action, this.onAction});
-  final String title;
-  final String? action;
-  final VoidCallback? onAction;
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      UiText(title, style: Theme.of(context).textTheme.titleLarge),
-      if (action != null)
-        TextButton(
-          onPressed: onAction,
-          child: UiText(
-            action!,
-            style: const TextStyle(color: ivory, fontWeight: FontWeight.w700),
+Future<bool> confirmSignOut(BuildContext context) async =>
+    await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const UiText('Sign out?'),
+        content: const UiText('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const UiText('Cancel'),
           ),
-        ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const UiText('Sign out'),
+          ),
+        ],
+      ),
+    ) ==
+    true;
+
+Future<String?> showChatDepthPicker(
+  BuildContext context, {
+  int? generalCoins,
+  int? relationshipCoins,
+}) => showDialog<String>(
+  context: context,
+  builder: (dialog) => AlertDialog(
+    title: const UiText('Start chat'),
+    content: Text(
+      uiText(dialog, 'Start chat') != 'Start chat'
+          ? 'பொதுவான கேள்விகளுக்கு ஒரு பதிலுக்கு ${generalCoins ?? remoteConfig.cost('generalStandard', 10)} நாணயங்கள். '
+                'உறவு தொடர்பான கேள்விகளுக்கு ஒரு பதிலுக்கு ${relationshipCoins ?? remoteConfig.cost('relationshipStandard', 15)} நாணயங்கள். '
+                'முழுமையான பதில்களுக்கு மட்டுமே கட்டணம்.'
+          : 'General questions: ${generalCoins ?? remoteConfig.cost('generalStandard', 10)} coins per answer. '
+                'Relationship questions: ${relationshipCoins ?? remoteConfig.cost('relationshipStandard', 15)} coins per answer. '
+                'Only completed answers are charged.',
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(dialog),
+        child: const UiText('Cancel'),
+      ),
+      FilledButton(
+        key: const Key('start-unified-chat'),
+        onPressed: () => Navigator.pop(dialog, 'standard'),
+        child: const UiText('Start chat'),
+      ),
     ],
-  );
-}
-
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.label});
-  final String label;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-    decoration: BoxDecoration(
-      color: const Color(0xFF48281F),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: const Color(0xFF79533C)),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: ivory,
-        fontSize: 9,
-        fontWeight: FontWeight.w800,
-        letterSpacing: .65,
-      ),
-    ),
-  );
-}
-
-class _LanguageBadge extends StatelessWidget {
-  const _LanguageBadge({required this.label});
-  final String label;
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-    decoration: BoxDecoration(
-      color: Colors.white.withValues(alpha: .08),
-      borderRadius: BorderRadius.circular(999),
-      border: Border.all(color: Colors.white.withValues(alpha: .16)),
-    ),
-    child: Text(
-      label,
-      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-    ),
-  );
-}
-
-class _AiBadge extends StatelessWidget {
-  const _AiBadge();
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.black.withValues(alpha: .2),
-      borderRadius: BorderRadius.circular(999),
-    ),
-    child: const UiText(
-      'AI GUIDE',
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w900,
-        letterSpacing: .7,
-        color: Color(0xFFFFF0D7),
-      ),
-    ),
-  );
-}
-
-class _StarField extends StatefulWidget {
-  const _StarField();
-  @override
-  State<_StarField> createState() => _StarFieldState();
-}
-
-class _StarFieldState extends State<_StarField>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 4),
-    )..repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _controller,
-    builder: (_, _) => CustomPaint(painter: _StarPainter(_controller.value)),
-  );
-}
-
-class _StarPainter extends CustomPainter {
-  const _StarPainter(this.progress);
-  final double progress;
-  @override
-  void paint(Canvas canvas, Size size) {
-    const points = [
-      Offset(.11, .18),
-      Offset(.82, .12),
-      Offset(.91, .33),
-      Offset(.18, .42),
-      Offset(.74, .55),
-      Offset(.35, .67),
-      Offset(.88, .76),
-      Offset(.08, .82),
-    ];
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: .18 + progress * .22);
-    for (var i = 0; i < points.length; i++) {
-      final point = Offset(
-        points[i].dx * size.width,
-        points[i].dy * size.height,
-      );
-      canvas.drawCircle(point, i.isEven ? 1.4 : .8, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _StarPainter oldDelegate) =>
-      oldDelegate.progress != progress;
-}
+  ),
+);

@@ -32,14 +32,21 @@ void main() {
       ),
     );
     final field = find.byKey(const Key('birthplaceField'));
-    await tester.scrollUntilVisible(field, -150, scrollable: find.byType(Scrollable).first);
-    await tester.enterText(field, 'Ero');
+    await tester.scrollUntilVisible(
+      field,
+      -150,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    final query = find.byKey(const Key('location-search-query'));
+    await tester.enterText(query, 'Ero');
     await tester.pump(const Duration(milliseconds: 200));
     expect(requests, isEmpty);
-    await tester.enterText(field, 'Erode');
+    await tester.enterText(query, 'Erode');
     await tester.pump(const Duration(milliseconds: 351));
     expect(requests.keys, ['Erode']);
-    await tester.enterText(field, 'Kochi');
+    await tester.enterText(query, 'Kochi');
     await tester.pump(const Duration(milliseconds: 351));
     http.Response reply(String name) => http.Response(
       jsonEncode({
@@ -58,7 +65,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
   testWidgets(
-    'selected birthplace survives keyboard search and editing invalidates it',
+    'popup stays above keyboard, preserves results and selected birthplace can be cleared',
     (tester) async {
       final queries = <String>[];
       final session = ProfileSession(
@@ -92,42 +99,48 @@ void main() {
         ),
       );
       final field = find.byKey(const Key('birthplaceField'));
-      await tester.scrollUntilVisible(field, -150, scrollable: find.byType(Scrollable).first);
-      await tester.enterText(field, 'Erode, Tamil Nadu');
+      await tester.scrollUntilVisible(
+        field,
+        -150,
+        scrollable: find.byType(Scrollable).first,
+      );
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(field);
+      await tester.tap(field);
+      await tester.pumpAndSettle();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 280);
+      await tester.pumpAndSettle();
+      final query = find.byKey(const Key('location-search-query'));
+      await tester.enterText(query, 'Erode');
       await tester.pump(const Duration(milliseconds: 351));
       await tester.pumpAndSettle();
       expect(queries, ['Erode']);
       final result = find.widgetWithText(ListTile, 'Erode, Tamil Nadu');
-      await tester.ensureVisible(result);
+      expect(tester.getBottomRight(result).dy, lessThanOrEqualTo(360));
+      expect(tester.takeException(), isNull);
+      // Closing the keyboard must retain the result list.
+      tester.view.viewInsets = FakeViewPadding.zero;
+      await tester.pumpAndSettle();
+      expect(result, findsOneWidget);
       await tester.tap(result);
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(field, -150, scrollable: find.byType(Scrollable).first);
-      await tester.pumpAndSettle();
+      await tester.ensureVisible(field);
       expect(
         tester.widget<TextField>(field).decoration!.helperText,
         'Birthplace selected',
       );
-      // Both the keyboard Search action and explicit button must preserve selection.
-      tester.widget<TextField>(field).onSubmitted!('Erode, Tamil Nadu');
+      await tester.tap(find.byTooltip('Clear birthplace'));
       await tester.pumpAndSettle();
-      final search = find.widgetWithText(TextButton, 'Search birthplace');
-      await tester.ensureVisible(search);
-      await tester.tap(search);
-      await tester.pumpAndSettle();
-      expect(queries, ['Erode']);
-      await tester.scrollUntilVisible(field, -150, scrollable: find.byType(Scrollable).first);
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<TextField>(field).decoration!.helperText,
-        'Birthplace selected',
-      );
-      await tester.scrollUntilVisible(field, -150, scrollable: find.byType(Scrollable).first);
-      await tester.enterText(field, 'Ko');
-      await tester.pumpAndSettle();
+      expect(tester.widget<TextField>(field).controller!.text, isEmpty);
       expect(find.text('Birthplace selected'), findsNothing);
       expect(
-        find.text('Select a birthplace from the search results.'),
-        findsOneWidget,
+        tester.widget<TextField>(field).decoration!.helperText,
+        'Choose a search result.',
       );
       await tester.pumpWidget(const SizedBox());
       session.dispose();

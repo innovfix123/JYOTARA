@@ -1,3 +1,4 @@
+import {jsonObject} from './json-object';
 import {erasePhoneAccount} from './account-deletion';
 import {reviewerLogin} from './reviewer-auth';
 import { createHmac, createHash, randomInt, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -34,7 +35,7 @@ export class PhoneAuth {
     if(!this.configured())return response({error:'Phone sign-in is being configured. Please try again later.',code:'otp_not_configured'},503);
     if(path==='/api/auth/reviewer' || path==='/api/auth/reviewer-delete')return reviewerLogin(request,this.db,this.settings,tester,this.now());
     if(path==='/api/auth/delete-account') {
-      const body=await request.json().catch(()=>null);
+      const body=await jsonObject(request);
       if(body?.confirm!==true)return response({error:'Confirm account deletion.'},422);
       const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
       if(!token || !await erasePhoneAccount(this.db,digest(token),tester,this.now())) {
@@ -54,10 +55,27 @@ export class PhoneAuth {
     let body:any;try{body=await request.json();}catch{return response({error:'Invalid request.'},400);}
     const mobile=typeof body?.mobile==='string'?body.mobile.trim():'';
     if(!/^[6-9]\d{9}$/.test(mobile))return response({error:'Enter a valid 10-digit Indian mobile number.'},422);
-    const phone=this.hash('phone:'+mobile), now=this.now();
+    const now=this.now();
+    const officeDemo = body.officeDemo === true && this.settings.JYOTARA_OFFICE_DEMO_ENABLED === 'true'
+      && tester === this.settings.JYOTARA_SAMSUNG_TESTER_SHA256?.split(',')[0]
+      && now < Date.parse(this.settings.JYOTARA_OFFICE_DEMO_EXPIRES_AT ?? '')
+      && (this.settings.JYOTARA_OFFICE_DEMO_PHONE_HASHES ?? '').split(',').includes(this.hash('phone:'+mobile))
+      && /^\d{6}$/.test(this.settings.JYOTARA_OFFICE_DEMO_OTP ?? '');
+    // A demo phone is only an identifier, never proof of ownership of a real account.
+    const phone=this.hash((officeDemo ? 'office-demo-phone:' : 'phone:')+mobile);
     if(path==='/api/auth/send') {
-      const challenge=randomBytes(24).toString('hex'),code=String(randomInt(100000,1000000));
+      if(body.requestId!==undefined && (typeof body.requestId!=='string'||! /^[a-f0-9]{32}$/.test(body.requestId)))return response({error:'Invalid OTP request.'},400);
+      const challenge=body.requestId ? this.hash('otp-request:'+tester+':'+phone+':'+body.requestId).slice(0,48) : randomBytes(24).toString('hex'),code=officeDemo ? this.settings.JYOTARA_OFFICE_DEMO_OTP! : String(randomInt(100000,1000000));
+      let recovered:{expiresIn:number;retryAfterSeconds:number}|null=null;
       const retryAfter=await this.db.transaction(async tx=>{
+        if(body.requestId){
+          const existing=await tx.query('SELECT expires_at FROM phone_challenges WHERE id=$1 AND phone_hash=$2 AND tester_key=$3 FOR UPDATE',[challenge,phone,tester]);
+          if(existing.rows[0]?.expires_at>now){
+            const cooldown=await tx.query('SELECT expires_at FROM phone_rate_limits WHERE id=$1',['cool:'+phone]);
+            recovered={expiresIn:Math.max(1,Math.floor((existing.rows[0].expires_at-now)/1000)),retryAfterSeconds:Math.max(0,Math.ceil(((cooldown.rows[0]?.expires_at ?? now)-now)/1000))};
+            return 0;
+          }
+        }
         await tx.query('DELETE FROM phone_rate_limits WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_challenges WHERE expires_at <= $1',[now]);
         await tx.query('DELETE FROM phone_login_sessions WHERE expires_at <= $1',[now]);
@@ -73,7 +91,9 @@ export class PhoneAuth {
         await tx.query('INSERT INTO phone_challenges(id,phone_hash,tester_key,code_hash,expires_at,tries) VALUES($1,$2,$3,$4,$5,0)',[challenge,phone,tester,this.hash(challenge+':'+code),now+300000]);
         return 0;
       });
+      if(recovered)return response({challengeId:challenge,...(recovered as {expiresIn:number;retryAfterSeconds:number}),deliveryUnconfirmed:!officeDemo,officeDemo});
       if(retryAfter>0)return response({error:`Please wait ${Math.ceil(retryAfter/60)} minute${retryAfter>60?'s':''} before requesting another OTP. No SMS was sent for this attempt.`,code:'otp_rate_limit',retryAfterSeconds:retryAfter},429);
+      if(officeDemo)return response({challengeId:challenge,expiresIn:300,retryAfterSeconds:60,officeDemo:true});
       const url=new URL('https://api.authkey.io/request');
       url.search=new URLSearchParams({authkey:this.settings.AUTHKEY_KEY!,sid:this.settings.AUTHKEY_SID!,mobile,country_code:'91',otp:code}).toString();
       try {
@@ -94,7 +114,7 @@ export class PhoneAuth {
     if(path==='/api/auth/verify' || path==='/api/auth/verify-deletion') {
       const deletionOnly=path==='/api/auth/verify-deletion';
       if(typeof body.challengeId!=='string'||! /^[a-f0-9]{48}$/.test(body.challengeId)||typeof body.otp!=='string'||!/^\d{6}$/.test(body.otp))return invalid();
-      const token=randomBytes(32).toString('hex'),expires=now+30*86400000;
+      const token=randomBytes(32).toString('hex'),expires=officeDemo ? Math.min(now+86400000,Date.parse(this.settings.JYOTARA_OFFICE_DEMO_EXPIRES_AT!)) : now+30*86400000;
       const account=await this.db.transaction(async tx=>{
         const found=await tx.query('SELECT * FROM phone_challenges WHERE id=$1 FOR UPDATE',[body.challengeId]);
         const rec=found.rows[0];
@@ -110,7 +130,7 @@ export class PhoneAuth {
           await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,now+60000]);
           return id;
         }
-        const user=await tx.query('INSERT INTO phone_accounts(id,phone_hash,last_four,created_at) VALUES($1,$2,$3,$4) ON CONFLICT(phone_hash) DO UPDATE SET last_four=EXCLUDED.last_four RETURNING id',[randomBytes(16).toString('hex'),phone,mobile.slice(-4),now]);
+        const user=await tx.query('INSERT INTO phone_accounts(id,phone_hash,last_four,created_at) VALUES($1,$2,$3,$4) ON CONFLICT(phone_hash) DO UPDATE SET last_four=EXCLUDED.last_four RETURNING id',[(officeDemo ? 'office_demo_' : '')+randomBytes(16).toString('hex'),phone,mobile.slice(-4),now]);
         const id=user.rows[0].id;
         await tx.query('INSERT INTO phone_login_sessions(token_hash,account_id,tester_key,expires_at) VALUES($1,$2,$3,$4)',[digest(token),id,tester,expires]);
         return id;
@@ -120,7 +140,7 @@ export class PhoneAuth {
         const deleted=account==='already-deleted' || await erasePhoneAccount(this.db,digest(token),tester,this.now());
         return deleted?response({deleted:true}):response({error:'Deletion was not confirmed. Request another verification code and retry.'},503);
       }
-      return account?response({token,accountId:account,expiresAt:expires}):invalid();
+      return account?response({token,accountId:account,expiresAt:expires,officeDemo}):invalid();
     }
     return response({error:'Unknown authentication endpoint.'},404);
   }

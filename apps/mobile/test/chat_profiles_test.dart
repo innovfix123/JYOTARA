@@ -18,6 +18,67 @@ import 'profile_replacement_test.dart' show chartReply;
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   testWidgets(
+    'failed question returns to composer after storage restore without sending',
+    (tester) async {
+      String? disk;
+      var questionCalls = 0;
+      final vault = LocalProfileVault(
+        read: () async => disk,
+        write: (value) async => disk = value,
+      );
+      ProfileSession make() => ProfileSession(
+        vault: vault,
+        api: JyotaraApiClient(
+          baseUrl: 'https://example.test',
+          client: MockClient((request) async {
+            if (request.url.path.endsWith('kundli')) {
+              return chartReply('retry-profile');
+            }
+            questionCalls++;
+            return http.Response('{}', 503);
+          }),
+        ),
+      );
+      final first = make();
+      await first.calculate(
+        dateTime: '2002-07-29T05:00:00+05:30',
+        latitude: 11,
+        longitude: 77,
+        exactTime: true,
+      );
+      first.conversation(guides.first.name).messages.addAll(const [
+        ChatMessage(fromUser: true, text: 'திருமணத்திற்கு ஏற்ற காலம் எப்போது?'),
+        ChatMessage(
+          fromUser: false,
+          text: 'Unable to connect.',
+          label: 'ANSWER NOT CONFIRMED',
+        ),
+      ]);
+      first.conversation(guides.first.name).changed();
+      await first.flushStorage();
+      final restored = make();
+      await restored.restore();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ChatScreen(guide: guides.first, session: restored),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('chatInput')))
+            .controller!
+            .text,
+        'திருமணத்திற்கு ஏற்ற காலம் எப்போது?',
+      );
+      expect(
+        questionCalls,
+        0,
+        reason: 'Restoring a draft must not make a paid request',
+      );
+    },
+  );
+  testWidgets(
     'selection uses the chosen chart and its history; End blocks sending and Continue restores it',
     (tester) async {
       final requests = <Map<String, dynamic>>[];
@@ -67,7 +128,7 @@ void main() {
 
       final a = await make('Profile A'), b = await make('Profile B');
       a
-          .conversation('Aadhirai')
+          .conversation('Meera')
           .messages
           .add(const ChatMessage(fromUser: true, text: 'Private A question'));
       await tester.pumpWidget(
@@ -82,31 +143,13 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('Open chat with Aadhirai'), 150);
-      expect(
-        tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
-        isNull,
-      );
       await tester.ensureVisible(find.byKey(const ValueKey('chat-profile-b')));
       await tester.tap(find.byKey(const ValueKey('chat-profile-b')));
-      await tester.pump();
-      await tester.scrollUntilVisible(
-        find.text('Open chat with Aadhirai'),
-        200,
-      );
-      await tester.ensureVisible(find.text('Open chat with Aadhirai'));
-      await tester.tap(find.text('Open chat with Aadhirai'));
       await tester.pumpAndSettle();
-      // Chat opens at the latest message. Profile details remain at the top,
-      // including when report controls or enlarged text increase bubble height.
-      await tester.drag(find.byKey(const Key('chatHistoryList')), const Offset(0, 900));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Name: Profile B'), findsOneWidget);
+      expect(find.textContaining('Full name: Profile B'), findsNothing);
       expect(find.text('Private A question'), findsNothing);
-      expect(
-        find.textContaining('Hi Profile B, I’m Aadhirai.'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Welcome!'), findsOneWidget);
+      expect(find.textContaining('I’m Meera.'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('chatInput')), 'hello');
       await tester.tap(find.byKey(const Key('sendMessage')));
       await tester.pumpAndSettle();
@@ -115,11 +158,8 @@ void main() {
         isEmpty,
         reason: 'A greeting must not spend a paid reading or question quota',
       );
-      expect(b.conversation('Aadhirai').pending, isFalse);
-      expect(
-        b.conversation('Aadhirai').messages.last.text,
-        contains('Hi Profile B'),
-      );
+      expect(b.conversation('Meera').pending, isFalse);
+      expect(b.conversation('Meera').messages.last.text, contains('Hi!'));
 
       await tester.enterText(
         find.byKey(const Key('chatInput')),
@@ -128,41 +168,31 @@ void main() {
       await tester.tap(find.byKey(const Key('sendMessage')));
       await tester.pumpAndSettle();
       expect(requests.single['chartTicket'], 'ticket-Profile B');
-      expect(requests.single['guide'], 'Aadhirai');
-      expect(a.conversation('Aadhirai').messages.length, 1);
-      final suggestion = find.text('How can I understand whether our effort is mutual?');
+      expect(requests.single['guide'], 'Meera');
+      expect(a.conversation('Meera').messages.length, 1);
       expect(
-        suggestion,
-        findsOneWidget,
-        reason: 'A relevant follow-up replaces the initial chart question',
-      );
-      await tester.tap(suggestion);
-      await tester.pumpAndSettle();
-      expect(
-        requests.last['question'],
-        'How can I understand whether our effort is mutual?',
-      );
-      expect(requests.last['chartTicket'], 'ticket-Profile B');
-      expect(
-        find.widgetWithText(
-          ActionChip,
-          'How can I understand whether our effort is mutual?',
-        ),
+        find.byType(ActionChip),
         findsNothing,
+        reason:
+            'Suggestions hide after conversation starts to leave room for chat',
       );
+      expect(requests, hasLength(1));
 
-      await tester.tap(find.text('End'));
+      await tester.tap(find.byTooltip('Chat options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('End chat'));
+      await tester.pumpAndSettle();
       await tester.pumpAndSettle();
       await tester.tap(find.text('End chat'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Skip'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('chatInput')), findsNothing);
-      expect(b.conversation('Aadhirai').ended, true);
+      expect(b.conversation('Meera').ended, true);
       await tester.tap(find.text('Continue this chat'));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('chatInput')), findsOneWidget);
-      expect(b.conversation('Aadhirai').ended, false);
+      expect(b.conversation('Meera').ended, false);
     },
   );
   test(
@@ -184,7 +214,7 @@ void main() {
         longitude: 77,
         exactTime: true,
       );
-      final chat = s.conversation('Aadhirai');
+      final chat = s.conversation('Meera');
       chat.messages.add(
         const ChatMessage(fromUser: true, text: 'Saved question'),
       );
@@ -194,10 +224,10 @@ void main() {
       await s.flushStorage();
       final restored = ProfileSession(api: api(), vault: vault);
       await restored.restore();
-      expect(restored.conversation('Aadhirai').ended, true);
-      expect(restored.conversation('Aadhirai').rating, 4);
+      expect(restored.conversation('Meera').ended, true);
+      expect(restored.conversation('Meera').rating, 4);
       expect(
-        restored.conversation('Aadhirai').messages.single.text,
+        restored.conversation('Meera').messages.single.text,
         'Saved question',
       );
       expect(restored.conversation('Arivan').ended, false);

@@ -1,0 +1,18 @@
+Jyotara team dashboard — 30 September 2026
+URL: https://api.jyotara.in/dashboard/
+Service: jyotara-dashboard.service, separate from production app API.
+Deployment: /opt/jyotara/dashboard; loopback port8788 behind existing HTTPS Nginx.
+Environment: /etc/jyotara/dashboard.env (server only; never commit).
+Login database: /var/lib/jyotara-dashboard/auth.sqlite, private service account filesystem access.
+Database role: jyotara_dashboard, column-level SELECT grants, default read-only transactions and5s query timeout; no phone hash, raw chat or birth data access.
+Cache:60seconds per7/30/90-day window. Page shows retrieval time and stale/error banner. No marketing source attribution or download inference.
+Revenue definition: currently paid orders with provider payment and positive amount, selected by creation date. Excludes complimentary grants and refunded orders; not profit or settlement.
+Activity definition: distinct account IDs in live wallet chat/matching requests; not all app usage or DAU/WAU.
+Demo identities excluded; real testing accounts remain included. Deleted records cannot be reconstructed.
+Google Play installs/downloads and campaign spend/retention not connected. Requires authorised Google reporting access; never substitute registrations or opt-in Firebase events for downloads.
+Owner may issue viewer invitations from UI. Links expire24h and work once. Passwords use salted scrypt; hashed session tokens expire8h. Cookies HttpOnly, Secure, SameSite Strict. Login attempts limited; reverse proxy rate limiting enabled.
+Admin invite: node --env-file=/etc/jyotara/dashboard.env /opt/jyotara/dashboard/invite.mjs EMAIL viewer (prints sensitive one-use link; share privately).
+Rollback: stop dashboard service and restore /etc/nginx/jyotara-domain.before-dashboard after checking configuration. Do not change app API.
+Checks: auth unit tests; server integration checks anonymous401, foreign-origin403, viewer cannot invite, logout revokes session; column grants deny phone_hash and writes; live metrics queries verified7/30/90days; browser login/render/logout inspected. Temporary QA accounts removed.
+
+30 September hourly upgrade: default days=1, plus7/30/90. 24 IST-aligned clock hours including current partial hour. Hourly registrations, paid order value, recharge count, distinct reading users and completed/failed requests; zero-filled hourly table. Existing read-only grants sufficient. All four query windows verified, hourly totals reconciled to KPI cards, auth tests passed, live browser rendered. Revenue still follows order creation time, not capture time; internal real accounts included. Installs and ad metrics remain disconnected and explicitly unavailable. Rollback files server.before-hourly.mjs and index.before-hourly.html on server.

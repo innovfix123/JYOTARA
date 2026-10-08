@@ -21,8 +21,11 @@ class ProfileSession extends ChangeNotifier {
     DateTime Function()? clock,
     this.preferences,
     this.vault,
+    this.onBirthProfileSaved,
   }) : _api = api ?? JyotaraApiClient(),
        _clock = clock ?? DateTime.now;
+  final Future<void> Function(Map<String, dynamic>)? onBirthProfileSaved;
+  String? backupError;
   final JyotaraApiClient _api;
   Future<void> reportAnswer({
     required String answer,
@@ -35,6 +38,8 @@ class ProfileSession extends ChangeNotifier {
   final LanguagePreferences? preferences;
   final LocalProfileVault? vault;
   String? storageError;
+  bool _savedReadFailed = false;
+  bool get savedReadFailed => _savedReadFailed;
   // Explicit opt-in for future requests only; never inferred from chat use.
   // This test-build choice resets on restart or profile deletion/change.
   bool researchConsent = false;
@@ -49,6 +54,7 @@ class ProfileSession extends ChangeNotifier {
   void _persist({bool deletionCheckpoint = false}) {
     if ((!deletionCheckpoint && (deleting || _deletionCapability != null)) ||
         vault == null ||
+        _savedReadFailed ||
         _raw == null ||
         _facts == null) {
       return;
@@ -61,6 +67,9 @@ class ProfileSession extends ChangeNotifier {
       'session': _api.sessionForStorage,
       'profileKey': _profileKey,
       'nickname': nickname,
+      'preferredChatLanguage': preferredChatLanguage,
+      'relationshipStatus': relationshipStatus,
+      'profession': profession,
       'gender': gender?.value,
       'birthplaceLabel': birthplaceLabel,
       'raw': _raw,
@@ -72,12 +81,32 @@ class ProfileSession extends ChangeNotifier {
           'interruptedRequest': conversation.pending,
           'ended': conversation.ended,
           'rating': conversation.rating,
+          'depth': conversation.depth,
+          'billingAcknowledged': conversation.billingAcknowledged,
+          'acceptedGeneralCoins': conversation.acceptedGeneralCoins,
+          'acceptedRelationshipCoins': conversation.acceptedRelationshipCoins,
+          'updatedAt': conversation.updatedAt?.toIso8601String(),
+          'history': conversation.history
+              .map(
+                (chat) => chat
+                    .map(
+                      (m) => {
+                        'fromUser': m.fromUser,
+                        'text': m.text,
+                        'label': m.label,
+                        'wallet': m.wallet,
+                      },
+                    )
+                    .toList(),
+              )
+              .toList(),
           'messages': conversation.messages
               .map(
                 (m) => {
                   'fromUser': m.fromUser,
                   'text': m.text,
                   'label': m.label,
+                  'wallet': m.wallet,
                 },
               )
               .toList(),
@@ -85,6 +114,8 @@ class ProfileSession extends ChangeNotifier {
       ),
       'requestIds': Map<String, String>.from(_requestIds),
       'conversationContexts': _conversationContexts,
+      'conversationModes': _conversationModes,
+      'conversationMemory': _conversationMemory,
       'reportPeople': _reportPeople.map(
         (key, value) => MapEntry(key, Map<String, dynamic>.from(value)),
       ),
@@ -97,6 +128,24 @@ class ProfileSession extends ChangeNotifier {
         .then((_) {
           if (revision != _revision) return;
           storageError = null;
+          if (onBirthProfileSaved != null && !deletionCheckpoint) {
+            // Account backup contains profile/chart fields only, not chat turns.
+            unawaited(
+              onBirthProfileSaved!(snapshot)
+                  .then((_) {
+                    if (revision == _revision) {
+                      backupError = null;
+                    }
+                  })
+                  .catchError((Object _) {
+                    if (revision == _revision) {
+                      backupError =
+                          'Profile backup pending. Reopen the app to retry.';
+                      notifyListeners();
+                    }
+                  }),
+            );
+          }
           notifyListeners();
         })
         .catchError((Object _) {
@@ -111,20 +160,27 @@ class ProfileSession extends ChangeNotifier {
     final revision = _revision;
     try {
       final saved = await vault!.load();
-      if (saved == null || revision != _revision) return;
+      if (revision != _revision) return;
+      if (saved == null) {
+        _savedReadFailed = false;
+        storageError = null;
+        notifyListeners();
+        return;
+      }
       if (saved['kind'] == 'pending-profile') {
-        if (saved['origin'] != _api.storageOrigin ||
+        if (!_api.acceptsStorageOrigin(saved['origin']) ||
             saved['session'] is! String) {
           throw const FormatException('Saved request is incompatible');
         }
         _api.restoreSession(saved['session'] as String);
         profileRequestUnconfirmed = true;
+        _savedReadFailed = false;
         storageError = null;
         _revision++;
         notifyListeners();
         return;
       }
-      if (saved['origin'] != _api.storageOrigin ||
+      if (!_api.acceptsStorageOrigin(saved['origin']) ||
           saved['raw'] is! Map<String, dynamic> ||
           saved['birthTimeKnown'] is! bool ||
           saved['profileKey'] is! String) {
@@ -179,7 +235,7 @@ class ProfileSession extends ChangeNotifier {
           )) {
         throw const FormatException('Invalid saved conversation context');
       }
-      if (chats is! Map<String, dynamic> || chats.length > 20) {
+      if (chats is! Map<String, dynamic> || chats.length > 5000) {
         throw const FormatException('Invalid saved conversations');
       }
       final restoredChats = <String, GuideConversation>{};
@@ -194,12 +250,47 @@ class ProfileSession extends ChangeNotifier {
         final conversation = GuideConversation()
           ..language = chat['language'] as String
           ..ended = chat['ended'] == true
+          ..billingAcknowledged =
+              chat['billingAcknowledged'] == true &&
+              chat['acceptedGeneralCoins'] is int &&
+              chat['acceptedGeneralCoins'] >= 1 &&
+              chat['acceptedGeneralCoins'] <= 500 &&
+              chat['acceptedRelationshipCoins'] is int &&
+              chat['acceptedRelationshipCoins'] >= 1 &&
+              chat['acceptedRelationshipCoins'] <= 500
+          ..acceptedGeneralCoins = chat['acceptedGeneralCoins'] is int
+              ? chat['acceptedGeneralCoins'] as int
+              : null
+          ..acceptedRelationshipCoins = chat['acceptedRelationshipCoins'] is int
+              ? chat['acceptedRelationshipCoins'] as int
+              : null
+          ..depth = ['standard', 'detailed'].contains(chat['depth'])
+              ? chat['depth'] as String
+              : null
+          ..updatedAt = DateTime.tryParse(
+            chat['updatedAt'] is String ? chat['updatedAt'] : '',
+          )
           ..rating =
               chat['rating'] is int &&
                   chat['rating'] >= 1 &&
                   chat['rating'] <= 5
               ? chat['rating'] as int
               : null;
+        for (final old in (chat['history'] is List ? chat['history'] : [])) {
+          if (old is! List) continue;
+          conversation.history.add([
+            for (final m in old)
+              if (m is Map && m['fromUser'] is bool && m['text'] is String)
+                ChatMessage(
+                  fromUser: m['fromUser'],
+                  text: m['text'],
+                  label: m['label'] is String ? m['label'] : null,
+                  wallet: m['wallet'] is Map
+                      ? Map<String, dynamic>.from(m['wallet'])
+                      : null,
+                ),
+          ]);
+        }
         for (final message in chat['messages']) {
           if (message is! Map ||
               message['fromUser'] is! bool ||
@@ -213,6 +304,9 @@ class ProfileSession extends ChangeNotifier {
               fromUser: message['fromUser'],
               text: message['text'],
               label: message['label'],
+              wallet: message['wallet'] is Map
+                  ? Map<String, dynamic>.from(message['wallet'])
+                  : null,
             ),
           );
         }
@@ -227,11 +321,75 @@ class ProfileSession extends ChangeNotifier {
         }
         restoredChats[entry.key] = conversation;
       }
+      final restoredTurns = <String, List<Map<String, String>>>{};
+      final turns = saved['conversationContexts'];
+      if (turns is Map) {
+        for (final entry in turns.entries) {
+          if (entry.key is! String ||
+              !ids.containsKey(entry.key) ||
+              entry.value is! List) {
+            throw const FormatException('Invalid saved conversation turns');
+          }
+          final items = entry.value as List;
+          if (items.length > 32 ||
+              items.any(
+                (v) =>
+                    v is! Map ||
+                    !['user', 'assistant'].contains(v['role']) ||
+                    v['content'] is! String ||
+                    (v['content'] as String).runes.length > 4000,
+              )) {
+            throw const FormatException('Invalid saved conversation turns');
+          }
+          restoredTurns[entry.key] = items
+              .map((v) => Map<String, String>.from(v as Map))
+              .toList();
+        }
+      }
+      final restoredModes = <String, String>{};
+      final modes = saved['conversationModes'];
+      if (modes is Map) {
+        for (final entry in modes.entries) {
+          if (entry.key is! String ||
+              !ids.containsKey(entry.key) ||
+              entry.value != 'conversation') {
+            throw const FormatException('Invalid saved conversation mode');
+          }
+          restoredModes[entry.key] = 'conversation';
+        }
+      }
+      final restoredMemory = <String, List<String>>{};
+      final memory = saved['conversationMemory'];
+      if (memory is Map) {
+        for (final entry in memory.entries) {
+          if (entry.key is! String ||
+              !restoredModes.containsKey(entry.key) ||
+              entry.value is! List ||
+              (entry.value as List).length > 12 ||
+              (entry.value as List).any(
+                (v) => v is! String || v.runes.length > 1000,
+              )) {
+            throw const FormatException('Invalid saved conversation memory');
+          }
+          restoredMemory[entry.key] = List<String>.from(entry.value as List);
+        }
+      }
       _api.restoreSession(saved['session'] as String?);
       _raw = raw;
       _facts = restoredFacts;
       _profileKey = saved['profileKey'];
       nickname = _displayValue(saved['nickname'], 60) ?? '';
+      preferredChatLanguage =
+          chatLanguages.contains(saved['preferredChatLanguage'])
+          ? saved['preferredChatLanguage'] as String
+          : 'auto';
+      relationshipStatus =
+          relationshipOptions.contains(saved['relationshipStatus'])
+          ? saved['relationshipStatus'] as String
+          : '';
+      profession = professionOptions.contains(saved['profession'])
+          ? saved['profession'] as String
+          : '';
       gender = ProfileGender.fromStored(saved['gender']);
       birthplaceLabel = _displayValue(saved['birthplaceLabel'], 160);
       birthTimeKnown = known;
@@ -247,31 +405,15 @@ class ProfileSession extends ChangeNotifier {
         ..addAll(
           contexts.map((k, v) => MapEntry(k, List<String>.from(v as List))),
         );
-      _conversationContexts.clear();
-      final turns = saved['conversationContexts'];
-      if (turns is Map) {
-        for (final entry in turns.entries) {
-          if (entry.key is! String ||
-              !_requestIds.containsKey(entry.key) ||
-              entry.value is! List) {
-            throw const FormatException('Invalid saved conversation turns');
-          }
-          final items = entry.value as List;
-          if (items.length > 12 ||
-              items.any(
-                (v) =>
-                    v is! Map ||
-                    !['user', 'assistant'].contains(v['role']) ||
-                    v['content'] is! String ||
-                    (v['content'] as String).runes.length > 1800,
-              )) {
-            throw const FormatException('Invalid saved conversation turns');
-          }
-          _conversationContexts[entry.key] = items
-              .map((v) => Map<String, String>.from(v as Map))
-              .toList();
-        }
-      }
+      _conversationContexts
+        ..clear()
+        ..addAll(restoredTurns);
+      _conversationModes
+        ..clear()
+        ..addAll(restoredModes);
+      _conversationMemory
+        ..clear()
+        ..addAll(restoredMemory);
       _reportPeople.clear();
       final people = saved['reportPeople'];
       if (people is Map) {
@@ -292,6 +434,7 @@ class ProfileSession extends ChangeNotifier {
               'profileId': raw['profileId'] as String,
             }
           : null;
+      _savedReadFailed = false;
       storageError = deletionRequested
           ? 'Deletion was requested but not completed on this device. Retry deletion before continuing.'
           : null;
@@ -299,6 +442,7 @@ class ProfileSession extends ChangeNotifier {
       notifyListeners();
     } catch (_) {
       if (revision != _revision) return;
+      _savedReadFailed = true;
       storageError = 'Saved data could not be opened. It has not been deleted or overwritten.';
       notifyListeners();
     }
@@ -306,6 +450,54 @@ class ProfileSession extends ChangeNotifier {
 
   String? _profileKey;
   String nickname = '';
+  static const chatLanguages = ['auto', 'english', 'tamil', 'tanglish'];
+  static const relationshipOptions = [
+    '',
+    'Single',
+    'In a relationship',
+    'Married',
+    'Separated',
+    'Divorced',
+    'Widowed',
+    'Prefer not to say',
+  ];
+  static const professionOptions = [
+    '',
+    'Student',
+    'Employed',
+    'Self-employed',
+    'Business owner',
+    'Homemaker',
+    'Looking for work',
+    'Retired',
+    'Other',
+    'Prefer not to say',
+  ];
+  String preferredChatLanguage = 'auto';
+  String relationshipStatus = '';
+  String profession = '';
+  Future<void> saveProfilePreferences({
+    required String language,
+    required String relationship,
+    required String occupation,
+  }) async {
+    if (!chatLanguages.contains(language) ||
+        !relationshipOptions.contains(relationship) ||
+        !professionOptions.contains(occupation)) {
+      throw ArgumentError('Invalid profile preferences');
+    }
+    preferredChatLanguage = language;
+    relationshipStatus = relationship;
+    profession = occupation;
+    for (final chat in _conversations.values) {
+      chat.language = language;
+      chat.changed();
+    }
+    _persist();
+    await flushStorage();
+    notifyListeners();
+  }
+
   ProfileGender? gender;
   String? birthplaceLabel;
   BirthProfileInput? get birthInput => BirthProfileInput.fromKey(_profileKey);
@@ -316,6 +508,16 @@ class ProfileSession extends ChangeNotifier {
       ? value.trim()
       : null;
   Map<String, dynamic>? _raw;
+  List<Map<String, dynamic>> get dashaTimeline {
+    if (!birthTimeKnown) return [];
+    final rows = _raw?['dashaPeriods']?['data']?['dasha_periods'];
+    if (rows is! List) return [];
+    return rows
+        .whereType<Map>()
+        .map((e) => Map<String, dynamic>.from(e))
+        .toList();
+  }
+
   bool get profileRecovered => _raw?['profileRecovered'] == true;
   Map<String, dynamic>? _facts;
   Map<String, dynamic>? get facts =>
@@ -348,6 +550,8 @@ class ProfileSession extends ChangeNotifier {
   final _reportPeople = <String, Map<String, dynamic>>{};
   final _requestContexts = <String, List<String>>{};
   final _conversationContexts = <String, List<Map<String, String>>>{};
+  final _conversationModes = <String, String>{};
+  final _conversationMemory = <String, List<String>>{};
   final _responseReceipts = Expando<({String key, String id, int revision})>();
 
   /// Commit the displayed answer and retire its retry identity in one vault
@@ -370,6 +574,8 @@ class ProfileSession extends ChangeNotifier {
     target.pending = false;
     final originalContext = _requestContexts.remove(receipt.key);
     final originalTurns = _conversationContexts.remove(receipt.key);
+    final originalMode = _conversationModes.remove(receipt.key);
+    final originalMemory = _conversationMemory.remove(receipt.key);
     if (_requestIds[receipt.key] == receipt.id) _requestIds.remove(receipt.key);
     target.changed(); // Persists the answer and identity removal together.
     await flushStorage();
@@ -379,6 +585,12 @@ class ProfileSession extends ChangeNotifier {
       // A failed write must not make another send billable. The original disk
       // generation still contains this identity, and memory must agree.
       _requestIds.putIfAbsent(receipt.key, () => receipt.id);
+      if (originalMode != null) {
+        _conversationModes.putIfAbsent(receipt.key, () => originalMode);
+      }
+      if (originalMemory != null) {
+        _conversationMemory.putIfAbsent(receipt.key, () => originalMemory);
+      }
       if (originalTurns != null) {
         _conversationContexts.putIfAbsent(receipt.key, () => originalTurns);
       }
@@ -389,10 +601,32 @@ class ProfileSession extends ChangeNotifier {
     return true;
   }
 
+  Map<String, GuideConversation> get savedConversations =>
+      Map.unmodifiable(_conversations);
+
+  void conversationUpdated() => notifyListeners();
+
+  void startNewConversation(String guide) {
+    final chat = conversation(guide);
+    if (chat.pending) return;
+    if (chat.messages.any((m) => m.fromUser)) {
+      chat.history.add(List.of(chat.messages));
+    }
+    chat.messages.clear();
+    chat.ended = false;
+    chat.rating = null;
+    chat.billingAcknowledged = false;
+    chat.acceptedGeneralCoins = null;
+    chat.acceptedRelationshipCoins = null;
+    chat.changed();
+  }
+
   GuideConversation conversation(String guide) => _conversations.putIfAbsent(
     guide,
     () => GuideConversation()
-      ..language = preferences?.value ?? 'auto'
+      ..language = preferredChatLanguage == 'auto'
+          ? (preferences?.value ?? 'auto')
+          : preferredChatLanguage
       ..addListener(_persist),
   );
 
@@ -417,6 +651,8 @@ class ProfileSession extends ChangeNotifier {
     _conversations.clear();
   }
 
+  static const _clockTolerance = Duration(minutes: 5);
+
   bool _sessionIsFresh(DateTime now) {
     if (_raw?['chatAuthorizedAt'] != null || _raw?['chatExpiresAt'] != null) {
       final start = parseChartInstant(_raw?['chatAuthorizedAt']);
@@ -424,13 +660,13 @@ class ProfileSession extends ChangeNotifier {
       return start != null &&
           end != null &&
           end.difference(start) == const Duration(hours: 24) &&
-          !now.toUtc().isBefore(start) &&
+          !now.toUtc().add(_clockTolerance).isBefore(start) &&
           now.toUtc().isBefore(end);
     }
     final timestamp = calculatedAt;
     if (timestamp == null) return false;
     final age = now.toUtc().difference(timestamp.toUtc());
-    return !age.isNegative && age < const Duration(hours: 24);
+    return age >= -_clockTolerance && age < const Duration(hours: 24);
   }
 
   Future<void>? _renewal;
@@ -443,7 +679,7 @@ class ProfileSession extends ChangeNotifier {
       );
     }
     if (calculatedAt == null ||
-        _clock().toUtc().isBefore(calculatedAt!.toUtc())) {
+        _clock().toUtc().add(_clockTolerance).isBefore(calculatedAt!.toUtc())) {
       return Future.error(
         const JyotaraApiException(
           'Check the device clock before renewing chat access.',
@@ -476,10 +712,41 @@ class ProfileSession extends ChangeNotifier {
         'A protected saved chart is required to renew chat access.',
       );
     }
-    final result = await _api.renewChartSession(
-      chartTicket: ticket,
-      profileId: profile,
-    );
+    final Map<String, dynamic> result;
+    try {
+      result = await _api.renewChartSession(
+        chartTicket: ticket,
+        profileId: profile,
+      );
+    } on JyotaraApiException catch (e) {
+      final input = birthInput;
+      if ([
+            'renewal_unavailable',
+            'provider_refresh_required',
+          ].contains(e.code) &&
+          input != null &&
+          revision == _revision &&
+          !deleting) {
+        await calculate(
+          dateTime: input.dateTime,
+          latitude: input.latitude,
+          longitude: input.longitude,
+          exactTime: input.exactTime,
+          nickname: nickname,
+          gender: gender,
+          birthplaceLabel: birthplaceLabel,
+          refreshAccess: false,
+          forceProviderRefresh: true,
+        );
+        if (storageError != null || facts == null) {
+          throw const JyotaraApiException(
+            'Saved profile could not be refreshed. Please retry.',
+          );
+        }
+        return;
+      }
+      rethrow;
+    }
     if (revision != _revision || deleting || _deletionCapability != null) {
       throw const JyotaraApiException(
         'Your profile changed while chat access was being renewed.',
@@ -487,7 +754,8 @@ class ProfileSession extends ChangeNotifier {
     }
     final start = parseChartInstant(result['chatAuthorizedAt'])!;
     final end = parseChartInstant(result['chatExpiresAt'])!;
-    if (_clock().toUtc().isBefore(start) || !_clock().toUtc().isBefore(end)) {
+    if (_clock().toUtc().add(_clockTolerance).isBefore(start) ||
+        !_clock().toUtc().isBefore(end)) {
       throw const JyotaraApiException(
         'Check the device clock before renewing chat access.',
       );
@@ -520,6 +788,8 @@ class ProfileSession extends ChangeNotifier {
     String? nickname,
     String? birthplaceLabel,
     ProfileGender? gender,
+    bool refreshAccess = true,
+    bool forceProviderRefresh = false,
   }) async {
     if (deleting || _deletionCapability != null) {
       throw const JyotaraApiException(
@@ -539,14 +809,14 @@ class ProfileSession extends ChangeNotifier {
         (birthplaceLabel != null &&
             _displayValue(birthplaceLabel, 160) == null)) {
       throw const JyotaraApiException(
-        'Check the nickname and birthplace label.',
+        'Check the full name and birthplace label.',
       );
     }
-    if (_profileKey == key && _facts != null) {
+    if (_profileKey == key && _facts != null && !forceProviderRefresh) {
       final savedRevision = _revision;
       var requiresCalculation = false;
       try {
-        await renewChatAccess();
+        if (refreshAccess) await renewChatAccess();
       } on JyotaraApiException catch (error) {
         if (error.code != 'provider_refresh_required') rethrow;
         // Explicit Calculate action authorizes a new chart only for this status.
@@ -568,7 +838,7 @@ class ProfileSession extends ChangeNotifier {
         return;
       }
     }
-    final revision = ++_revision;
+    final revision = forceProviderRefresh ? _revision : ++_revision;
     final previousSession = _api.ensureSession();
     // Keep the saved profile/history until replacement calculations validate.
     // Asking is blocked by calculating, so these facts cannot answer a request
@@ -619,6 +889,8 @@ class ProfileSession extends ChangeNotifier {
         _reportPeople.clear();
         _requestContexts.clear();
         _conversationContexts.clear();
+        _conversationModes.clear();
+        _conversationMemory.clear();
         this.nickname = '';
         this.gender = null;
         this.birthplaceLabel = null;
@@ -628,7 +900,7 @@ class ProfileSession extends ChangeNotifier {
       if (birthplaceLabel != null) {
         this.birthplaceLabel = birthplaceLabel.trim();
       }
-      researchConsent = false;
+      if (!forceProviderRefresh) researchConsent = false;
       _facts = converted;
       _raw = response.chart;
       _profileKey = key;
@@ -647,11 +919,73 @@ class ProfileSession extends ChangeNotifier {
     }
   }
 
+  /// Resolve an unconfirmed saved request before changing its reply mode. This
+  /// is recovery, not a new reading; preserve its original receipt identity.
+  ({
+    String? depth,
+    String? upgrade,
+    String id,
+    String key,
+    bool consent,
+    String? guide,
+  })?
+  pendingGuidanceRequest({
+    required String category,
+    required String question,
+    required String responseStyle,
+    String? guide,
+  }) {
+    final profile = _raw?['profileId'];
+    final normalized = question.trim().replaceAll(RegExp(r'\s+'), ' ');
+    // Prefer this guide, then recover pre-guide legacy requests. Research
+    // preference changes affect new requests, never an uncertain receipt.
+    for (final legacy in [false, true]) {
+      for (final key in _requestIds.keys.toList().reversed) {
+        try {
+          var base = jsonDecode(key);
+          String? depth;
+          String? upgrade;
+          if (base is List && base.length == 3 && base[0] is String) {
+            depth = base[1] as String?;
+            upgrade = base[2] as String?;
+            base = jsonDecode(base[0] as String);
+          }
+          if (base is! List ||
+              ![5, 6].contains(base.length) ||
+              base[0] != profile ||
+              base[1] != category ||
+              base[2] != normalized ||
+              base[3] != responseStyle ||
+              base[4] is! bool ||
+              (depth != null && !['standard', 'detailed'].contains(depth))) {
+            continue;
+          }
+          final savedGuide = base.length == 6 ? base[5] as String? : null;
+          if (legacy ? savedGuide != null : savedGuide != guide) continue;
+          return (
+            depth: depth,
+            upgrade: upgrade,
+            id: _requestIds[key]!,
+            key: key,
+            consent: base[4] as bool,
+            guide: savedGuide,
+          );
+        } catch (_) {
+          /* Unrelated legacy identities remain intact. */
+        }
+      }
+    }
+    return null;
+  }
+
   Future<GuidanceResponse> ask({
     required String category,
     required String question,
     required String responseStyle,
     String? guide,
+    String? conversationKey,
+    String? depth,
+    String? upgradeFrom,
   }) async {
     var chart = _facts;
     // Reject invalid input before renewing access or making any network call.
@@ -715,7 +1049,16 @@ class ProfileSession extends ChangeNotifier {
     answering = true;
     notifyListeners();
     try {
-      final consent = researchConsent;
+      final pending = pendingGuidanceRequest(
+        category: category,
+        question: question,
+        responseStyle: responseStyle,
+        guide: guide,
+      );
+      final consent = pending?.consent ?? researchConsent;
+      final requestDepth = pending != null ? pending.depth : depth;
+      final requestUpgrade = pending != null ? pending.upgrade : upgradeFrom;
+      final requestGuide = pending != null ? pending.guide : guide;
       final normalizedQuestion = question.trim().replaceAll(
         RegExp(r'\s+'),
         ' ',
@@ -727,7 +1070,7 @@ class ProfileSession extends ChangeNotifier {
         responseStyle,
         consent,
       ]);
-      final requestKey = _requestIds.containsKey(legacyKey) || guide == null
+      final baseRequestKey = _requestIds.containsKey(legacyKey) || guide == null
           ? legacyKey
           : jsonEncode([
               profileId,
@@ -737,6 +1080,11 @@ class ProfileSession extends ChangeNotifier {
               consent,
               guide,
             ]);
+      final requestKey =
+          pending?.key ??
+          (depth == null && upgradeFrom == null
+              ? baseRequestKey
+              : jsonEncode([baseRequestKey, depth, upgradeFrom]));
       if (!_requestIds.containsKey(requestKey)) {
         if (_requestIds.length >= 5000) {
           throw const JyotaraApiException(
@@ -747,7 +1095,8 @@ class ProfileSession extends ChangeNotifier {
         // from this guide are retained for legacy topic routing.
         final messages = guide == null
             ? <String>[]
-            : (_conversations[guide]?.messages ?? <ChatMessage>[])
+            : (_conversations[conversationKey ?? guide]?.messages ??
+                      <ChatMessage>[])
                   .where(
                     (m) =>
                         m.fromUser &&
@@ -766,14 +1115,19 @@ class ProfileSession extends ChangeNotifier {
         final turns =
             (guide == null
                     ? <ChatMessage>[]
-                    : (_conversations[guide]?.messages ?? <ChatMessage>[]))
+                    : (_conversations[conversationKey ?? guide]?.messages ??
+                          <ChatMessage>[]))
                 .where(
                   (m) =>
                       m.text.trim().isNotEmpty &&
+                      m.wallet?['status'] != 'failed' &&
                       ![
                         'INTERRUPTED REQUEST',
                         'ERROR',
                         'REQUEST FAILED',
+                        'ANSWER NOT CONFIRMED',
+                        'REQUEST NOT COMPLETED',
+                        'SERVICE ERROR',
                       ].contains(m.label),
                 )
                 .toList();
@@ -783,28 +1137,52 @@ class ProfileSession extends ChangeNotifier {
                 normalizedQuestion) {
           turns.removeLast();
         }
+        final unified = guide != null;
+        final contextStart = max(0, turns.length - (unified ? 32 : 12));
+        if (unified) {
+          _conversationModes[requestKey] = 'conversation';
+          final earlier = turns
+              .take(contextStart)
+              .where((m) => m.fromUser)
+              .toList();
+          _conversationMemory[requestKey] = earlier
+              .skip(max(0, earlier.length - 12))
+              .map((m) => String.fromCharCodes(m.text.trim().runes.take(1000)))
+              .toList();
+        }
         _conversationContexts[requestKey] = turns
-            .skip(max(0, turns.length - 12))
+            .skip(contextStart)
             .map(
               (m) => <String, String>{
                 'role': m.fromUser ? 'user' : 'assistant',
-                'content': String.fromCharCodes(m.text.trim().runes.take(1800)),
+                'content': String.fromCharCodes(
+                  m.text.trim().runes.take(unified ? 4000 : 1800),
+                ),
               },
             )
             .toList();
         final input = birthInput;
+        // General guidance can use optional context even when time is unknown.
+        // Never invent a provider birth time or gender to unlock a reading.
+        _reportPeople[requestKey] = {
+          if (relationshipStatus.isNotEmpty &&
+              relationshipStatus != 'Prefer not to say')
+            'relationshipStatus': relationshipStatus,
+          if (profession.isNotEmpty && profession != 'Prefer not to say')
+            'profession': profession,
+        };
         if (input != null &&
             input.exactTime &&
             ['male', 'female'].contains(gender?.value) &&
             (birthplaceLabel?.isNotEmpty ?? false)) {
-          _reportPeople[requestKey] = {
+          _reportPeople[requestKey]!.addAll({
             'datetime': input.dateTime,
             'latitude': input.latitude,
             'longitude': input.longitude,
             'name': nickname.isEmpty ? 'Jyotara profile' : nickname,
             'gender': gender!.value,
             'place': birthplaceLabel!,
-          };
+          });
         }
         final random = Random.secure();
         _requestIds[requestKey] = List.generate(
@@ -839,8 +1217,12 @@ class ProfileSession extends ChangeNotifier {
         requestId: requestId,
         previousUserMessages: _requestContexts[requestKey] ?? const [],
         conversationHistory: _conversationContexts[requestKey] ?? const [],
+        responseMode: _conversationModes[requestKey],
+        conversationMemory: _conversationMemory[requestKey] ?? const [],
         reportPerson: _reportPeople[requestKey],
-        guide: guide,
+        guide: requestGuide,
+        depth: requestDepth,
+        upgradeFrom: requestUpgrade,
       );
       if (revision != _revision) {
         throw const JyotaraApiException(
@@ -882,7 +1264,7 @@ class ProfileSession extends ChangeNotifier {
     }
     if (_facts != null || _raw != null) {
       throw const JyotaraApiException(
-        'Use saved chart deletion for a completed Kundli.',
+        'Use saved chart deletion for a completed birth chart.',
       );
     }
     deleting = true;
@@ -967,10 +1349,15 @@ class ProfileSession extends ChangeNotifier {
     _reportPeople.clear();
     _requestContexts.clear();
     _conversationContexts.clear();
+    _conversationModes.clear();
+    _conversationMemory.clear();
     _facts = null;
     _raw = null;
     _profileKey = null;
     nickname = '';
+    preferredChatLanguage = 'auto';
+    relationshipStatus = '';
+    profession = '';
     gender = null;
     birthplaceLabel = null;
     calculatedAt = null;

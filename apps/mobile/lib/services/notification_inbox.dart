@@ -10,18 +10,27 @@ class AppNotice {
     required this.body,
     required this.time,
     this.read = false,
+    this.account,
   });
   final String id, title, body;
   final DateTime time;
   final bool read;
-  AppNotice seen() =>
-      AppNotice(id: id, title: title, body: body, time: time, read: true);
+  final String? account;
+  AppNotice seen() => AppNotice(
+    id: id,
+    title: title,
+    body: body,
+    time: time,
+    read: true,
+    account: account,
+  );
   Map<String, Object> toJson() => {
     'id': id,
     'title': title,
     'body': body,
     'time': time.toIso8601String(),
     'read': read,
+    if (account != null) 'account': account!,
   };
 }
 
@@ -63,6 +72,7 @@ class NotificationInbox extends ChangeNotifier {
             body: row['body'] as String,
             time: DateTime.parse(row['time'] as String),
             read: row['read'] == true,
+            account: row['account'] as String?,
           ),
         );
       }

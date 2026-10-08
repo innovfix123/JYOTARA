@@ -1,7 +1,26 @@
-import 'brand_mark.dart';
+import 'bronze_theme.dart';
+import 'matching_art.dart';
+import 'notification_center.dart';
+import 'rasi_emblem.dart';
+import 'cinematic_matching.dart';
+import 'services/matching_rasi.dart';
+import 'location_search_sheet.dart';
+import 'services/name_display.dart';
+import 'services/remote_config.dart';
+import 'payment_support.dart' show walletMode;
+import 'launch_intro.dart';
+import 'coin_wallet.dart';
 import 'services/ui_language.dart';
+import 'services/user_journey.dart';
 
 import 'dart:convert';
+import 'dart:ui' as ui;
+
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import 'dart:async';
 import 'dart:math';
 
@@ -15,14 +34,19 @@ import 'main.dart'
         accountStorage,
         testerAccess,
         profileSession,
-        ivory,
-        muted;
+        bodyInk,
+        muted,
+        MainTabScope;
 import 'birth_form.dart';
 import 'south_chart.dart';
 import 'services/jyotara_api.dart';
 import 'services/profile_session.dart';
 import 'services/profile_gender.dart';
 import 'services/local_profile_vault.dart';
+
+part 'daily_rhythm.dart';
+part 'matching_studio.dart';
+part 'matching_entry.dart';
 
 const zodiacNames = [
   'Mesha · Aries',
@@ -54,10 +78,10 @@ const zodiacIds = [
 ];
 String readingLanguage(BuildContext context) =>
     context
-                .dependOnInheritedWidgetOfExactType<UiLanguageScope>()
-                ?.notifier
-                ?.value ==
-            'ta'
+            .dependOnInheritedWidgetOfExactType<UiLanguageScope>()
+            ?.notifier
+            ?.value ==
+        'ta'
     ? 'ta'
     : 'en';
 
@@ -73,10 +97,15 @@ Future<Map<String, dynamic>> discoveryRequest(
   http.Client? client,
 }) async {
   try {
+    if (coinWalletEnabled && path == '/api/kundli/matching') {
+      body = await confirmCoins('matching', body);
+    }
     final response = await (client?.post ?? http.post)(
       Uri.parse(defaultApiBaseUrl).resolve(path),
       headers: {
         'Content-Type': 'application/json',
+        if (coinWalletEnabled && path == '/api/kundli/matching')
+          'X-Jyotara-Wallet-Mode': walletMode,
         if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))
           'X-Jyotara-Phone-Auth': 'required',
         'X-Jyotara-Tester-Code': testerAccess.code ?? '',
@@ -106,38 +135,57 @@ Future<Map<String, dynamic>> discoveryRequest(
 }
 
 class DiscoveryActions extends StatelessWidget {
-  const DiscoveryActions({super.key});
+  const DiscoveryActions({super.key, this.editorial = false});
+  final bool editorial;
   @override
   Widget build(BuildContext context) => Column(
     children: [
-      Align(
-        alignment: Alignment.centerRight,
-        child: OutlinedButton.icon(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute<void>(builder: (_) => const WalletScreen()),
+      if (!editorial)
+        Align(
+          alignment: Alignment.centerRight,
+          child: OutlinedButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute<void>(builder: (_) => const WalletScreen()),
+            ),
+            icon: const Icon(Icons.account_balance_wallet_outlined),
+            label: const UiText('Wallet · ₹0  +'),
           ),
-          icon: const Icon(Icons.account_balance_wallet_outlined),
-          label: const UiText('Wallet · ₹0  +'),
         ),
-      ),
-      const SizedBox(height: 12),
+      if (!editorial) const SizedBox(height: 12),
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final item in [
-            (
-              Icons.wb_sunny_outlined,
-              'Daily\nHoroscope',
-              const DailyHoroscopeScreen(),
-            ),
-            (
-              Icons.grid_on_rounded,
-              'Free\nKundli',
-              const KundliLibraryScreen(),
-            ),
-            (Icons.favorite_border, 'Kundli\nMatching', const MatchingScreen()),
-          ])
+          for (final item
+              in [
+                (
+                  Icons.wb_sunny_outlined,
+                  'Daily\nHoroscope',
+                  const FeatureGate(
+                    feature: 'daily',
+                    child: DailyHoroscopeScreen(),
+                  ),
+                ),
+                (
+                  Icons.grid_on_rounded,
+                  'Free\nKundli',
+                  const KundliLibraryScreen(),
+                ),
+                (
+                  Icons.favorite_border,
+                  editorial ? 'Matching' : 'Birth Chart\nMatching',
+                  const FeatureGate(
+                    feature: 'matching',
+                    child: MatchingScreen(),
+                  ),
+                ),
+              ].where(
+                (item) => item.$1 == Icons.wb_sunny_outlined
+                    ? RemoteConfigScope.watch(context).enabled('daily')
+                    : item.$1 == Icons.favorite_border
+                    ? RemoteConfigScope.watch(context).enabled('matching')
+                    : true,
+              ))
             Expanded(
               child: InkWell(
                 borderRadius: BorderRadius.circular(20),
@@ -145,17 +193,50 @@ class DiscoveryActions extends StatelessWidget {
                   context,
                   MaterialPageRoute<void>(builder: (_) => item.$3),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(8),
+                child: Container(
+                  constraints: editorial
+                      ? const BoxConstraints(minHeight: 140)
+                      : null,
+                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: editorial ? 20 : 18,
+                  ),
+                  decoration: BoxDecoration(
+                    color: BronzePalette.card,
+                    borderRadius: BorderRadius.circular(editorial ? 12 : 20),
+                    border: editorial
+                        ? null
+                        : Border.all(color: BronzePalette.border),
+                  ),
                   child: Column(
                     children: [
-                      CircleAvatar(
-                        radius: 30,
-                        backgroundColor: const Color(0xFF66402C),
-                        child: Icon(item.$1, color: ivory, size: 28),
-                      ),
+                      if (editorial)
+                        SizedBox(
+                          height: 48,
+                          child: CustomPaint(
+                            size: const Size(44, 44),
+                            painter: _HomeToolPainter(item.$1),
+                          ),
+                        )
+                      else
+                        CircleAvatar(
+                          radius: 30,
+                          backgroundColor: BronzePalette.raised,
+                          child: Icon(
+                            item.$1,
+                            color: BronzePalette.accent,
+                            size: 28,
+                          ),
+                        ),
                       const SizedBox(height: 10),
-                      UiText(item.$2, textAlign: TextAlign.center),
+                      UiText(
+                        item.$2,
+                        textAlign: TextAlign.center,
+                        style: editorial
+                            ? const TextStyle(fontSize: 12, height: 1.35)
+                            : null,
+                      ),
                     ],
                   ),
                 ),
@@ -165,6 +246,53 @@ class DiscoveryActions extends StatelessWidget {
       ),
     ],
   );
+}
+
+class _HomeToolPainter extends CustomPainter {
+  const _HomeToolPainter(this.icon);
+  final IconData icon;
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = BronzePalette.gold
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.3;
+    final c = Offset(size.width / 2, size.height / 2);
+    if (icon == Icons.favorite_border) {
+      final heart = Path()
+        ..moveTo(c.dx, c.dy + 17)
+        ..cubicTo(c.dx - 32, c.dy - 3, c.dx - 17, c.dy - 26, c.dx, c.dy - 11)
+        ..cubicTo(c.dx + 17, c.dy - 26, c.dx + 32, c.dy - 3, c.dx, c.dy + 17);
+      canvas.drawPath(heart, p);
+    } else if (icon == Icons.grid_on_rounded) {
+      for (final dx in [-17.0, 2.0]) {
+        for (final dy in [-17.0, 2.0]) {
+          final rect = Rect.fromLTWH(c.dx + dx, c.dy + dy, 15, 15);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+            Paint()
+              ..shader = const LinearGradient(
+                colors: [Color(0xFFFFD88C), Color(0xFFAF7428)],
+              ).createShader(rect),
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+            p,
+          );
+        }
+      }
+    } else {
+      canvas.drawCircle(c, 11, p);
+      for (var i = 0; i < 12; i++) {
+        final angle = i * pi / 6;
+        final direction = Offset(cos(angle), sin(angle));
+        canvas.drawLine(c + direction * 16, c + direction * 21, p);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HomeToolPainter old) => icon != old.icon;
 }
 
 class WalletScreen extends StatefulWidget {
@@ -187,7 +315,7 @@ class _WalletScreenState extends State<WalletScreen> {
           style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
-        const UiText('Wallet preview', style: TextStyle(color: ivory)),
+        const UiText('Wallet preview', style: TextStyle(color: bodyInk)),
         const UiText(
           'Choose a recharge amount to preview. Payments and deductions are not enabled during this test.',
         ),
@@ -210,10 +338,10 @@ class _WalletScreenState extends State<WalletScreen> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 28),
                       backgroundColor: selected == amount
-                          ? const Color(0xFF66402C)
+                          ? BronzePalette.raised
                           : null,
                       side: BorderSide(
-                        color: selected == amount ? ivory : muted,
+                        color: selected == amount ? bodyInk : muted,
                       ),
                     ),
                     child: UiText('₹$amount'),
@@ -242,200 +370,346 @@ class _WalletScreenState extends State<WalletScreen> {
 }
 
 class DailyHoroscopeScreen extends StatefulWidget {
-  const DailyHoroscopeScreen({super.key, this.request = discoveryRequest});
+  const DailyHoroscopeScreen({
+    super.key,
+    this.request = discoveryRequest,
+    this.readCity,
+    this.writeCity,
+    this.pickCity,
+  });
+  final Future<String?> Function()? readCity;
+  final Future<void> Function(String)? writeCity;
+  final Future<List<dynamic>?> Function(BuildContext, String)? pickCity;
   final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
   request;
   @override
   State<DailyHoroscopeScreen> createState() => _DailyHoroscopeScreenState();
 }
 
-class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
-  int sign = 0, day = 0, revision = 0;
-  Map<String, dynamic>? reading;
-  String? error;
-  bool busy = false;
-  String? _language;
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final value = readingLanguage(context);
-    if (_language != value) {
-      _language = value;
-      _load();
-    }
-  }
+String dailyShortText(String value) {
+  final sentences = value.trim().split(RegExp(r'(?<=[.!?。])\s+'));
+  return sentences.first;
+}
 
+// Preserve provider wording while separating complete thoughts into short reading points.
+List<String> dailyReadingPoints(String value) => value
+    .trim()
+    .split(RegExp(r'(?<=[.!?。])\s+|\n+'))
+    .where((part) => part.trim().isNotEmpty)
+    .map((part) => part.trim())
+    .toList();
+
+// Topic labels describe source content, not a new prediction or a rating.
+String dailyTheme(Map<String, dynamic> reading, bool tamil) {
+  final text = (reading['sections'] as List? ?? [])
+      .map((e) => e['text'])
+      .join(' ')
+      .toLowerCase();
+  for (final topic in [
+    (
+      ['communicat', 'conversation', 'பேச்சு', 'உரையாட'],
+      'Communication',
+      'உரையாடல்',
+    ),
+    (['family', 'குடும்ப'], 'Family', 'குடும்பம்'),
+    (['plan', 'திட்ட'], 'Planning', 'திட்டமிடல்'),
+    (['patien', 'பொறும'], 'Patience', 'பொறுமை'),
+    (['creativ', 'படைப்ப'], 'Creativity', 'படைப்பாற்றல்'),
+    (['work', 'career', 'வேலை', 'தொழில்'], 'Work', 'வேலை'),
+    (['relationship', 'உறவு'], 'Relationships', 'உறவுகள்'),
+  ]) {
+    if (topic.$1.any(text.contains)) return tamil ? topic.$3 : topic.$2;
+  }
+  return tamil ? 'இன்றைய பலன்' : 'Daily reading';
+}
+
+class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
+  void updateDaily(VoidCallback action) => setState(action);
+
+  int sign = 0, day = 0, revision = 0, calendarRevision = 0, energyTab = 0;
+  final scroll = ScrollController();
+  String? profileRasi;
+  String? language, error, calendarError, city;
+  double? latitude, longitude;
+  bool busy = false, calendarBusy = false;
+  final readings = <int, Map<String, dynamic>>{};
+  Map<String, dynamic>? calendar;
+  String local(String en, String ta) =>
+      readingLanguage(context) == 'ta' ? ta : en;
   String get date => DateTime.now()
       .toUtc()
       .add(Duration(hours: 5, minutes: 30, days: day))
       .toIso8601String()
       .substring(0, 10);
-  Future<void> _load() async {
-    final current = ++revision;
-    setState(() {
-      busy = true;
-      reading = null;
-      error = null;
-    });
-    try {
-      final value = await widget.request('/api/horoscope/daily', {
-        'sign': zodiacIds[sign],
-        'date': date,
-        'language': readingLanguage(context),
-      });
-      if (mounted && current == revision) setState(() => reading = value);
-    } catch (e) {
-      if (mounted && current == revision) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          !MainTabScope.contains(context) &&
+          ModalRoute.of(context)?.isCurrent != false) {
+        userJourney.screen('daily');
       }
-    } finally {
-      if (mounted && current == revision) setState(() => busy = false);
+    });
+    final initial = SouthIndianChart.signIndex(profileSession.facts?['rashi']);
+    sign = initial < 0 ? 0 : initial;
+    profileRasi = profileSession.facts?['rashi']?.toString();
+    profileSession.addListener(profileChanged);
+    _restoreCity();
+  }
+
+  void profileChanged() {
+    final next = profileSession.facts?['rashi']?.toString();
+    if (!mounted) return;
+    if (next == profileRasi) {
+      setState(() {});
+      return;
+    }
+    profileRasi = next;
+    final index = SouthIndianChart.signIndex(next);
+    setState(() => sign = index < 0 ? 0 : index);
+    _load();
+  }
+
+  int _cityRevision = 0;
+  Future<void> _citySave = Future.value();
+
+  Future<void> _restoreCity() async {
+    final revision = _cityRevision;
+    try {
+      final saved =
+          await (widget.readCity?.call() ??
+              SharedPreferencesAsync().getString('jyotara.daily.city.v1'));
+      if (saved == null || !mounted || revision != _cityRevision) return;
+      final v = jsonDecode(saved) as Map;
+      setState(() {
+        city = v['name'];
+        latitude = (v['lat'] as num).toDouble();
+        longitude = (v['lon'] as num).toDouble();
+      });
+      _loadCalendar();
+    } catch (_) {
+      /* A city can be selected again if preferences are unavailable. */
     }
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const UiText('Daily Horoscope')),
-    body: ListView(
-      padding: const EdgeInsets.all(20),
-      children: [
-        const UiText(
-          'A little guidance for your day',
-          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 8),
-        const UiText(
-          'General zodiac readings for all 12 signs. These are not personal birth-chart predictions.',
-          style: TextStyle(color: muted),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: 144,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: 12,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (_, i) => SizedBox(
-              width: 110,
-              child: InkWell(
-                onTap: () {
-                  setState(() => sign = i);
-                  _load();
-                },
-                child: Column(
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: sign == i ? ivory : Colors.transparent,
-                          width: 2,
-                        ),
-                      ),
-                      child: RasiFigure(index: i),
-                    ),
-                    const SizedBox(height: 8),
-                    UiText(
-                      zodiacLabel(context, i).replaceFirst(' · ', '\n'),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: sign == i ? ivory : muted),
-                    ),
-                  ],
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final next = readingLanguage(context);
+    if (language != next) {
+      language = next;
+      _load();
+      _loadCalendar();
+    }
+  }
+
+  @override
+  void dispose() {
+    revision++;
+    calendarRevision++;
+    profileSession.removeListener(profileChanged);
+    scroll.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    final rev = ++revision, selected = sign;
+    final requestedDate = date, requestedLanguage = language;
+    setState(() {
+      busy = true;
+      error = null;
+      readings.clear();
+    });
+    Future<void> fetch(int i) async {
+      try {
+        final value = await widget.request('/api/horoscope/daily', {
+          'sign': zodiacIds[i],
+          'date': requestedDate,
+          'language': i == selected ? requestedLanguage : 'en',
+        });
+        if (mounted &&
+            rev == revision &&
+            readings[i]?['_displayLanguage'] != requestedLanguage) {
+          value['_displayLanguage'] = i == selected ? requestedLanguage : 'en';
+          setState(() => readings[i] = value);
+        }
+      } catch (_) {
+        if (mounted && rev == revision && i == selected) {
+          setState(
+            () => error = local(
+              'Reading unavailable. Please retry.',
+              'பலன் கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.',
+            ),
+          );
+        }
+      }
+    }
+
+    await fetch(selected);
+    if (!mounted || rev != revision) return;
+    setState(() => busy = false);
+  }
+
+  Future<void> selectSign(int i) async {
+    setState(() {
+      sign = i;
+      error = null;
+      busy = false;
+    });
+    scroll.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    if (readings[i]?['_displayLanguage'] == language) return;
+    final rev = revision;
+    final requestedLanguage = language;
+    setState(() => busy = true);
+    try {
+      final value = await widget.request('/api/horoscope/daily', {
+        'sign': zodiacIds[i],
+        'date': date,
+        'language': requestedLanguage,
+      });
+      if (mounted && rev == revision) {
+        value['_displayLanguage'] = requestedLanguage;
+        setState(() => readings[i] = value);
+      }
+    } catch (_) {
+      if (mounted && rev == revision && sign == i) {
+        setState(
+          () => error = local(
+            'Reading unavailable. Please retry.',
+            'பலன் கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted && rev == revision && sign == i) setState(() => busy = false);
+    }
+  }
+
+  Future<void> _loadCalendar() async {
+    final rev = ++calendarRevision;
+    setState(() {
+      calendar = null;
+      calendarError = null;
+      calendarBusy = city != null;
+    });
+    if (city == null) return;
+    try {
+      final v = await widget.request('/api/explore/panchang', {
+        'date': date,
+        'latitude': latitude,
+        'longitude': longitude,
+        'language': 'en',
+      });
+      if (mounted && rev == calendarRevision) setState(() => calendar = v);
+    } catch (_) {
+      if (mounted && rev == calendarRevision) {
+        setState(
+          () => calendarError = local(
+            'Timings unavailable',
+            'நேரங்கள் கிடைக்கவில்லை',
+          ),
+        );
+      }
+    } finally {
+      if (mounted && rev == calendarRevision) {
+        setState(() => calendarBusy = false);
+      }
+    }
+  }
+
+  Future<void> _chooseCity() async {
+    final chosen = await (widget.pickCity != null
+        ? widget.pickCity!(context, city ?? '')
+        : pickIndianLocation(
+            context,
+            profileSession,
+            initialQuery: city ?? '',
+            title: 'Current city',
+          ));
+    if (chosen == null || !mounted) return;
+    _cityRevision++;
+    setState(() {
+      city = '${chosen[1]}, ${chosen[2]}';
+      latitude = (chosen[6] as num).toDouble();
+      longitude = (chosen[7] as num).toDouble();
+    });
+    _loadCalendar();
+    final saved = jsonEncode({'name': city, 'lat': latitude, 'lon': longitude});
+    _citySave = _citySave.then((_) async {
+      try {
+        await (widget.writeCity?.call(saved) ??
+            SharedPreferencesAsync().setString('jyotara.daily.city.v1', saved));
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                local(
+                  'City could not be saved. Please select it again.',
+                  'நகரத்தைச் சேமிக்க முடியவில்லை. மீண்டும் தேர்ந்தெடுக்கவும்.',
                 ),
               ),
             ),
-          ),
-        ),
-        Row(
-          children: [
-            for (final d in [-1, 0, 1])
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(3),
-                  child: ChoiceChip(
-                    showCheckmark: false,
-                    label: UiText(['Yesterday', 'Today', 'Tomorrow'][d + 1]),
-                    selected: day == d,
-                    onSelected: (_) {
-                      setState(() => day = d);
-                      _load();
-                    },
-                  ),
-                ),
-              ),
-          ],
-        ),
-        const SizedBox(height: 20),
-        Center(child: RasiFigure(index: sign, size: 96)),
-        const SizedBox(height: 12),
-        UiText(
-          '${zodiacLabel(context, sign)}\n$date · IST',
-          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 18),
-        if (busy)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.all(32),
-              child: CircularProgressIndicator(),
-            ),
-          ),
-        if (error != null) ...[
-          UiText(error!),
-          TextButton(onPressed: _load, child: const UiText('Retry')),
-        ],
-        if (reading != null) ...[
-          for (final section in reading!['sections'] as List)
-            _ReadingCard(
-              section['title'] as String,
-              section['text'] as String,
-              details: section['details'] as String?,
-            ),
-          const _ReadingCard(
-            'Money · everyday reminder',
-            'Check your available budget before spending. Give yourself time to compare options before a purchase.',
-          ),
-          const UiText(
-            'These daily readings are traditional astrology, not medical assessments. Money is an everyday reminder, not a date-specific forecast.',
-            style: TextStyle(color: muted, fontSize: 12),
-          ),
-        ],
-      ],
+          );
+        }
+      }
+    });
+    await _citySave;
+  }
+
+  String time(dynamic value) {
+    final v = DateTime.tryParse('$value')
+        ?.toUtc()
+        .add(const Duration(hours: 5, minutes: 30));
+    return v == null
+        ? '—'
+        : '${v.hour.toString().padLeft(2, '0')}:${v.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget heading(String en, String ta) => Padding(
+    padding: const EdgeInsets.only(top: 22, bottom: 10),
+    child: Text(
+      local(en, ta),
+      style: const TextStyle(
+        fontSize: 22,
+        fontFamily: 'JyotaraEditorial',
+        color: BronzePalette.gold,
+      ),
     ),
   );
+  @override
+  Widget build(BuildContext context) => _dailyLayout();
 }
 
 class _ReadingCard extends StatelessWidget {
-  const _ReadingCard(this.title, this.text, {this.details});
-  final String? details;
+  const _ReadingCard(this.title, this.text);
   final String title, text;
   @override
-  Widget build(BuildContext context) => Card(
-    margin: const EdgeInsets.only(bottom: 14),
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          UiText(
-            readingText(context, title),
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: ivory,
+  Widget build(BuildContext context) => EntranceReveal(
+    child: Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            UiText(
+              readingText(context, title),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: bodyInk,
+              ),
             ),
-          ),
-          const SizedBox(height: 10),
-          UiText(readingText(context, text)),
-          if (details != null && details != text)
-            ExpansionTile(
-              tilePadding: EdgeInsets.zero,
-              title: UiText(readingText(context, 'Full reading')),
-              children: [UiText(details!)],
-            ),
-        ],
+            const SizedBox(height: 10),
+            UiText(readingText(context, text)),
+          ],
+        ),
       ),
     ),
   );
@@ -458,7 +732,7 @@ class KundliLibrary {
     final result = <SavedKundli>[];
     for (final id in ids) {
       if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(id)) {
-        throw const FormatException('Invalid saved Kundli');
+        throw const FormatException('Invalid saved birth chart');
       }
       final session = _session(id);
       await session.restore();
@@ -470,20 +744,21 @@ class KundliLibrary {
   static ProfileSession _session(String id) {
     final storageKey = accountStorage.key('jyotara.kundli.$id');
     return ProfileSession(
-    api: JyotaraApiClient(
-      testerCode: () => testerAccess.code,
-      phoneToken: () => phoneAccess.token,
-    ),
-    vault: LocalProfileVault(
-      read: () => storage.read(key: storageKey),
-      write: (value) => accountStorage.writeKey(storageKey, value),
-    ),
-  );
+      api: JyotaraApiClient(
+        testerCode: () => testerAccess.code,
+        phoneToken: () => phoneAccess.token,
+      ),
+      vault: LocalProfileVault(
+        read: () => storage.read(key: storageKey),
+        write: (value) => accountStorage.writeKey(storageKey, value),
+      ),
+    );
   }
+
   static Future<SavedKundli> create(List<SavedKundli> rows) async {
     if (rows.length >= 10) {
       throw Exception(
-        'You can save up to 10 Kundlis. Remove one to add another.',
+        'You can save up to 10 birth charts. Remove one to add another.',
       );
     }
     final random = Random.secure();
@@ -500,9 +775,8 @@ class KundliLibrary {
 
   static Future<void> remove(SavedKundli row, List<SavedKundli> rows) async {
     final originalIndexKey = indexKey;
-    if (row.session.storageError != null) {
-      throw Exception(row.session.storageError);
-    }
+    // A previous failed deletion is retryable. The session retains the server
+    // capability and confirms storage again before the index is removed.
     if (row.session.facts == null) {
       await row.session.discardUnfinished();
     } else {
@@ -513,15 +787,14 @@ class KundliLibrary {
     }
     await accountStorage.writeKey(
       originalIndexKey,
-      jsonEncode(
-        rows.where((r) => r.id != row.id).map((r) => r.id).toList(),
-      ),
+      jsonEncode(rows.where((r) => r.id != row.id).map((r) => r.id).toList()),
     );
   }
 }
 
 class KundliLibraryScreen extends StatefulWidget {
-  const KundliLibraryScreen({super.key});
+  const KundliLibraryScreen({super.key, this.includeOwnProfile = false});
+  final bool includeOwnProfile;
   @override
   State<KundliLibraryScreen> createState() => _KundliLibraryScreenState();
 }
@@ -552,7 +825,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
       if (mounted) {
         setState(() {
           libraryLoaded = false;
-          error = 'Saved Kundlis could not be opened. Please retry.';
+          error = 'Saved birth charts could not be opened. Please retry.';
         });
       }
     } finally {
@@ -569,7 +842,8 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
       await Navigator.push(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => BirthForm(session: selected.session),
+          builder: (_) =>
+              BirthForm(session: selected.session, onboarding: true),
         ),
       );
       await selected.session.flushStorage();
@@ -591,7 +865,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const UiText('Delete this Kundli?'),
+        title: const UiText('Delete this birth chart?'),
         content: const UiText(
           'This removes its saved chart from this device and the server.',
         ),
@@ -623,7 +897,11 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const UiText('Free Kundli')),
+    appBar: AppBar(
+      title: UiText(
+        widget.includeOwnProfile ? 'My Profiles' : 'Free Birth Chart',
+      ),
+    ),
     body: ListView(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -632,13 +910,31 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         20 + MediaQuery.viewPaddingOf(context).bottom,
       ),
       children: [
+        if (widget.includeOwnProfile)
+          Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: ListTile(
+              title: Text(profileSession.nickname),
+              subtitle: Text(
+                '${uiText(context, profileSession.facts?['rashi'] as String? ?? 'Unavailable')} · ${profileSession.birthInput?.indiaDateTime.toString().substring(0, 10) ?? ''}\n${profileSession.birthplaceLabel ?? ''}',
+              ),
+              trailing: const Icon(Icons.edit_outlined),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) =>
+                      BirthForm(session: profileSession, onboarding: true),
+                ),
+              ),
+            ),
+          ),
         const UiText(
           'Charts for the people you know',
           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 8),
         const UiText(
-          'Save up to 10 separate Kundlis with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.',
+          'Save up to 10 separate birth charts with permission. Your own chat profile stays separate. Up to 10 new chart sessions per tester per day.',
           style: TextStyle(color: muted),
         ),
         const SizedBox(height: 18),
@@ -646,7 +942,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
           onChanged: (v) => setState(() => query = v),
           decoration: InputDecoration(
             prefixIcon: const Icon(Icons.search),
-            hintText: uiText(context, 'Search Kundli by name'),
+            hintText: uiText(context, 'Search birth chart by name'),
           ),
         ),
         const SizedBox(height: 20),
@@ -655,13 +951,13 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
           UiText(error!),
           TextButton(
             onPressed: busy ? null : _load,
-            child: const UiText('Retry loading Kundlis'),
+            child: const UiText('Retry loading birth charts'),
           ),
         ],
         if (!busy && rows.isEmpty)
           const Padding(
             padding: EdgeInsets.all(24),
-            child: UiText('Your saved Kundlis will appear here.'),
+            child: UiText('Your saved birth charts will appear here.'),
           ),
         for (final row in rows.where(
           (r) => r.session.nickname.toLowerCase().contains(query.toLowerCase()),
@@ -671,7 +967,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
             child: ListTile(
               title: UiText(
                 row.session.nickname.isEmpty
-                    ? 'Unfinished Kundli'
+                    ? 'Unfinished Birth Chart'
                     : row.session.nickname,
               ),
               subtitle: UiText(
@@ -715,12 +1011,12 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   IconButton(
-                    tooltip: uiText(context, 'Edit Kundli'),
+                    tooltip: uiText(context, 'Edit birth chart'),
                     onPressed: busy ? null : () => _edit(row),
                     icon: const Icon(Icons.edit_outlined),
                   ),
                   IconButton(
-                    tooltip: uiText(context, 'Delete Kundli'),
+                    tooltip: uiText(context, 'Delete birth chart'),
                     onPressed: busy ? null : () => _remove(row),
                     icon: const Icon(Icons.delete_outline),
                   ),
@@ -732,7 +1028,7 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         FilledButton.icon(
           onPressed: busy || !libraryLoaded ? null : () => _edit(),
           icon: const Icon(Icons.add),
-          label: const UiText('Create New Kundli'),
+          label: const UiText('Create New Birth Chart'),
         ),
       ],
     ),
@@ -740,7 +1036,17 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
 }
 
 class MatchingScreen extends StatefulWidget {
-  const MatchingScreen({super.key, this.request = discoveryRequest, this.loadKundlis = KundliLibrary.load});
+  const MatchingScreen({
+    super.key,
+    this.request = discoveryRequest,
+    this.loadKundlis = KundliLibrary.load,
+    this.resolveRasi = resolveMatchingPersonRasi,
+    this.createKundli = KundliLibrary.create,
+    this.removeKundli = KundliLibrary.remove,
+  });
+  final Future<SavedKundli> Function(List<SavedKundli>) createKundli;
+  final Future<void> Function(SavedKundli, List<SavedKundli>) removeKundli;
+  final Future<String?> Function(Map<String, dynamic>) resolveRasi;
   final Future<List<SavedKundli>> Function() loadKundlis;
   final Future<Map<String, dynamic>> Function(String, Map<String, dynamic>)
   request;
@@ -748,26 +1054,48 @@ class MatchingScreen extends StatefulWidget {
   State<MatchingScreen> createState() => _MatchingScreenState();
 }
 
+Future<String?> resolveMatchingPersonRasi(Map<String, dynamic> person) =>
+    loadMatchingRasi(
+      person,
+      phoneToken: () => phoneAccess.token,
+      testerCode: () => testerAccess.code,
+    );
+
 class _MatchingScreenState extends State<MatchingScreen> {
   List<SavedKundli> rows = [];
   SavedKundli? boy, girl;
   Map<String, dynamic>? boyDraft, girlDraft;
-  bool consent = false, busy = false, openSaved = false;
-  String searchName = '';
-  bool selectBoy = true;
+  final Set<String> _pendingRasi = {};
+  bool consent = false, busy = false;
+  String connectionType = 'My Crush';
+  List<Map<String, dynamic>> people = [];
+  String get peopleKey => accountStorage.key('jyotara.matching.people.v1');
   String? error;
   Map<String, dynamic>? result;
+  void _selectContext(String value) => setState(() => connectionType = value);
+  void _selectConsent(bool? value) => setState(() => consent = value ?? false);
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent != false) {
+        userJourney.screen('matching');
+      }
+    });
     _load();
   }
 
   Future<void> _load() async {
     try {
       final saved = await widget.loadKundlis();
+      final savedPeople = await KundliLibrary.storage.read(key: peopleKey);
       if (mounted) {
         setState(() {
+          people = savedPeople == null
+              ? []
+              : (jsonDecode(savedPeople) as List)
+                    .map((e) => Map<String, dynamic>.from(e as Map))
+                    .toList();
           rows = [
             if (profileSession.facts != null)
               SavedKundli('personal', profileSession),
@@ -779,7 +1107,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => error = 'Could not open saved Kundlis.');
+      if (mounted) setState(() => error = 'Could not open saved birth charts.');
     }
   }
 
@@ -795,17 +1123,303 @@ class _MatchingScreenState extends State<MatchingScreen> {
     };
   }
 
-  String _detailsLabel(bool male) {
-    final selected = male ? boy : girl;
-    final data =
-        (male ? boyDraft : girlDraft) ??
-        (selected?.session.birthInput == null ? null : _input(selected!));
-    if (data == null) return uiText(context, 'No birth details entered yet.');
-    final stamp = DateTime.parse(data['datetime'] as String)
-        .toUtc()
-        .add(const Duration(hours: 5, minutes: 30))
-        .toIso8601String();
-    return '${data['nickname'] ?? uiText(context, 'Saved profile')}\n${stamp.substring(0, 10)} · ${data['exactTime'] == true ? '${stamp.substring(11, 16)} IST · ${uiText(context, 'confirmed birth time')}' : uiText(context, 'Birth time unknown — provisional comparison')}\n${data['birthplaceLabel'] ?? ''}';
+  String local(String en, String ta) =>
+      readingLanguage(context) == 'ta' ? ta : en;
+  Map<String, dynamic>? details(bool male) =>
+      (male ? boyDraft : girlDraft) ??
+      ((male ? boy : girl)?.session.birthInput == null
+          ? null
+          : _input((male ? boy : girl)!));
+
+  String? _rasi(bool first) {
+    final draft = first ? boyDraft : girlDraft;
+    if (draft != null) {
+      return draft['rasiBirthKey'] == matchingBirthKey(draft)
+          ? draft['calculatedRasi'] as String?
+          : null;
+    }
+    final row = first ? boy : girl;
+    return row?.session.facts?['rashi'] as String?;
+  }
+
+  Future<void> _resolveRasi(Map<String, dynamic> person) async {
+    final key = matchingBirthKey(person);
+    if (person['rasiBirthKey'] == key &&
+        SouthIndianChart.signIndex(person['calculatedRasi']) >= 0) {
+      return;
+    }
+    if (!_pendingRasi.add(key)) return;
+    final storageKey = peopleKey;
+    final owner = accountStorage.account;
+    try {
+      final rasi = await widget.resolveRasi(Map<String, dynamic>.from(person));
+      if (!mounted ||
+          storageKey != peopleKey ||
+          accountStorage.account != owner ||
+          SouthIndianChart.signIndex(rasi) < 0) {
+        return;
+      }
+      Map<String, dynamic> updated(Map<String, dynamic> data) =>
+          matchingBirthKey(data) == key
+          ? {...data, 'calculatedRasi': rasi, 'rasiBirthKey': key}
+          : data;
+      final next = people.map(updated).toList();
+      // Publish the merged state before queuing persistence. A second chart
+      // finishing concurrently must merge with this result, not overwrite it.
+      setState(() {
+        people = next;
+        if (boyDraft != null) boyDraft = updated(boyDraft!);
+        if (girlDraft != null) girlDraft = updated(girlDraft!);
+      });
+      await accountStorage.writeKey(storageKey, jsonEncode(next));
+    } catch (_) {
+      // Rasi is optional: comparison still uses original birth inputs. No
+      // guessed sign or repeated automatic provider request on failure.
+    } finally {
+      _pendingRasi.remove(key);
+    }
+  }
+
+  Future<void> choosePerson(bool male) async {
+    final choice = await showModalBottomSheet<Object>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(context).height * .65,
+          child: ListView(
+            padding: const EdgeInsets.all(22),
+            children: [
+              Text(
+                local('Choose a person', 'ஒருவரைத் தேர்வுசெய்க'),
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontFamily: 'JyotaraEditorial',
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_add_alt),
+                title: Text(local('Add new person', 'புதியவரைச் சேர்க்கவும்')),
+                onTap: () => Navigator.pop(context, 'new'),
+              ),
+              if (details(male) != null)
+                ListTile(
+                  leading: const Icon(Icons.edit_outlined),
+                  title: Text(
+                    local(
+                      'Edit selected details',
+                      'தேர்ந்தெடுத்த விவரங்களை மாற்றவும்',
+                    ),
+                  ),
+                  onTap: () => Navigator.pop(context, 'edit'),
+                ),
+              for (final row in rows)
+                ListTile(
+                  key: ValueKey('matching-saved-${row.id}'),
+                  leading: const Icon(Icons.person_outline),
+                  title: Text(row.session.nickname),
+                  subtitle: Text(
+                    '${row.session.birthplaceLabel ?? ''} · ${row.session.birthInput!.indiaDateTime.year}',
+                  ),
+                  onTap: (male ? girl : boy)?.id == row.id
+                      ? null
+                      : () => Navigator.pop(context, row),
+                  trailing: row.id == 'personal'
+                      ? null
+                      : IconButton(
+                          key: ValueKey('matching-delete-${row.id}'),
+                          tooltip: local(
+                            'Delete saved person',
+                            'சேமித்தவரை நீக்கு',
+                          ),
+                          icon: const Icon(Icons.delete_outline, size: 19),
+                          onPressed: () async {
+                            Navigator.pop(context);
+                            await _removeSavedPerson(row);
+                          },
+                        ),
+                ),
+              for (final person in people)
+                ListTile(
+                  leading: const Icon(Icons.person_outline),
+                  title: Text('${person['nickname']}'),
+                  subtitle: Text('${person['birthplaceLabel'] ?? ''}'),
+                  onTap: () => Navigator.pop(context, person),
+                  trailing: IconButton(
+                    tooltip: local('Remove saved person', 'சேமித்தவரை நீக்கு'),
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () async {
+                      final targetKey = peopleKey;
+                      userJourney.event(
+                        'matching.delete',
+                        metadata: {'feature': 'matching', 'outcome': 'started'},
+                      );
+                      final updated = people
+                          .where((p) => !_samePerson(p, person))
+                          .toList();
+                      try {
+                        await accountStorage.writeKey(
+                          targetKey,
+                          jsonEncode(updated),
+                        );
+                        if (mounted && targetKey == peopleKey) {
+                          userJourney.event(
+                            'matching.delete',
+                            metadata: {
+                              'feature': 'matching',
+                              'outcome': 'success',
+                            },
+                          );
+                          setState(() {
+                            people = updated;
+                            if (boyDraft != null &&
+                                _samePerson(boyDraft!, person)) {
+                              boyDraft = null;
+                            }
+                            if (girlDraft != null &&
+                                _samePerson(girlDraft!, person)) {
+                              girlDraft = null;
+                            }
+                            consent = false;
+                            result = null;
+                            error = null;
+                          });
+                          if (context.mounted) Navigator.pop(context);
+                        }
+                      } catch (_) {
+                        if (mounted && targetKey == peopleKey) {
+                          userJourney.event(
+                            'matching.delete',
+                            metadata: {
+                              'feature': 'matching',
+                              'outcome': 'failed',
+                              'error': 'storage',
+                            },
+                          );
+                          await _notice(
+                            'Could not save changes. Please retry.',
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'new' || choice == 'edit') {
+      await _enterBirth(male, fresh: choice == 'new');
+      return;
+    }
+    setState(() {
+      if (male) {
+        boy = choice is SavedKundli ? choice : null;
+        boyDraft = choice is Map<String, dynamic> ? choice : null;
+      } else {
+        girl = choice is SavedKundli ? choice : null;
+        girlDraft = choice is Map<String, dynamic> ? choice : null;
+      }
+      consent = false;
+      error = null;
+      result = null;
+    });
+    if (choice is Map<String, dynamic>) unawaited(_resolveRasi(choice));
+  }
+
+  bool _samePerson(Map<String, dynamic> a, Map<String, dynamic> b) =>
+      matchingBirthKey(a) == matchingBirthKey(b) &&
+      a['nickname'] == b['nickname'];
+
+  Future<void> _removeSavedPerson(SavedKundli row) async {
+    final targetKey = peopleKey;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text(local('Delete this saved person?', 'சேமித்தவரை நீக்கவா?')),
+        content: Text(
+          local(
+            'Their saved birth chart will be removed from this device and the server.',
+            'அவரது சேமித்த ஜாதகம் இந்தச் சாதனத்திலிருந்தும் சேவையகத்திலிருந்தும் நீக்கப்படும்.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const UiText('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const UiText('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted || targetKey != peopleKey) return;
+    userJourney.event(
+      'matching.delete',
+      metadata: {'feature': 'matching', 'outcome': 'started'},
+    );
+    try {
+      await widget.removeKundli(
+        row,
+        rows.where((r) => r.id != 'personal').toList(),
+      );
+      if (!mounted || targetKey != peopleKey) return;
+      userJourney.event(
+        'matching.delete',
+        metadata: {'feature': 'matching', 'outcome': 'success'},
+      );
+      setState(() {
+        if (boy?.id == row.id) boy = null;
+        if (girl?.id == row.id) girl = null;
+        consent = false;
+        result = null;
+        error = null;
+      });
+      await _load();
+    } catch (_) {
+      if (mounted && targetKey == peopleKey) {
+        userJourney.event(
+          'matching.delete',
+          metadata: {
+            'feature': 'matching',
+            'outcome': 'failed',
+            'error': 'unknown',
+          },
+        );
+        await _notice(
+          local(
+            'Could not delete the saved person. Please retry.',
+            'சேமித்தவரை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> openReport(Map<String, dynamic> value) => Navigator.push(
+    context,
+    PageRouteBuilder<void>(
+      settings: const RouteSettings(name: 'matching_result'),
+      transitionDuration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 650),
+      reverseTransitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (_, _, _) => MatchingResultScreen(value: value),
+      transitionsBuilder: (_, animation, _, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+        child: child,
+      ),
+    ),
+  );
+  Future<void> openHistory() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(builder: (_) => const SavedMatchesScreen()),
+    );
   }
 
   Future<void> _notice(String message) async {
@@ -825,50 +1439,133 @@ class _MatchingScreenState extends State<MatchingScreen> {
     );
   }
 
-  Future<void> _enterBirth(bool male) async {
-    final session = ProfileSession(
-      api: JyotaraApiClient(
-        testerCode: () => testerAccess.code,
-        phoneToken: () => phoneAccess.token,
-      ),
-    );
-    await Navigator.push(
-      context,
-      MaterialPageRoute<void>(
-        builder: (_) => BirthForm(
-          session: session,
-          initialGender: male ? ProfileGender.male : ProfileGender.female,
-          initialDetails:
-              (male ? boyDraft : girlDraft) ??
-              ((male ? boy : girl)?.session.birthInput == null
-                  ? null
-                  : _input((male ? boy : girl)!)),
-          onSubmit: (data) async {
-            if (!mounted) return;
-            setState(() {
-              if (male) {
-                boyDraft = data;
-                boy = null;
-              } else {
-                girlDraft = data;
-                girl = null;
-              }
-              error = null;
-              result = null;
-            });
-          },
+  Future<void> _enterBirth(bool male, {bool fresh = false}) async {
+    final targetKey = peopleKey;
+    final previous = fresh
+        ? null
+        : male
+        ? boy
+        : girl;
+    final draft = fresh
+        ? null
+        : male
+        ? boyDraft
+        : girlDraft;
+    final savedRows = rows.where((r) => r.id != 'personal').toList();
+    SavedKundli? selected;
+    var keepCreatedSession = false;
+    if (previous == null) {
+      userJourney.event(
+        'matching.add',
+        metadata: {'feature': 'matching', 'outcome': 'started'},
+      );
+    }
+    try {
+      selected = previous ?? await widget.createKundli(savedRows);
+      if (!mounted || targetKey != peopleKey) return;
+      // Legacy matching-only entries use the shared saved-chart form too. Keep
+      // their place label while upgrading to a calculated, separate chart.
+      if (draft != null) {
+        selected.session.birthplaceLabel = draft['birthplaceLabel'] as String?;
+      }
+      await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+          builder: (_) => BirthForm(
+            session: selected!.session,
+            onboarding: true,
+            initialGender:
+                selected.session.gender ??
+                (male ? ProfileGender.male : ProfileGender.female),
+            initialDetails: draft,
+          ),
         ),
-      ),
-    );
-    session.dispose();
+      );
+      await selected.session.flushStorage();
+      if (!mounted || targetKey != peopleKey) return;
+      if (selected.session.facts == null) {
+        if (previous == null) {
+          userJourney.event(
+            'matching.add',
+            metadata: {
+              'feature': 'matching',
+              'outcome': selected.session.profileRequestUnconfirmed
+                  ? 'pending'
+                  : 'cancelled',
+            },
+          );
+        }
+        if (previous == null &&
+            !selected.session.profileRequestUnconfirmed &&
+            selected.session.storageError == null) {
+          await widget.removeKundli(selected, [...savedRows, selected]);
+        }
+        await _load();
+        return;
+      }
+      if (selected.session.storageError != null) {
+        throw StateError('Saved chart could not be stored');
+      }
+      if (draft != null) {
+        final next = people.where((p) => !_samePerson(p, draft)).toList();
+        await accountStorage.writeKey(targetKey, jsonEncode(next));
+      }
+      await _load();
+      if (!mounted || targetKey != peopleKey) return;
+      final returned =
+          rows.where((r) => r.id == selected!.id).firstOrNull ?? selected;
+      keepCreatedSession = identical(returned.session, selected.session);
+      if (previous == null) {
+        userJourney.event(
+          'matching.add',
+          metadata: {'feature': 'matching', 'outcome': 'success'},
+        );
+      }
+      setState(() {
+        if (male) {
+          boy = returned;
+          boyDraft = null;
+        } else {
+          girl = returned;
+          girlDraft = null;
+        }
+        consent = false;
+        error = null;
+        result = null;
+      });
+    } catch (_) {
+      if (mounted && targetKey == peopleKey) {
+        if (previous == null) {
+          userJourney.event(
+            'matching.add',
+            metadata: {
+              'feature': 'matching',
+              'outcome': 'failed',
+              'error': 'storage',
+            },
+          );
+        }
+        await _notice(
+          local(
+            'Could not save the birth chart. Please retry.',
+            'ஜாதகத்தைச் சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+          ),
+        );
+      }
+    } finally {
+      if (previous == null && selected != null && !keepCreatedSession) {
+        selected.session.dispose();
+      }
+    }
   }
 
   Future<void> _match() async {
     if (busy) return;
+    userJourney.tap('match', feature: 'matching');
     if ((boy == null && boyDraft == null) ||
         (girl == null && girlDraft == null)) {
       await _notice(
-        'Enter birth details for both people, or choose their saved Kundlis.',
+        'Enter birth details for both people, or choose their saved birth charts.',
       );
       return;
     }
@@ -889,12 +1586,26 @@ class _MatchingScreenState extends State<MatchingScreen> {
     }
     final boyInput = boyDraft ?? _input(boy!);
     final girlInput = girlDraft ?? _input(girl!);
+    if (boyInput['datetime'] == girlInput['datetime'] &&
+        boyInput['latitude'] == girlInput['latitude'] &&
+        boyInput['longitude'] == girlInput['longitude'] &&
+        boyInput['nickname'] == girlInput['nickname']) {
+      await _notice('Choose two different profiles.');
+      return;
+    }
 
     setState(() {
       busy = true;
       error = null;
       result = null;
     });
+    final started = Stopwatch()..start();
+    final owner = accountStorage.account;
+    final reduced = MediaQuery.disableAnimationsOf(context);
+    userJourney.event(
+      'matching.start',
+      metadata: {'feature': 'matching', 'outcome': 'started'},
+    );
     try {
       final value = await widget.request('/api/kundli/matching', {
         'boy': boyInput,
@@ -902,35 +1613,47 @@ class _MatchingScreenState extends State<MatchingScreen> {
         'consent': true,
         'language': readingLanguage(context),
       });
-      if (mounted) {
-        value['boyName'] = boyInput['nickname'];
-        value['girlName'] = girlInput['nickname'];
+      if (mounted && accountStorage.account == owner) {
+        userJourney.event(
+          'matching.complete',
+          metadata: {
+            'feature': 'matching',
+            'outcome': 'success',
+            'durationMs': started.elapsedMilliseconds,
+          },
+        );
         setState(() => result = value);
-        await showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (context) => SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  MatchingReport(value: value),
-                  const SizedBox(height: 20),
-                  FilledButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const UiText('Done'),
-                  ),
-                ],
-              ),
-            ),
+      }
+      if (!reduced &&
+          started.elapsedMilliseconds < matchingMotionDuration.inMilliseconds) {
+        await Future<void>.delayed(
+          Duration(
+            milliseconds:
+                matchingMotionDuration.inMilliseconds -
+                started.elapsedMilliseconds,
           ),
         );
       }
+      if (mounted && accountStorage.account == owner) {
+        value['connectionType'] = connectionType;
+        value['boyName'] = boyInput['nickname'];
+        value['girlName'] = girlInput['nickname'];
+        value['boyRasi'] = _rasi(true);
+        value['girlRasi'] = _rasi(false);
+        coinWalletRevision.value++;
+        setState(() => result = value);
+        await openReport(value);
+      }
     } catch (e) {
-      if (mounted) {
+      if (mounted && accountStorage.account == owner) {
+        userJourney.event(
+          'matching.complete',
+          metadata: {
+            'feature': 'matching',
+            'outcome': 'failed',
+            'error': 'unknown',
+          },
+        );
         await _notice(e.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
@@ -939,126 +1662,292 @@ class _MatchingScreenState extends State<MatchingScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const UiText('Kundli Matching')),
-    body: ListView(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        20 + MediaQuery.viewPaddingOf(context).bottom,
-      ),
-      children: [
-        const UiText(
-          'Compare two birth charts',
-          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 10),
-        const UiText(
-          'Traditional Ashta Kuta matching · 36 points. This calculation uses the male and female roles of that system; it does not measure love or guarantee a marriage outcome.',
-          style: TextStyle(color: muted),
-        ),
-        const SizedBox(height: 20),
-        const UiText(
-          'If a birth time is unknown, we use noon for a provisional comparison. The score may change with the actual time.',
-        ),
-        const SizedBox(height: 12),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: true, label: UiText('Open Kundli'), icon: Icon(Icons.folder_open)),
-            ButtonSegment(value: false, label: UiText('New Matching'), icon: Icon(Icons.add)),
+  Widget build(BuildContext context) => MatchingSurface(
+    child: PopScope(
+      canPop: !busy,
+      child: Scaffold(
+        backgroundColor: matchBackground,
+        appBar: AppBar(
+          backgroundColor: matchBackground,
+          foregroundColor: matchGold,
+          title: Text('Jyotara', style: matchHeading(30)),
+          actions: [
+            if (coinWalletEnabled && coinAccount != null)
+              const HomeCoinCard(compact: true),
+            IconButton(
+              onPressed: busy
+                  ? null
+                  : () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                        builder: (_) => const NotificationCenter(),
+                      ),
+                    ),
+              tooltip: uiText(context, 'Notifications'),
+              icon: const Icon(Icons.notifications_outlined),
+            ),
           ],
-          selected: {openSaved},
-          onSelectionChanged: busy ? null : (v) => setState(() => openSaved = v.first),
         ),
-        const SizedBox(height: 16),
-        if (openSaved) ...[
-          SegmentedButton<bool>(
-            segments: const [ButtonSegment(value: true, label: UiText('Boy’s Kundli')), ButtonSegment(value: false, label: UiText('Girl’s Kundli'))],
-            selected: {selectBoy},
-            onSelectionChanged: busy ? null : (v) => setState(() => selectBoy = v.first),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            onChanged: (v) => setState(() => searchName = v.trim().toLowerCase()),
-            decoration: InputDecoration(prefixIcon: const Icon(Icons.search), hintText: uiText(context, 'Search Kundli by name')),
-          ),
-          const SizedBox(height: 12),
-          if (rows.isEmpty) const UiText('No saved Kundlis yet. Use New Matching to enter birth details.'),
-          if (rows.isNotEmpty && !rows.any((r) => r.session.nickname.toLowerCase().contains(searchName))) const UiText('No matching names found.'),
-          for (final row in rows.where((r) => r.session.nickname.toLowerCase().contains(searchName)))
-            Card(child: ListTile(
-              key: ValueKey('matching-saved-${row.id}'),
-              leading: CircleAvatar(child: Text(row.session.nickname.isEmpty ? '?' : row.session.nickname.substring(0, 1).toUpperCase())),
-              title: Text(row.session.nickname.isEmpty ? uiText(context, 'Saved profile') : row.session.nickname),
-              subtitle: Text('${row.session.birthInput!.indiaDateTime.toIso8601String().substring(0, 10)} · ${row.session.birthInput!.exactTime ? row.session.birthInput!.indiaDateTime.toIso8601String().substring(11, 16) : uiText(context, 'Unknown birth time')}\n${row.session.birthplaceLabel ?? ''}'),
-              isThreeLine: true,
-              selected: (selectBoy ? boy : girl)?.id == row.id,
-              trailing: (selectBoy ? boy : girl)?.id == row.id ? const Icon(Icons.check_circle) : const Icon(Icons.circle_outlined),
-              onTap: busy || (selectBoy ? girl : boy)?.id == row.id ? null : () => setState(() {
-                if (selectBoy) { boy = row; boyDraft = null; } else { girl = row; girlDraft = null; }
-                consent = false; error = null; result = null;
-              }),
-            )),
-          const SizedBox(height: 12),
-        ],
-        for (final male in [true, false])
-          _ReadingCard(
-            male
-                ? 'Boy: details used for matching'
-                : 'Girl: details used for matching',
-            _detailsLabel(male),
-          ),
-        if (!openSaved) for (final male in [true, false])
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: OutlinedButton.icon(
-              onPressed: busy ? null : () => _enterBirth(male),
-              icon: const Icon(Icons.person_add_alt),
-              label: UiText(
-                '${uiText(context, male ? "Boy" : "Girl")}: ${(male ? boyDraft : girlDraft)?['nickname'] ?? uiText(context, "Enter birth details")}',
-              ),
+        body: busy
+            ? CinematicMatchingAnimation(
+                first: '${details(true)?['nickname'] ?? ''}',
+                second: '${details(false)?['nickname'] ?? ''}',
+                type: connectionType,
+                resultReady: result != null,
+                firstRasi: SouthIndianChart.signIndex(_rasi(true)),
+                secondRasi: SouthIndianChart.signIndex(_rasi(false)),
+              )
+            : _entry(),
+      ),
+    ),
+  );
+}
+
+class MatchingAnimation extends StatelessWidget {
+  const MatchingAnimation({
+    super.key,
+    required this.first,
+    required this.second,
+  });
+  final String first, second;
+  @override
+  Widget build(BuildContext context) =>
+      ApprovedMatchingAnimation(type: 'My Crush', first: first, second: second);
+}
+
+class MatchingResultScreen extends StatefulWidget {
+  const MatchingResultScreen({super.key, required this.value});
+  final Map<String, dynamic> value;
+  @override
+  State<MatchingResultScreen> createState() => _MatchingResultScreenState();
+}
+
+class _MatchingResultScreenState extends State<MatchingResultScreen> {
+  bool saving = false, saved = false;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && ModalRoute.of(context)?.isCurrent != false) {
+        userJourney.screen('matching_result');
+      }
+    });
+    saved = widget.value['savedAt'] != null;
+  }
+
+  Future<void> save() async {
+    if (saving || saved) return;
+    setState(() => saving = true);
+    try {
+      await SavedMatches.save(widget.value);
+      if (mounted) setState(() => saved = true);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              readingLanguage(context) == 'ta'
+                  ? 'சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.'
+                  : 'Could not save. Please retry.',
             ),
           ),
-        OutlinedButton.icon(
-          onPressed: busy
-              ? null
-              : () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute<void>(
-                      builder: (_) => const KundliLibraryScreen(),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => MatchingSurface(
+    child: Scaffold(
+      backgroundColor: matchBackground,
+      appBar: AppBar(
+        title: Text('Jyotara', style: matchHeading(30)),
+        backgroundColor: matchBackground,
+        foregroundColor: matchGold,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(22),
+        child: Column(
+          children: [
+            MatchingReport(value: widget.value),
+            TextButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => Scaffold(
+                    backgroundColor: matchBackground,
+                    appBar: AppBar(title: const Text('Your connection')),
+                    body: ApprovedMatchingAnimation(
+                      type:
+                          widget.value['connectionType']?.toString() ??
+                          'Marriage',
+                      first: '${widget.value['boyName'] ?? ''}',
+                      second: '${widget.value['girlName'] ?? ''}',
+                      replay: true,
                     ),
-                  );
-                  await _load();
-                },
-          icon: const Icon(Icons.add),
-          label: const UiText('Create or edit Kundlis'),
+                  ),
+                ),
+              ),
+              icon: const Icon(Icons.play_arrow),
+              label: const Text('Watch matching animation'),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: saving || saved ? null : save,
+                icon: Icon(saved ? Icons.check : Icons.bookmark_border),
+                label: Text(
+                  readingLanguage(context) == 'ta'
+                      ? (saved
+                            ? 'சேமிக்கப்பட்டது'
+                            : 'பொருத்தத்தைச் சேமிக்கவும்')
+                      : (saved ? 'Saved' : 'Save this match'),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text(
+                readingLanguage(context) == 'ta'
+                    ? 'மற்றொரு பொருத்தம் பார்க்க'
+                    : 'Match another pair',
+              ),
+            ),
+          ],
         ),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          value: consent,
-          onChanged: busy ? null : (v) => setState(() => consent = v ?? false),
-          title: UiText(
-            consent
-                ? 'Permission confirmed for both people.'
-                : 'I confirm both people agree to this comparison.',
-          ),
-        ),
-        if (error != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: UiText(error!),
-          ),
-        FilledButton(
-          onPressed: busy ? null : _match,
-          child: UiText(busy ? 'Comparing…' : 'Match Horoscope'),
-        ),
-        if (result != null) ...[
-          const SizedBox(height: 24),
-          MatchingReport(value: result!),
-        ],
-      ],
+      ),
+    ),
+  );
+}
+
+class SavedMatches {
+  static String get key => accountStorage.key('jyotara.matching.results.v1');
+  static Future<List<Map<String, dynamic>>> load() async {
+    final raw = await KundliLibrary.storage.read(key: key);
+    return raw == null
+        ? []
+        : (jsonDecode(raw) as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+  }
+
+  static Future<void> save(Map<String, dynamic> value) async {
+    final target = key;
+    final rows = await load();
+    if (target != key) throw StateError('Account changed');
+    final copy = Map<String, dynamic>.from(value)
+      ..remove('savedAt')
+      ..remove('wallet')
+      ..remove('replayed');
+    final signature = jsonEncode(copy);
+    if (rows.any(
+      (r) => jsonEncode(Map.of(r)..remove('savedAt')) == signature,
+    )) {
+      return;
+    }
+    await accountStorage.writeKey(
+      target,
+      jsonEncode([
+        {'savedAt': DateTime.now().toIso8601String(), ...copy},
+        ...rows,
+      ]),
+    );
+  }
+
+  static Future<void> remove(Map<String, dynamic> value) async {
+    final target = key;
+    final rows = await load();
+    if (target != key) throw StateError('Account changed');
+    await accountStorage.writeKey(
+      target,
+      jsonEncode(
+        rows.where((r) => jsonEncode(r) != jsonEncode(value)).toList(),
+      ),
+    );
+  }
+}
+
+class SavedMatchesScreen extends StatefulWidget {
+  const SavedMatchesScreen({super.key});
+  @override
+  State<SavedMatchesScreen> createState() => _SavedMatchesScreenState();
+}
+
+class _SavedMatchesScreenState extends State<SavedMatchesScreen> {
+  late Future<List<Map<String, dynamic>>> data = SavedMatches.load();
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(
+      title: Text(
+        readingLanguage(context) == 'ta'
+            ? 'சேமித்த பொருத்தங்கள்'
+            : 'Saved matches',
+      ),
+    ),
+    body: FutureBuilder<List<Map<String, dynamic>>>(
+      future: data,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: TextButton(
+              onPressed: () => setState(() => data = SavedMatches.load()),
+              child: const UiText('Retry'),
+            ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.data!.isEmpty) {
+          return Center(
+            child: Text(
+              readingLanguage(context) == 'ta'
+                  ? 'சேமித்த பொருத்தங்கள் இல்லை'
+                  : 'No saved matches yet',
+            ),
+          );
+        }
+        return ListView(
+          children: [
+            for (final value in snapshot.data!)
+              ListTile(
+                title: Text('${value['boyName']} · ${value['girlName']}'),
+                subtitle: Text(
+                  '${value['score']} / ${value['maximum']} · ${value['savedAt']?.toString().substring(0, 10) ?? ''}',
+                ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => MatchingResultScreen(value: value),
+                  ),
+                ),
+                trailing: IconButton(
+                  tooltip: uiText(context, 'Delete'),
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: () async {
+                    try {
+                      await SavedMatches.remove(value);
+                      if (mounted) setState(() => data = SavedMatches.load());
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: UiText(
+                              'Could not save changes. Please retry.',
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+          ],
+        );
+      },
     ),
   );
 }
@@ -1066,64 +1955,6 @@ class _MatchingScreenState extends State<MatchingScreen> {
 class MatchingReport extends StatelessWidget {
   const MatchingReport({super.key, required this.value});
   final Map<String, dynamic> value;
-  String number(num v) => v == v.roundToDouble() ? v.toInt().toString() : v.toString();
   @override
-  Widget build(BuildContext context) {
-    final score = (value['score'] as num).toDouble();
-    final maximum = (value['maximum'] as num).toDouble();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      if (value['boyName'] != null || value['girlName'] != null)
-        Padding(padding: const EdgeInsets.only(bottom: 12), child: Text('${value['boyName'] ?? ''} · ${value['girlName'] ?? ''}', textAlign: TextAlign.center, style: Theme.of(context).textTheme.titleLarge)),
-      Card(child: Padding(padding: const EdgeInsets.all(24), child: Column(children: [
-        UiText(value['provisional'] == true ? 'Provisional comparison' : 'Compatibility score', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 20),
-        SizedBox(height: 155, child: TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: (score / maximum).clamp(0, 1)),
-          duration: MediaQuery.disableAnimationsOf(context) ? Duration.zero : const Duration(milliseconds: 800),
-          builder: (_, progress, _) => CustomPaint(size: const Size(280, 155), painter: _MatchingGauge(progress)),
-        )),
-        Text('${number(score)} / ${number(maximum)}', style: Theme.of(context).textTheme.headlineLarge),
-      ]))),
-      const SizedBox(height: 16),
-      UiText(value['interpretation'] as String),
-      const SizedBox(height: 12),
-      UiText(value['note'] as String),
-      const SizedBox(height: 20),
-      if (value['factors'] is List) ...[
-        const UiText('Score breakdown', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-        for (final f in (value['factors'] as List).whereType<Map>())
-          Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [Expanded(child: Text(f['name'] as String, style: Theme.of(context).textTheme.titleMedium)), Text('${number(f['score'] as num)} / ${number(f['maximum'] as num)}', style: const TextStyle(fontWeight: FontWeight.bold))]),
-            const SizedBox(height: 10),
-            LinearProgressIndicator(value: ((f['score'] as num) / (f['maximum'] as num)).clamp(0, 1)),
-            const SizedBox(height: 12),
-            Text(f['description'] as String),
-          ]))),
-      ],
-      for (final role in ['boy', 'girl'])
-        if (value['${role}Mangal'] is Map)
-          _ReadingCard('${value['${role}Name'] ?? uiText(context, role == 'boy' ? 'Boy' : 'Girl')} · ${uiText(context, 'Mangal Dosha')}',
-            '${uiText(context, value['${role}Mangal']['present'] == true ? 'Present' : 'Not present')}${value['${role}Mangal']['exception'] == true ? ' · ${uiText(context, 'Exception reported')}' : ''}'),
-    ]);
-  }
-}
-
-class _MatchingGauge extends CustomPainter {
-  _MatchingGauge(this.progress);
-  final double progress;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height - 12);
-    final radius = min(size.width / 2 - 20, size.height - 25);
-    final rect = Rect.fromCircle(center: center, radius: radius);
-    const colors = [Color(0xffc95649), Color(0xffdc883a), Color(0xffdfb442), Color(0xff80a660), Color(0xff398567)];
-    for (var i = 0; i < colors.length; i++) {
-      canvas.drawArc(rect, pi + i * pi / 5, pi / 5 - 0.018, false, Paint()..color = colors[i]..style = PaintingStyle.stroke..strokeWidth = 24);
-    }
-    final angle = pi + pi * progress;
-    canvas.drawLine(center, center + Offset(cos(angle), sin(angle)) * (radius - 12), Paint()..color = const Color(0xff68392b)..strokeWidth = 5..strokeCap = StrokeCap.round);
-    canvas.drawCircle(center, 8, Paint()..color = const Color(0xff68392b));
-  }
-  @override
-  bool shouldRepaint(_MatchingGauge oldDelegate) => oldDelegate.progress != progress;
+  Widget build(BuildContext context) => ApprovedMatchingReport(value: value);
 }

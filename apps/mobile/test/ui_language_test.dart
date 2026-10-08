@@ -12,9 +12,11 @@ void main() {
       await tester.pumpWidget(JyotaraApp(uiPreferences: ui));
       await tester.pump(const Duration(milliseconds: 1900));
       await tester.pump(const Duration(milliseconds: 1400));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('enterApp')));
       await tester.tap(find.byKey(const Key('enterApp')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Account'));
+      await tester.tap(find.text('Profile'));
       await tester.pumpAndSettle();
       expect(find.text('Your account'), findsOneWidget);
       await ui.set('ta');

@@ -39,11 +39,10 @@ void main() {
     await access.restore();
     await tester.pumpWidget(
       MaterialApp(
-        home: PhoneAccessScreen(access: access, child: const IntroScreen()),
+        home: PhoneAccessScreen(access: access, child: const MainShell()),
       ),
     );
     await tester.pump(const Duration(seconds: 2));
-    await tester.tap(find.text('Explore Jyotara'));
     await tester.pumpAndSettle();
     expect(find.byType(MainShell), findsOneWidget);
     await access.signOut();
@@ -67,12 +66,17 @@ void main() {
       await tester.tap(find.byTooltip('Account'));
       await tester.pumpAndSettle();
       expect(observer.pushes, initial + 1);
-      expect(find.text('Your account'), findsOneWidget);
+      expect(find.text('My Profiles'), findsOneWidget);
       expect(find.byTooltip('Account'), findsNothing);
-      await tester.pageBack();
+      final onBack = tester
+          .widget<BackButton>(find.byType(BackButton))
+          .onPressed!;
+      onBack();
+      await tester.pump();
+      onBack();
       await tester.pumpAndSettle();
       expect(find.byTooltip('Account'), findsOneWidget);
-      expect(find.text('Your account'), findsNothing);
+      expect(find.text('My Profiles'), findsNothing);
     },
   );
   testWidgets('account tab never offers a recursive account shortcut', (

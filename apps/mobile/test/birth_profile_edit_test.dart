@@ -33,14 +33,19 @@ void main() {
         ),
       );
       expect(find.text('உங்கள் பிறப்பு விவரங்கள்'), findsOneWidget);
-      await tester.scrollUntilVisible(find.byKey(const ValueKey('gender-prefer_not_to_say')), 200);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('gender-prefer_not_to_say')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('gender-prefer_not_to_say')));
       await tester.pump();
-      await tester.scrollUntilVisible(find.byKey(const ValueKey('gender-continue')), 200);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('gender-continue')));
-      await tester.pumpAndSettle();
       final scroll = find
           .descendant(
             of: find.byType(ListView),
@@ -58,7 +63,7 @@ void main() {
       await tester.pump();
       await tester.scrollUntilVisible(
         find.text(
-          tamilUi['A noon estimate will be used. Rasi/Nakshatra may change during the day; Lagnam and Dasa guidance are withheld.']!,
+          tamilUi['General guidance only. You can add your birth time later.']!,
         ),
         200,
         scrollable: scroll,
@@ -72,13 +77,13 @@ void main() {
         tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
         false,
       );
-      expect(find.textContaining('தானியங்கி வேத ஜோதிட'), findsOneWidget);
+      expect(find.textContaining('எனக்கு 13 வயதுக்கு மேல்'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.byType(FilledButton),
         250,
         scrollable: scroll,
       );
-      expect(find.text('என் ஜாதகத்தைக் கணக்கிடவும்'), findsOneWidget);
+      expect(find.text(tamilUi['Continue']!), findsOneWidget);
       expect(tester.takeException(), null);
     },
   );
@@ -165,7 +170,11 @@ void main() {
           .first;
       await tester.drag(formScroll, const Offset(0, -250));
       await tester.pumpAndSettle();
-      await tester.scrollUntilVisible(find.text('5:00 AM'), 100, scrollable: formScroll);
+      await tester.scrollUntilVisible(
+        find.text('5:00 AM'),
+        100,
+        scrollable: formScroll,
+      );
       expect(find.text('5:00 AM'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('Erode, Tamil Nadu'),

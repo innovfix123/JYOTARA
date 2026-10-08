@@ -4,6 +4,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:jyotara/services/account_storage.dart';
 
 void main() {
+  test('demo erasure removes only its namespace and blocks later writes', () async {
+    final owner='office_demo_${List.filled(32,'a').join()}';
+    final key='jyotara.account.$owner.profile';
+    final data=<String,String>{key:'private','jyotara.account.other.profile':'keep'};
+    final store=AccountStorage(readAll:() async=>Map.of(data),delete:(k) async{data.remove(k);},write:(k,v) async{data[k]=v;});
+    await store.erase(owner);
+    expect(data.containsKey(key),false);
+    expect(data['jyotara.account.other.profile'],'keep');
+    await expectLater(store.writeKey(key,'late'),throwsStateError);
+  });
+
   test('upgrade preserves known account without leaking legacy data to a new login', () async {
     final id = List.filled(32, 'a').join();
     final records = <String, String>{

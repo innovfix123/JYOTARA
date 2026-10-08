@@ -1,3 +1,6 @@
+import 'services/meta_measurement.dart';
+import 'services/marketing_analytics.dart';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
@@ -13,6 +16,7 @@ class FirebasePreferences extends StatefulWidget {
 
 class _FirebasePreferencesState extends State<FirebasePreferences> {
   bool busy = false;
+  bool? pendingAnalytics, pendingCrashes, pendingNotifications;
   Future<void> change(Future<void> Function() action) async {
     setState(() => busy = true);
     try {
@@ -26,62 +30,107 @@ class _FirebasePreferencesState extends State<FirebasePreferences> {
         );
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          pendingAnalytics = null;
+          pendingCrashes = null;
+          pendingNotifications = null;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) => AnimatedBuilder(
-    animation: firebaseServices,
+    animation: Listenable.merge([
+      firebaseServices,
+      marketingAnalytics,
+      metaMeasurement,
+    ]),
     builder: (context, _) => Card(
       child: Column(
         children: [
           const ListTile(
             title: UiText('Notifications & app improvements'),
             subtitle: UiText(
-              'Optional services provided by Google Firebase. Birth details and chat text are not included in analytics events.',
+              'Optional services provided by Google Firebase, Singular and Meta. Birth details and chat text are not included in analytics events.',
             ),
           ),
           SwitchListTile(
             title: const UiText('Usage analytics'),
             subtitle: const UiText(
-              'Share app usage and device information to help improve Jyotara.',
+              'Share app usage and device information with Firebase to help improve Jyotara.',
             ),
-            value: firebaseServices.analytics,
+            value: pendingAnalytics ?? firebaseServices.analytics,
             onChanged: busy || !firebaseServices.ready
                 ? null
-                : (v) => change(() => firebaseServices.setAnalytics(v)),
+                : (v) {
+                    setState(() => pendingAnalytics = v);
+                    change(() => firebaseServices.setAnalytics(v));
+                  },
           ),
+          if (marketingAnalytics.configured)
+            SwitchListTile(
+              title: const UiText('Marketing measurement'),
+              subtitle: const UiText(
+                'Allow Singular to measure installs, app usage and verified recharge amounts. No birth details or chat text are shared.',
+              ),
+              value: marketingAnalytics.enabled,
+              onChanged: busy
+                  ? null
+                  : (value) =>
+                        change(() => marketingAnalytics.setConsent(value)),
+            ),
+          if (metaMeasurement.configured)
+            SwitchListTile(
+              title: const UiText('Meta measurement'),
+              subtitle: const UiText(
+                'Allow Meta to measure app opens, successful sign-ins and completed readings. Device information is shared; birth details and chat text are excluded.',
+              ),
+              value: metaMeasurement.enabled,
+              onChanged: busy
+                  ? null
+                  : (value) => change(() => metaMeasurement.setConsent(value)),
+            ),
           SwitchListTile(
             title: const UiText('Crash reports'),
             subtitle: const UiText(
               'Share technical error and device reports to help fix crashes.',
             ),
-            value: firebaseServices.crashReports,
+            value: pendingCrashes ?? firebaseServices.crashReports,
             onChanged: busy || !firebaseServices.ready
                 ? null
-                : (v) => change(() => firebaseServices.setCrashReports(v)),
+                : (v) {
+                    setState(() => pendingCrashes = v);
+                    change(() => firebaseServices.setCrashReports(v));
+                  },
           ),
           SwitchListTile(
             title: const UiText('App notifications'),
             subtitle: const UiText(
               'Receive Jyotara updates. You can turn these off at any time.',
             ),
-            value: firebaseServices.notifications,
+            value: pendingNotifications ?? firebaseServices.notifications,
             onChanged: busy || !firebaseServices.ready
                 ? null
-                : (v) => change(() async {
-                    final allowed = await firebaseServices.setNotifications(v);
-                    if (!allowed && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: UiText(
-                            'Allow notifications in Android settings to enable updates.',
-                          ),
-                        ),
+                : (v) {
+                    setState(() => pendingNotifications = v);
+                    change(() async {
+                      final allowed = await firebaseServices.setNotifications(
+                        v,
                       );
-                    }
-                  }),
+                      if (!allowed && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: UiText(
+                              'Allow notifications in Android settings to enable updates.',
+                            ),
+                          ),
+                        );
+                      }
+                    });
+                  },
           ),
           if (const bool.fromEnvironment('JYOTARA_FIREBASE_QA'))
             TextButton(

@@ -11,6 +11,17 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       : language == 'tanglish'
       ? tanglish
       : english;
+  if (result.answerMode == 'reading_unavailable') {
+    return ChatMessage(
+      fromUser: false,
+      wallet: result.wallet,
+      text: copy(
+        'The reading is unavailable right now. Tap Retry to try again.',
+        'இப்போது பலன் கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.',
+        'Ippo badhil kidaikkala. Meendum muyarchi pannunga.',
+      ),
+    );
+  }
   final chartReading = result.answerMode == 'chart_guidance';
   final provider = result.answerMode == 'provider_reading';
   final traditional = result.answerMode == 'reviewed_traditional';
@@ -20,7 +31,8 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       provider ||
       traditional ||
       result.answerMode == 'model_guidance' ||
-      result.answerMode == 'practical_guidance';
+      result.answerMode == 'practical_guidance' ||
+      result.answerMode == 'limited_guidance';
   final indiaTime = result.answeredAt?.toUtc().add(
     const Duration(hours: 5, minutes: 30),
   );
@@ -43,6 +55,7 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
         );
   return ChatMessage(
     fromUser: false,
+    wallet: result.wallet,
     text: [
       if (result.replayed)
         copy(
@@ -58,7 +71,9 @@ ChatMessage guidanceMessage(GuidanceResponse result, String language) {
       if (result.limitation?.trim().isNotEmpty == true)
         '${copy('Limitations', 'வரம்புகள்', 'Varambugal')}: ${result.limitation}',
     ].join('\n\n'),
-    label: chartReading
+    label: result.answerMode == 'limited_guidance'
+        ? null
+        : chartReading
         ? copy('CHART GUIDANCE', 'ஜாதக வழிகாட்டல்', 'JATHAGA GUIDANCE')
         : result.answerMode == 'model_guidance'
         ? copy('GUIDANCE', 'வழிகாட்டல்', 'GUIDANCE')

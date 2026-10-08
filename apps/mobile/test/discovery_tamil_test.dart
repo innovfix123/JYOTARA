@@ -21,7 +21,7 @@ void main() {
           child: MaterialApp(
             home: DailyHoroscopeScreen(
               request: (_, body) async {
-                requested = body['language'] as String;
+                requested ??= body['language'] as String;
                 return {
                   'sections': [
                     {
@@ -39,16 +39,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(requested, 'ta');
       await tester.scrollUntilVisible(
-        find.text('பொதுப் பலன்'),
+        find.text('தனிப்பட்ட கவனம்'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
       expect(find.text('இன்று தெளிவாகப் பேசுங்கள்.'), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('பணம் · அன்றாட நினைவூட்டல்'),
-        150,
-        scrollable: find.byType(Scrollable).first,
-      );
       expect(find.text('Money · everyday reminder'), findsNothing);
     },
   );
@@ -58,11 +53,13 @@ void main() {
   ) async {
     languagePreferences.value = 'tamil';
     String? requested;
+    final dates = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         home: DailyHoroscopeScreen(
           request: (_, body) async {
             requested = body['language'] as String;
+            dates.add(body['date'] as String);
             return {
               'sections': [
                 {
@@ -78,7 +75,24 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(requested, 'en');
-    expect(find.text('Daily Horoscope'), findsOneWidget);
+    expect(find.text('Jyotara'), findsOneWidget);
+    expect(find.text('Relationships'), findsOneWidget);
+    expect(find.text('Work & studies'), findsOneWidget);
+    expect(find.text('Personal focus'), findsOneWidget);
+    expect(find.text('Yesterday'), findsNothing);
+    await tester.tap(find.text('Tomorrow'));
+    await tester.pumpAndSettle();
+    expect(
+      DateTime.parse(dates.last).difference(DateTime.parse(dates.first)).inDays,
+      1,
+    );
+    await tester.ensureVisible(find.text('Personal focus'));
+    await tester.tap(find.text('Personal focus'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('General reading.'),
+      findsNothing,
+    ); // No long detail popup.
   });
   testWidgets(
     'Tamil app preference localises Kundli library heading and create action',

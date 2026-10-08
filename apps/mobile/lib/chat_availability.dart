@@ -1,3 +1,5 @@
+import 'bronze_theme.dart';
+
 import 'package:flutter/material.dart';
 
 import 'services/ui_language.dart';
@@ -21,7 +23,7 @@ class ChatUnavailableScreen extends StatelessWidget {
               const Icon(
                 Icons.lock_outline_rounded,
                 size: 56,
-                color: Color(0xFFE6B85C),
+                color: BronzePalette.gold,
               ),
               const SizedBox(height: 24),
               const UiText(
@@ -36,7 +38,7 @@ class ChatUnavailableScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               const UiText(
-                'Daily horoscopes, Free Kundli and Kundli Matching are still available.',
+                'Daily horoscopes, Free Birth Chart and Birth Chart Matching are still available.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 24),

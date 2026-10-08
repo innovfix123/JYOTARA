@@ -1,3 +1,4 @@
+import {jsonObject} from './json-object';
 import {createHash, createHmac, randomBytes, timingSafeEqual} from 'node:crypto';
 import type {PostgresDatabase} from './postgres';
 import {erasePhoneAccount} from './account-deletion';
@@ -10,7 +11,7 @@ export async function reviewerLogin(request:Request,db:PostgresDatabase,settings
   const expected=settings.JYOTARA_REVIEW_PASSWORD_SHA256;
   const secret=settings.JYOTARA_PHONE_AUTH_KEY;
   if(tester!=='public-v1' || !expected || !/^[a-f0-9]{64}$/.test(expected) || !secret || secret.length<32) return reply({error:'Review access is unavailable.'},503);
-  const body=await request.json().catch(()=>null);
+  const body=await jsonObject(request);
   if(typeof body?.password!=='string' || body.password.length>256) return reply({error:'Invalid review credentials.'},401);
   const limited=await db.transaction(async tx=>{
     await tx.query('DELETE FROM phone_rate_limits WHERE expires_at <= $1',[now]);

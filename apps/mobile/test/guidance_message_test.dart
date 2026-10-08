@@ -25,6 +25,30 @@ void main() {
     }
   });
 
+  test('failed reading is one localized message without metadata', () {
+    for (final language in ['english', 'tamil', 'tanglish']) {
+      final message = guidanceMessage(
+        GuidanceResponse(
+          answer: 'Legacy mixed language error.',
+          evidence: ['Do not show'],
+          support: 'unsupported',
+          answerMode: 'reading_unavailable',
+          answeredAt: DateTime.utc(2026, 10, 7),
+          wallet: {'status': 'failed', 'coins': 0},
+        ),
+        language,
+      );
+      expect(message.label, isNull);
+      expect(message.text, isNot(contains('Legacy')));
+      expect(message.text, isNot(contains('2026')));
+      expect(message.text, isNot(contains('\n')));
+      expect(message.wallet?['status'], 'failed');
+      if (language == 'tamil') {
+        expect(RegExp('[A-Za-z]').hasMatch(message.text), isFalse);
+      }
+    }
+  });
+
   GuidanceResponse response(String mode) => GuidanceResponse(
     answer: 'Original answer',
     evidence: ['Moon: Meena'],

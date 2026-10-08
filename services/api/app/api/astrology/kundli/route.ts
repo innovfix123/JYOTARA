@@ -86,7 +86,7 @@ export async function POST(request: Request) {
         headers: { ...sessionHeaders(session), 'Cache-Control': 'no-store' },
       });
       return Response.json(
-        { code: 'profile_attempt_exists', error: 'A chart request already exists for this session today. It will not be repeated automatically, even if its result was not received.' },
+        { code: 'profile_attempt_exists', error: 'This update could not be confirmed. Your saved profile is unchanged.' },
         { status: 429, headers: sessionHeaders(session) },
       );
     }

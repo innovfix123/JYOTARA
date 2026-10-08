@@ -6,14 +6,24 @@ test('OTP one-time consumption, attempts, expiry, resend and sessions use atomic
  const url=process.env.DATABASE_URL!;
  if(!url||!url.includes('jyotara_qa_otp'))throw Error('Isolated QA database required');
  const db=new PostgresDatabase(url);
- let now=Date.now(),code='';
+ let now=Date.now(),code='',sms=0;
  const config={JYOTARA_OTP_ENABLED:'true',JYOTARA_PHONE_AUTH_KEY:'synthetic-integration-secret-123456',AUTHKEY_KEY:'synthetic',AUTHKEY_SID:'123'};
- const auth=new PhoneAuth(db,config,async(input)=>{code=new URL(String(input)).searchParams.get('otp')!;return Response.json({Message:'Submitted Successfully'});},()=>now);
+ const auth=new PhoneAuth(db,config,async(input)=>{sms++;code=new URL(String(input)).searchParams.get('otp')!;return Response.json({Message:'Submitted Successfully'});},()=>now);
  const req=(path:string,body:object={},token?:string)=>new Request('https://example.test/api/auth/'+path,{method:'POST',headers:token?{Authorization:'Bearer '+token}:{},body:JSON.stringify(body)});
  const send=async()=>{const r=await auth.handle(req('send',{mobile:'9000000000'}),'tester');assert.equal(r.status,200);return ((await r.json()) as {challengeId:string}).challengeId;};
  const verify=(id:string,otp=code)=>auth.handle(req('verify',{mobile:'9000000000',challengeId:id,otp}),'tester');
  try{
-  const id=await send();
+  const requestId='a'.repeat(32);
+  const concurrent=await Promise.all(Array.from({length:6},()=>auth.handle(req('send',{mobile:'9000000000',requestId}),'tester')));
+  assert.ok(concurrent.every(r=>r.status===200));
+  const challenges=await Promise.all(concurrent.map(r=>r.json() as Promise<{challengeId:string}>));
+  const id=challenges[0].challengeId;
+  assert.ok(challenges.every(b=>b.challengeId===id));assert.equal(sms,1);
+  now+=20000;
+  const replay=await auth.handle(req('send',{mobile:'9000000000',requestId}),'tester');
+  const recovered=await replay.json() as {challengeId:string;expiresIn:number};
+  assert.equal(recovered.challengeId,id);assert.equal(recovered.expiresIn,280);assert.equal(sms,1);
+  assert.equal((await auth.handle(req('send',{mobile:'9000000000',requestId}),'other')).status,429);
   assert.equal((await auth.handle(req('send',{mobile:'9000000000'}),'tester')).status,429);
   const outcomes=await Promise.all(Array.from({length:8},()=>verify(id)));
   assert.equal(outcomes.filter(r=>r.status===200).length,1);

@@ -214,11 +214,22 @@ export function conciseReply(answer:string): string {
 }
 
 /** Dialogue is untrusted memory, never calculation evidence or system instructions. */
-export function conversationHistory(value: unknown): {role: 'user' | 'assistant'; content: string}[] | null {
+export function conversationHistory(value: unknown, responseMode?:string): {role: 'user' | 'assistant'; content: string}[] | null {
   if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > 12) return null;
-  if (value.some(v => !v || !['user','assistant'].includes(v.role) || typeof v.content !== 'string' || !v.content.trim() || [...v.content].length > 1800)) return null;
+  const conversational=responseMode==='conversation';
+  if (!Array.isArray(value) || value.length > (conversational?32:12)) return null;
+  if (value.some(v => !v || !['user','assistant'].includes(v.role) || typeof v.content !== 'string' || !v.content.trim() || [...v.content].length > (conversational?4000:1800))) return null;
   return value.map(v => ({role:v.role, content:v.content.trim()}));
+}
+
+/** Exact earlier user statements supplied by the selected conversation. They
+ * are untrusted context, never verified facts or generated assistant memory. */
+export function conversationMemory(value:unknown,responseMode?:string):string[]|null {
+  if(value===undefined)return [];
+  if(responseMode!=='conversation')return null;
+  if(!Array.isArray(value)||value.length>12)return null;
+  if(value.some(v=>typeof v!=='string'||!v.trim()||[...v].length>1000||/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u.test(v)))return null;
+  return value.map(v=>v.trim());
 }
 
 /** Authored fictional coaching examples, not chart evidence or real-user records. */

@@ -5,9 +5,42 @@ import 'package:jyotara/discovery_screens.dart';
 import 'package:jyotara/birth_form.dart';
 import 'package:jyotara/services/profile_session.dart';
 import 'package:jyotara/services/profile_gender.dart';
+import 'package:jyotara/services/jyotara_api.dart';
+import 'package:http/testing.dart';
+
+import 'profile_replacement_test.dart' show chartReply;
 
 void main() {
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  late List<SavedKundli> saved;
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    saved = [];
+  });
+  Future<SavedKundli> createProfile(List<SavedKundli> rows) async {
+    final id = 'fixture-${saved.length}';
+    final row = SavedKundli(
+      id,
+      ProfileSession(
+        api: JyotaraApiClient(
+          baseUrl: 'https://fixture.test',
+          client: MockClient((_) async => chartReply(id)),
+        ),
+      ),
+    );
+    saved.add(row);
+    return row;
+  }
+
+  Future<void> calculateFixture(
+    ProfileSession session,
+    Map<String, dynamic> body,
+  ) => session.calculate(
+    dateTime: body['datetime'] as String,
+    latitude: (body['latitude'] as num).toDouble(),
+    longitude: (body['longitude'] as num).toDouble(),
+    exactTime: body['exactTime'] == true,
+    nickname: body['nickname'] as String,
+  );
   testWidgets(
     'editing matching details restores the confirmed time and submits from the real button',
     (tester) async {
@@ -75,26 +108,28 @@ void main() {
       await tester.pumpWidget(const MaterialApp(home: MatchingScreen()));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
-        find.text('Match Horoscope'),
+        find.text('See our match'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.ensureVisible(find.text('Match Horoscope'));
+      await tester.ensureVisible(find.text('See our match'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Match Horoscope'));
+      await tester.tap(find.text('See our match'));
       await tester.pumpAndSettle();
       expect(find.byType(AlertDialog), findsOneWidget);
       expect(find.text('Check matching details'), findsOneWidget);
     },
   );
   testWidgets(
-    'direct birth details reach matching without calculating separate charts and show result',
+    'new saved birth charts reach matching with their original details and show result',
     (tester) async {
       var calls = 0;
       Map<String, dynamic>? submitted;
       await tester.pumpWidget(
         MaterialApp(
           home: MatchingScreen(
+            loadKundlis: () async => saved,
+            createKundli: createProfile,
             request: (path, body) async {
               calls++;
               submitted = body;
@@ -112,19 +147,23 @@ void main() {
       );
       await tester.pumpAndSettle();
       for (final male in [true, false]) {
-        final label = '${male ? 'Boy' : 'Girl'}: Enter birth details';
-        await tester.scrollUntilVisible(
-          find.text(label),
-          200,
-          scrollable: find.byType(Scrollable).first,
+        await tester.ensureVisible(
+          find.byKey(ValueKey(male ? 'matching-first' : 'matching-second')),
         );
-        await tester.ensureVisible(find.text(label));
+        await tester.tap(
+          find.byKey(ValueKey(male ? 'matching-first' : 'matching-second')),
+        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text(label));
+        await tester.tap(find.text('Add new person'));
         await tester.pumpAndSettle();
         final form = tester.widget<BirthForm>(find.byType(BirthForm));
-        expect(form.onSubmit, isNotNull);
-        await form.onSubmit!({
+        expect(form.onSubmit, isNull);
+        expect(form.onboarding, isTrue);
+        expect(form.initialDetails, isNull);
+        expect(form.session.nickname, isEmpty);
+        expect(find.text('Made for you.'), findsOneWidget);
+        expect(find.text('Start with your birth details.'), findsOneWidget);
+        await calculateFixture(form.session, {
           'nickname': male ? 'Test A' : 'Test B',
           'datetime': male
               ? '1995-01-10T08:00:00+05:30'
@@ -146,19 +185,19 @@ void main() {
       await tester.tap(find.byType(Checkbox));
       await tester.pump();
       await tester.scrollUntilVisible(
-        find.text('Match Horoscope'),
+        find.text('See our match'),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.ensureVisible(find.text('Match Horoscope'));
+      await tester.ensureVisible(find.text('See our match'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Match Horoscope'));
+      await tester.tap(find.text('See our match'));
       await tester.pumpAndSettle();
       expect(calls, 1);
       expect(submitted!['consent'], true);
       expect(submitted!['boy']['nickname'], 'Test A');
       expect(find.text('24.5 / 36'), findsWidgets);
-      expect(find.text('Compatibility score'), findsWidgets);
+      expect(find.text('Room to connect.'), findsWidgets);
       expect(tester.takeException(), isNull);
     },
   );
@@ -170,6 +209,8 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MatchingScreen(
+          loadKundlis: () async => saved,
+          createKundli: createProfile,
           request: (path, body) async {
             calls++;
             submitted = body;
@@ -188,19 +229,18 @@ void main() {
     );
     await tester.pumpAndSettle();
     for (final male in [true, false]) {
-      final label = '${male ? 'Boy' : 'Girl'}: Enter birth details';
-      await tester.scrollUntilVisible(
-        find.text(label),
-        200,
-        scrollable: find.byType(Scrollable).first,
+      await tester.ensureVisible(
+        find.byKey(ValueKey(male ? 'matching-first' : 'matching-second')),
       );
-      await tester.ensureVisible(find.text(label));
+      await tester.tap(
+        find.byKey(ValueKey(male ? 'matching-first' : 'matching-second')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.text(label));
+      await tester.tap(find.text('Add new person'));
       await tester.pumpAndSettle();
       final form = tester.widget<BirthForm>(find.byType(BirthForm));
-      expect(form.onSubmit, isNotNull);
-      await form.onSubmit!({
+      expect(form.onSubmit, isNull);
+      await calculateFixture(form.session, {
         'nickname': male ? 'Test A' : 'Test B',
         'datetime': male
             ? '1995-01-10T08:00:00+05:30'
@@ -222,13 +262,13 @@ void main() {
     await tester.tap(find.byType(Checkbox));
     await tester.pump();
     await tester.scrollUntilVisible(
-      find.text('Match Horoscope'),
+      find.text('See our match'),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.ensureVisible(find.text('Match Horoscope'));
+    await tester.ensureVisible(find.text('See our match'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Match Horoscope'));
+    await tester.tap(find.text('See our match'));
     await tester.pumpAndSettle();
     expect(submitted!['boy']['exactTime'], false);
     expect(submitted!['girl']['exactTime'], false);
@@ -236,7 +276,10 @@ void main() {
     expect(submitted!['consent'], true);
     expect(submitted!['boy']['nickname'], 'Test A');
     expect(find.text('24.5 / 36'), findsWidgets);
-    expect(find.text('Provisional comparison'), findsWidgets);
+    expect(
+      find.text('Provisional comparison · Birth time unknown.'),
+      findsWidgets,
+    );
     expect(tester.takeException(), isNull);
   });
 }

@@ -1,4 +1,5 @@
 import 'chat_availability.dart';
+import 'services/ui_language.dart';
 
 import 'package:flutter/material.dart';
 
@@ -11,7 +12,7 @@ String chatProfileDetails(ProfileSession session) {
   final birth = session.birthInput;
   final stamp = birth?.indiaDateTime.toIso8601String();
   return [
-    'Name: ${session.nickname.isEmpty ? 'My profile' : session.nickname}',
+    'Full name: ${session.nickname.isEmpty ? 'My profile' : session.nickname}',
     'Gender: ${session.gender?.label ?? 'Not specified'}',
     if (stamp != null) 'Date of birth: ${stamp.substring(0, 10)}',
     if (stamp != null)
@@ -73,7 +74,9 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
   Future<void> _edit(SavedKundli row) async {
     await Navigator.push(
       context,
-      MaterialPageRoute<void>(builder: (_) => BirthForm(session: row.session)),
+      MaterialPageRoute<void>(
+        builder: (_) => BirthForm(session: row.session, onboarding: true),
+      ),
     );
     await row.session.flushStorage();
     await _load();
@@ -104,14 +107,12 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
             child: ListView(
               padding: const EdgeInsets.all(20),
               children: [
-                Text(
-                  'Chat with ${widget.guide.name}',
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-                Text('${widget.guide.speciality}\nAI guide'),
-                const SizedBox(height: 16),
-                const Text(
-                  'Choose whose chart this conversation is about. Each profile has its own chat history.',
+                const UiText(
+                  'Whose Birth Chart?',
+                  style: TextStyle(
+                    fontFamily: 'JyotaraEditorial',
+                    fontSize: 27,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
@@ -145,17 +146,12 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
                                 ? Icons.radio_button_checked
                                 : Icons.radio_button_off,
                           ),
-                          title: Text(
+                          title: UiText(
                             row.session.nickname.isEmpty
                                 ? (row.id == 'personal'
                                       ? 'My profile'
-                                      : 'Unfinished Kundli')
+                                      : 'Unfinished Birth Chart')
                                 : row.session.nickname,
-                          ),
-                          subtitle: Text(
-                            row.session.facts == null
-                                ? 'Complete birth details to use this profile.'
-                                : chatProfileDetails(row.session),
                           ),
                           onTap: busy
                               ? null
@@ -165,6 +161,7 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
                                     return;
                                   }
                                   setState(() => selected = row);
+                                  _start();
                                 },
                           trailing: IconButton(
                             tooltip: 'Edit profile',
@@ -175,11 +172,6 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
                       ],
                     ),
                   ),
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: selected == null || busy ? null : _start,
-                  child: Text('Open chat with ${widget.guide.name}'),
-                ),
               ],
             ),
           ),

@@ -1,3 +1,4 @@
+import { limitedBirthGuidance } from '@/lib/limited-birth-guidance';
 import { divineContext } from '@/lib/divine-calculations';
 import { divineConsultation } from '@/lib/divine-consultation';
 import { profileOverviewQuestion, profileOverview } from '@/lib/profile-overview';
@@ -8,7 +9,7 @@ import { requestIdentity, reserveQuestion, sealReply, openReply, eraseGuidanceCo
 import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
 import { reportPerson, verifiedReportPerson } from '@/lib/marriage-report';
-import { conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, relationshipFollowup, relationshipResponse, responseStyle, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
+import { conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, conversationMemory, relationshipFollowup, relationshipResponse, responseStyle, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
 import {
   buildTopicContext,
   buildEvidencePacket,
@@ -22,6 +23,15 @@ const allowedCategories = new Set<GuidanceCategory>([
   'Marriage', 'Family', 'Business', 'Property', 'Spiritual', 'Panchang',
 ]);
 const guideVoices:Record<string,string>={
+Meera:"Love and dating: warm and attentive; explore communication and healthy mutual interest without claiming to know another person\u2019s private feelings.",
+Janaki:"Marriage and compatibility: calm and respectful; focus on readiness, consent and shared expectations. Never guarantee marriage dates.",
+Harini:"Love to marriage: discuss commitment, family acceptance and preparation for married life without pressuring marriage.",
+Aravind:"Education: encouraging and practical; support school, college, exams, higher studies and overseas-study questions without promising admission or marks.",
+Kavya:"Hobbies and creativity: curious and encouraging; explore creative interests and practice, without limiting talents based on a chart.",
+Adithya:"Career: direct and supportive; discuss jobs, promotion, career changes and practical preparation without guaranteeing selection.",
+Raghavan:"Business: thoughtful and practical; discuss direction and partnership responsibilities without promising profit or investment returns.",
+Revathi:"Family: warm and grounded; discuss parenting, communication, caregiving and boundaries without blame.",
+Karthik:"Personal growth: reflective and encouraging; explore confidence, values and life direction without creating dependence.",
  Aadhirai:'Love: warm, gentle and attentive; understand feelings before offering a next step.',
  Arivan:'Career: thoughtful and clear; explore direction, responsibility and the user’s real work context.',
  Medha:'Education: patient and encouraging; understand learning needs before suggesting one manageable step.',
@@ -112,19 +122,29 @@ export async function POST(request: Request) {
     requestId?: string;
     previousUserMessages?: unknown;
     conversationHistory?: unknown;
+    conversationMemory?: unknown;
+    responseMode?: 'conversation';
     guide?: string;
+    depth?: 'standard' | 'detailed';
+    upgradeFrom?: unknown;
     reportPerson?: unknown;
   };
   const question = typeof body?.question === 'string' ? body.question.trim().replace(/\s+/g, ' ') : '';
   if (!body?.category || !allowedCategories.has(body.category) || !question || [...question].length > 240) {
     return Response.json({ error: 'A valid category, question and calculated chart are required.' }, { status: 400 });
   }
+  if (body.depth !== undefined && !['standard','detailed'].includes(body.depth)) return Response.json({error:'Choose Standard or Detailed.'},{status:400});
+  if (body.responseMode !== undefined && body.responseMode !== 'conversation') return Response.json({error:'Invalid response mode.'},{status:400});
+  if (body.responseMode === 'conversation' && (body.depth === 'detailed' || body.upgradeFrom != null)) return Response.json({error:'Conversational answers use the standard price and do not support paid upgrades.'},{status:400});
+  if (body.conversationMemory !== undefined && body.responseMode !== 'conversation') return Response.json({error:'Conversation memory requires conversational mode.'},{status:400});
   if (body.guide !== undefined && (typeof body.guide !== 'string' || !Object.hasOwn(guideVoices,body.guide))) return Response.json({error:'Unknown guide.'},{status:400});
   if (body.requestId !== undefined && (typeof body.requestId !== 'string' || !/^[A-Za-z0-9_-]{16,128}$/.test(body.requestId))) {
     return Response.json({ error: 'Invalid request identifier.' }, { status: 400 });
   }
-  const dialogue = conversationHistory(body.conversationHistory);
+  const dialogue = conversationHistory(body.conversationHistory,body.responseMode);
   if (dialogue === null) return Response.json({error:'Invalid conversation history.'},{status:400});
+  const memory = conversationMemory(body.conversationMemory,body.responseMode);
+  if (memory === null) return Response.json({error:'Invalid conversation memory.'},{status:400});
   const history = previousUserMessages(body.previousUserMessages);
   if (history === null) return Response.json({error: 'Invalid conversation context.'}, {status: 400});
   const language = allowedLanguages.has(body.language ?? '') ? body.language! : 'ta';
@@ -147,7 +167,10 @@ export async function POST(request: Request) {
   // Preserve legacy hashes for requests without context. Context changes conflict.
   if (history.length) identityPayload.push(history);
   if (dialogue.length) identityPayload.push({conversationHistory:dialogue});
+  if (body.responseMode) identityPayload.push({responseMode:body.responseMode});
+  if (memory.length) identityPayload.push({conversationMemory:memory});
   if (body.guide) identityPayload.push({guide:body.guide});
+  if (body.depth) identityPayload.push({depth:body.depth});
   if (body.reportPerson !== undefined) identityPayload.push({reportPerson:body.reportPerson});
   const identity = await requestIdentity(chartSecret, session.id,
     body.requestId ?? crypto.randomUUID(), identityPayload);
@@ -178,27 +201,40 @@ export async function POST(request: Request) {
   // Old tickets lack the location needed to safely refresh timed context.
   // Keep natal facts, but do not reuse their one-time Panchang selection.
   let chart: ChartFacts = { ...trusted.chart, transits: undefined, todayPanchang: undefined, contextCalculatedAt: undefined };
-  body.category = conversationTopic(question, body.category, dialogue.length ? dialogue.filter(turn=>turn.role==='user').map(turn=>turn.content) : history) as GuidanceCategory;
-  const safetyQuestion = relationshipFollowup(question) ? [...history, question].join('\n') : question;
+  const recentUserStatements=dialogue.filter(turn=>turn.role==='user').map(turn=>turn.content);
+  const priorUserStatements=[...memory,...(recentUserStatements.length ? recentUserStatements : history)];
+  body.category = conversationTopic(question, body.category, priorUserStatements) as GuidanceCategory;
+  const safetyQuestion = relationshipFollowup(question) ? [...priorUserStatements, question].join('\n') : question;
   const safetyPacket = buildEvidencePacket({category: body.category, question: safetyQuestion, language, birthTimeKnown: trusted.birthTimeKnown, chart});
-  const scripted = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, history, style);
+  const scripted = safetyPacket.intent === 'high_stakes' ? null : relationshipResponse(body.category, question, priorUserStatements, style);
   // Context-aware wording for ordinary conversation; dedicated sensitive boundaries remain.
   let practical = scripted && ['privacy', 'no_contact'].includes(scripted.kind) ? scripted : null;
   if (safetyPacket.intent !== 'high_stakes' && !practical && question !== profileOverviewQuestion) {
-    const person = reportPerson(body.reportPerson);
+    if (!trusted.birthTimeKnown) {
+      const result = await limitedBirthGuidance(env,{question,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson});
+      const reply={replayed:false,answer:result.answer,answerMode:'limited_guidance',providerUsage:{calls:result.calls,newProviderCalls:result.calls.length},answeredAt:new Date().toISOString(),evidence:[],support:'unsupported',profileId:trusted.profileId};
+      const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,consent:body.researchConsent===true?researchConsentVersion:null,ageBand,ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
+      if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+      return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
+    }
+    const reportedPerson = reportPerson(body.reportPerson);
+    const person = reportedPerson && trusted.birthDatetime && Date.parse(reportedPerson.datetime) === Date.parse(trusted.birthDatetime)
+      ? {...reportedPerson,datetime:trusted.birthDatetime} : reportedPerson;
     const verified = trusted.birthTimeKnown && person && (
-      (trusted.birthDatetime === person.datetime && trusted.contextLocation?.latitude === person.latitude && trusted.contextLocation?.longitude === person.longitude) ||
+      (trusted.birthDatetime !== undefined && Date.parse(trusted.birthDatetime) === Date.parse(person.datetime) && trusted.contextLocation?.latitude === person.latitude && trusted.contextLocation?.longitude === person.longitude) ||
       await verifiedReportPerson(env.DB,person,session.id,trusted.profileId,trusted.contextLocation,{
         hash:async values=>(await requestIdentity(chartSecret,session.id,'profile-v1',values)).hash,
         open:(id,cipher)=>openReply(chartSecret,id,cipher,2_000_000),
       }));
-    const result = verified && person ? await divineConsultation(env,{id:identity.id,person,question,style,category:body.category,guide:body.guide,dialogue},env.DB) : {answer:null,calls:[]};
-    const unavailable = !verified
-      ? (style==='tamil'?'பிறந்த நேரத்துடன் சேமித்த விவரங்களைத் திறந்து உறுதிப்படுத்துங்கள்; அதன் பிறகு உங்கள் கேள்விக்கான ஜாதகப் பலனைப் பார்க்கலாம்.':style==='tanglish'?'Pirandha nerathoda saved details-a thirandhu urudhippaduthunga; appuram unga kelvikkaana jathaga palanai paarkalaam.':'Please confirm your saved birth details and birth time so I can prepare this chart reading.')
-      : (style==='tamil'?'பதிலைத் தயாரிப்பதில் தாமதம் ஏற்பட்டுள்ளது. சிறிது நேரத்தில் புதிய கேள்வியை அனுப்புங்கள்.':style==='tanglish'?'Badhil thayaarikka thaamadham aagudhu. Konjam nerathil pudhu kelviyai anuppunga.':'The reading could not be completed just now. Please send a new question in a moment.');
-    const reply={replayed:false,answer:result.answer||unavailable,answerMode:result.answer?'provider_reading':'reading_unavailable',
-      providerUsage:{calls:result.calls,newProviderCalls:result.calls.length},answeredAt:new Date().toISOString(),
-      evidence:[],support:'partially_supported',profileId:trusted.profileId};
+    const result = verified && person ? await divineConsultation(env,{id:identity.id,person,question,style,category:body.category,guide:body.guide,profileContext:body.reportPerson as {relationshipStatus?:string;profession?:string},guideNotes:body.guide==='Nila'&&body.category==='Relationships'?'Love and trust: listen without judgement; discuss mixed signals and boundaries. Astrology cannot prove lying, cheating or another person’s private feelings.':body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,natalChart:{rashi:chart.rashi,nakshatra:chart.nakshatra,lagna:chart.lagna,lagnaLord:chart.lagnaLord,planets:chart.planets},dialogue},env.DB) : {answer:null,calls:[]};
+    // Missing legacy provider metadata must not strand a saved profile or ask
+    // again for a time the user cannot supply. Never send guessed birth inputs.
+    const general = !verified ? await limitedBirthGuidance(env,{question,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson}) : null;
+    const unavailable = style==='tamil'?'இப்போது பலன் கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.':style==='tanglish'?'Ippo badhil kidaikkala. Meendum muyarchi pannunga.':'The reading is unavailable right now. Tap Retry to try again.';
+    const calls = general?.calls ?? result.calls;
+    const reply={replayed:false,answer:general?.answer||result.answer||unavailable,answerMode:general?'limited_guidance':result.answer?'provider_reading':'reading_unavailable',
+      providerUsage:{calls,newProviderCalls:calls.length},answeredAt:new Date().toISOString(),
+      evidence:[],support:general?'unsupported':'partially_supported',profileId:trusted.profileId};
     const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,
       question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,
       consent:body.researchConsent===true?researchConsentVersion:null,ageBand,
@@ -211,7 +247,7 @@ export async function POST(request: Request) {
   // to a retired provider or a generic model-generated chart reading.
   const charges:import('@/lib/divine-calculations').CalculationCharge[]=[];
   const overview=question===profileOverviewQuestion;
-  if(overview && trusted.contextLocation) {
+  if(overview && trusted.birthTimeKnown && trusted.contextLocation) {
     const now=Date.now();
     const context=await currentContext(env.DB,trusted.contextLocation,
       (module,datetime,location)=>divineContext(env,module,{...location,datetime},charges),now);

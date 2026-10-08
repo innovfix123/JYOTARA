@@ -47,14 +47,12 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pageBack();
         await tester.pumpAndSettle();
-        const disclaimer =
-            'Daily timings are not connected on this screen yet. Your birth chart is not today’s Panchangam. No daily timings are being shown.';
         await tester.scrollUntilVisible(
-          find.text(text(disclaimer)),
+          find.text(text('SAME STARS. A BRIGHTER YOU.')),
           180,
           scrollable: find.byType(Scrollable).first,
         );
-        expect(find.text(text(disclaimer)), findsOneWidget);
+        expect(find.text(text('SAME STARS. A BRIGHTER YOU.')), findsOneWidget);
         expect(find.text('SET LOCATION'), findsNothing);
         expect(find.byIcon(Icons.notifications_none_rounded), findsNothing);
         expect(tester.takeException(), isNull);

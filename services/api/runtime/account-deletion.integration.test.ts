@@ -23,7 +23,7 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
   const now=Date.now();
   const reviewSettings={JYOTARA_PHONE_AUTH_KEY:'synthetic-review-key-more-than-32-characters',JYOTARA_REVIEW_PASSWORD_SHA256:createHash('sha256').update('synthetic-review-password').digest('hex')};
   const reviewRequest=(deleting=false)=>new Request('https://example.test/api/auth/'+(deleting?'reviewer-delete':'reviewer'),{method:'POST',body:JSON.stringify({username:'jyotara-review',password:'synthetic-review-password'})});
-  const demo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json();
+  const demo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json() as {token:string;accountId:string};
   const demoAuth=new PhoneAuth(db,{});
   assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'public-v1'),demo.accountId);
   assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'wrong'),null);
@@ -31,7 +31,7 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
   assert.deepEqual(await (await reviewerLogin(reviewRequest(true),db,reviewSettings,'public-v1',now)).json(),{deleted:true});
   assert.equal((await db.pool.query('SELECT id FROM phone_accounts WHERE id=$1',[demo.accountId])).rowCount,0);
   assert.equal(await demoAuth.account(new Request('https://example.test',{headers:{Authorization:'Bearer '+demo.token}}),'public-v1'),null);
-  const freshDemo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json();
+  const freshDemo=await (await reviewerLogin(reviewRequest(),db,reviewSettings,'public-v1',now)).json() as {token:string;accountId:string};
   assert.notEqual(freshDemo.accountId,demo.accountId);
   assert.equal(await demoAuth.ownProfile('nirayana_pilot_session=demo-chart',freshDemo.accountId,true),false);
   assert.deepEqual(await (await reviewerLogin(reviewRequest(true),db,reviewSettings,'public-v1',now)).json(),{deleted:true});
@@ -41,6 +41,10 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
    await db.pool.query('INSERT INTO phone_profile_owners VALUES($1,$2)',[who+'-chart',who]);
    await db.pool.query("INSERT INTO guide_requests(id,session_id,category,language,support_level,answer_mode,created_at,question_text,response_ciphertext) VALUES($1,$2,'love','en','chart','chart',$3,'private question','private answer')",[who+'-reply',who+'-chart',now]);
    await db.pool.query("INSERT INTO profile_generations(id,session_id,day_key,status,created_at,updated_at,response_ciphertext) VALUES($1,$2,'today','completed',$3,$3,'private chart')",[who+'-generation',who+'-chart',now]);
+  }
+  // Regression: several corrected charts on the same day must erase together.
+  for(const [id,hash] of [['owner-correction-one','private-hash-one'],['owner-correction-two','private-hash-two']]) {
+    await db.pool.query("INSERT INTO profile_generations(id,session_id,day_key,status,created_at,updated_at,request_hash,response_ciphertext) VALUES($1,'owner-chart','today','completed',$2,$2,$3,'private corrected chart')",[id,now,hash]);
   }
   const reportToken='12'.repeat(32);
   const auth=new PhoneAuth(db,{});
@@ -67,13 +71,13 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
     return Response.json({Message:'Submitted Successfully'});
   },()=>clock);
   const recoveryRequest=(path:string,body:object)=>new Request('https://example.test/api/auth/'+path,{method:'POST',body:JSON.stringify({mobile:'9000000001',...body})});
-  let challenge=await (await recovery.handle(recoveryRequest('send',{}),'public-v1')).json();
+  let challenge=await (await recovery.handle(recoveryRequest('send',{}),'public-v1')).json() as {challengeId:string};
   assert.equal((await recovery.handle(recoveryRequest('verify-deletion',{challengeId:challenge.challengeId,otp:'000000'}),'public-v1')).status,400);
   assert.equal((await db.pool.query("SELECT id FROM phone_accounts WHERE id='otp-owner'")).rowCount,1);
   assert.deepEqual(await (await recovery.handle(recoveryRequest('verify-deletion',{challengeId:challenge.challengeId,otp}),'public-v1')).json(),{deleted:true});
   assert.equal((await db.pool.query("SELECT id FROM phone_accounts WHERE id='otp-owner'")).rowCount,0);
   clock+=61000;
-  challenge=await (await recovery.handle(recoveryRequest('send',{}),'public-v1')).json();
+  challenge=await (await recovery.handle(recoveryRequest('send',{}),'public-v1')).json() as {challengeId:string};
   assert.deepEqual(await (await recovery.handle(recoveryRequest('verify-deletion',{challengeId:challenge.challengeId,otp}),'public-v1')).json(),{deleted:true});
   assert.equal((await db.pool.query('SELECT id FROM phone_accounts WHERE phone_hash=$1',[phoneHash])).rowCount,0);
   // Simulate provider requests already running when account deletion commits.
@@ -102,7 +106,10 @@ test('PostgreSQL erasure preserves other accounts and acknowledges concurrent re
   assert.equal((await db.pool.query("SELECT * FROM phone_login_sessions WHERE account_id='owner'")).rowCount,0);
   const erased=(await db.pool.query("SELECT * FROM guide_requests WHERE id='owner-reply'")).rows[0];
   assert.equal(erased.question_text,null);assert.equal(erased.response_ciphertext,null);
-  assert.equal((await db.pool.query("SELECT status FROM profile_generations WHERE id='owner-generation'")).rows[0].status,'deleted');
+  const generations=(await db.pool.query("SELECT id,status,request_hash,response_ciphertext FROM profile_generations WHERE session_id='owner-chart'")).rows;
+  assert.equal(generations.length,3);
+  for(const row of generations) {assert.equal(row.status,'deleted');assert.equal(row.request_hash,'erased:'+row.id);assert.equal(row.response_ciphertext,null);}
+  assert.equal(new Set(generations.map(row=>row.request_hash)).size,3);
   assert.equal((await db.pool.query("SELECT * FROM deleted_chart_sessions WHERE session_id='owner-chart'")).rowCount,1);
   assert.equal((await db.pool.query("SELECT question_text FROM guide_requests WHERE id='other-reply'")).rows[0].question_text,'private question');
   assert.equal((await db.pool.query("SELECT * FROM phone_accounts WHERE id='other'")).rowCount,1);

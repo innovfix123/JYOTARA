@@ -2,23 +2,40 @@ import 'chart_instant.dart';
 
 /// Keep actual nested provider checks, not group headings. Absence is a
 /// boolean fact; malformed/ambiguous or unknown-time results are withheld.
-List<Map<String, dynamic>>? normalizeYogaAssessments(dynamic groups, bool known) {
+List<Map<String, dynamic>>? normalizeYogaAssessments(
+  dynamic groups,
+  bool known,
+) {
   if (!known || groups is! List || groups.length > 20) return null;
   final result = <Map<String, dynamic>>[];
   final seen = <String>{};
-  bool validName(dynamic value) => value is String && value.trim().isNotEmpty &&
-      value.length <= 80 && !RegExp(r'[\u0000-\u001f]').hasMatch(value);
+  bool validName(dynamic value) =>
+      value is String &&
+      value.trim().isNotEmpty &&
+      value.length <= 80 &&
+      !RegExp(r'[\u0000-\u001f]').hasMatch(value);
   for (final group in groups) {
-    if (group is! Map || !validName(group['name']) || group['yoga_list'] is! List) return null;
+    if (group is! Map ||
+        !validName(group['name']) ||
+        group['yoga_list'] is! List) {
+      return null;
+    }
     for (final item in group['yoga_list'] as List) {
-      if (item is! Map || !validName(item['name']) || item['has_yoga'] is! bool ||
-          item['description'] is! String || (item['description'] as String).length > 8000) {
+      if (item is! Map ||
+          !validName(item['name']) ||
+          item['has_yoga'] is! bool ||
+          item['description'] is! String ||
+          (item['description'] as String).length > 8000) {
         return null;
       }
       final key = (item['name'] as String).trim().toLowerCase();
       if (!seen.add(key) || result.length >= 100) return null;
-      result.add({'name': (item['name'] as String).trim(), 'description': item['description'],
-        'group': (group['name'] as String).trim(), 'present': item['has_yoga']});
+      result.add({
+        'name': (item['name'] as String).trim(),
+        'description': item['description'],
+        'group': (group['name'] as String).trim(),
+        'present': item['has_yoga'],
+      });
     }
   }
   return result;
@@ -82,16 +99,20 @@ List<Map<String, dynamic>>? normalizeNavamsa(dynamic payload, bool known) {
       final rasi = item['rasi'] as Map;
       final name = names[planet['id']];
       final degree = item['sign_degree'];
-      final signOnly = payload['provider'] == 'divine' && payload['degreePrecision'] == 'sign-only' && degree == null;
+      final signOnly =
+          payload['provider'] == 'divine' &&
+          payload['degreePrecision'] == 'sign-only' &&
+          degree == null;
       if (name == null ||
           planet['name'] != name ||
           !seenPlanets.add(name) ||
           rasi['id'] != id ||
           rasi['name'] != signs[id] ||
-          (!signOnly && (degree is! num ||
-          !degree.isFinite ||
-          degree < 0 ||
-          degree >= 30))) {
+          (!signOnly &&
+              (degree is! num ||
+                  !degree.isFinite ||
+                  degree < 0 ||
+                  degree >= 30))) {
         return null;
       }
       if (planet['id'] != 100) {
@@ -176,7 +197,10 @@ Map<String, dynamic> normalizeChartFacts(
   }
 
   final kundli = data('result');
-  final yogaAssessments = normalizeYogaAssessments(kundli['yoga_details'], birthTimeKnown);
+  final yogaAssessments = normalizeYogaAssessments(
+    kundli['yoga_details'],
+    birthTimeKnown,
+  );
   final details = object(kundli['nakshatra_details']);
   final moon = object(details['chandra_rasi']);
   final star = object(details['nakshatra']);
@@ -215,7 +239,10 @@ Map<String, dynamic> normalizeChartFacts(
       'contextCalculatedAt': payload['contextCalculatedAt'],
     'yogas': (yogaAssessments ?? <Map<String, dynamic>>[])
         .where((item) => item['present'] == true)
-        .map((item) => {'name': item['name'], 'description': item['description']}).toList(),
+        .map(
+          (item) => {'name': item['name'], 'description': item['description']},
+        )
+        .toList(),
     'yogaAssessments': ?yogaAssessments,
     'currentDasha': ?period(dasha),
     'currentAntardasha': ?period(bhukti),

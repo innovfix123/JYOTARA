@@ -62,13 +62,25 @@ export async function issueChartTicket(secret: string, input: {
 }
 export async function openChartTicket(secret: string, token: unknown, sessionId: string,
   profileId: unknown, now = Date.now()): Promise<ChartTicket | null> {
+  if (!identifier(sessionId)) return null;
   return readChartTicket(secret, token, sessionId, profileId, now, false);
+}
+
+/** Wallet quotes from installed clients carry the protected ticket but no chart
+ * cookie. These authenticated ticket flags are for pricing only. The caller
+ * MUST verify the returned session's account ownership and deletion status;
+ * this is never a capability to answer a question or renew a chart. */
+export async function openChartQuoteTicket(secret: string, token: unknown,
+  profileId: unknown, now = Date.now()) {
+  const ticket = await readChartTicket(secret, token, null, profileId, now, false);
+  return ticket ? {sessionId: ticket.sessionId, birthTimeKnown: ticket.birthTimeKnown} : null;
 }
 
 /** Expiry must not prevent erasing data. This capability is for deletion ONLY;
  * normal guidance still uses openChartTicket and enforces the 24-hour expiry. */
 export async function openChartDeletionTicket(secret: string, token: unknown, sessionId: string,
   profileId: unknown, now = Date.now()): Promise<ChartTicket | null> {
+  if (!identifier(sessionId)) return null;
   return readChartTicket(secret, token, sessionId, profileId, now, true);
 }
 
@@ -76,6 +88,7 @@ export async function openChartDeletionTicket(secret: string, token: unknown, se
  * Keeping this fixed prevents renewal after a deletion tombstone expires. */
 export async function openChartRenewalTicket(secret: string, token: unknown, sessionId: string,
   profileId: unknown, now = Date.now()): Promise<ChartTicket | null> {
+  if (!identifier(sessionId)) return null;
   const ticket = await readChartTicket(secret, token, sessionId, profileId, now, true);
   if (!ticket || now >= (ticket.renewalUntil ?? ticket.issuedAt + renewalWindow)) return null;
   return { ...ticket, renewalUntil: ticket.renewalUntil ?? ticket.issuedAt + renewalWindow };
@@ -90,9 +103,9 @@ export function chartProviderDataFresh(ticket: ChartTicket, now: number): boolea
     calculatedAt <= ticket.issuedAt && calculatedAt <= now && now - calculatedAt < lifetime;
 }
 
-async function readChartTicket(secret: string, token: unknown, sessionId: string,
+async function readChartTicket(secret: string, token: unknown, sessionId: string | null,
   profileId: unknown, now: number, allowExpired: boolean): Promise<ChartTicket | null> {
-  if (!identifier(sessionId) || !identifier(profileId) || typeof token !== 'string' || token.length > 140_000 ||
+  if ((sessionId !== null && !identifier(sessionId)) || !identifier(profileId) || typeof token !== 'string' || token.length > 140_000 ||
       !Number.isSafeInteger(now) || now < 0) return null;
   try {
     const pieces = token.split('.');
@@ -101,7 +114,7 @@ async function readChartTicket(secret: string, token: unknown, sessionId: string
     if (iv.length !== 12) return null;
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv, additionalData: aad }, await key(secret), decode(pieces[2]));
     const value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(plaintext));
-    if (value.version !== 1 || value.sessionId !== sessionId || value.profileId !== profileId ||
+    if (value.version !== 1 || !identifier(value.sessionId) || (sessionId !== null && value.sessionId !== sessionId) || value.profileId !== profileId ||
         !Number.isSafeInteger(value.issuedAt) || !Number.isSafeInteger(value.expiresAt) ||
         value.issuedAt < 0 || value.issuedAt > now || (!allowExpired && value.expiresAt <= now) || value.expiresAt - value.issuedAt !== lifetime ||
         (value.renewalUntil !== undefined && (!Number.isSafeInteger(value.renewalUntil) || value.renewalUntil < value.issuedAt || value.renewalUntil > value.issuedAt + renewalWindow)) ||

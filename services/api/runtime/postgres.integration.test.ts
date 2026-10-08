@@ -20,6 +20,17 @@ test('PostgreSQL preserves reservation budgets, idempotency, deletion and atomic
       id: `profile-${i}`, session: `owner-${i}`, day: 'qa-day', now, limit: 3,
     })));
     assert.equal(profiles.filter(r => r === 'claimed').length, 3, 'concurrent processes must not exceed daily paid-profile cap');
+    assert.equal(await reserveProfile(db(0), {
+      id: 'editable-original', session: 'editable-owner', day: 'qa-edits', now, limit: 60, hash: 'original',
+    }), 'claimed');
+    const corrected = await Promise.all(Array.from({ length: 12 }, (_, i) => reserveProfile(db(i), {
+      id: `editable-correction-${i}`, session: 'editable-owner', day: 'qa-edits', now, limit: 60, hash: 'corrected-time',
+    })));
+    assert.equal(corrected.filter(r => r === 'claimed').length, 1);
+    assert.equal(corrected.filter(r => r === 'existing').length, 11);
+    assert.equal(await reserveProfile(db(0), {
+      id: 'editable-place', session: 'editable-owner', day: 'qa-edits', now, limit: 60, hash: 'corrected-place',
+    }), 'claimed');
     const questions = await Promise.all(Array.from({ length: 24 }, (_, i) => reserveQuestion(db(i), {
       id: `q-${i}`, hash: 'synthetic-hash', session: 'same-owner', category: 'Love', language: 'en', now, limit: 3,
     })));

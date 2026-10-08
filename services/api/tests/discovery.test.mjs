@@ -4,8 +4,11 @@ import test from 'node:test';
 import ts from 'typescript';
 const encode = source => 'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText).toString('base64');
 const client=encode(readFileSync(new URL('../lib/divine-calculations.ts',import.meta.url),'utf8'));
-const source=readFileSync(new URL('../runtime/discovery.ts',import.meta.url),'utf8').replace("'../lib/divine-calculations'",JSON.stringify(client));
-const {validDay,validBirth,daily,matching}=await import(encode(source));
+const dailyCopy=encode(readFileSync(new URL('../runtime/daily-copy.mjs',import.meta.url),'utf8'));
+const source=readFileSync(new URL('../runtime/discovery.ts',import.meta.url),'utf8')
+ .replace("'../lib/divine-calculations'",JSON.stringify(client))
+ .replace("'./daily-copy.mjs'",JSON.stringify(dailyCopy));
+const {validDay,validBirth,daily,matching,tamilTranslation}=await import(encode(source));
 test('daily dates use IST and reject outside the three-day window',()=>{
  const now=Date.parse('2026-09-08T20:00:00Z');
  for(const date of ['2026-09-08','2026-09-09','2026-09-10'])assert.equal(validDay(date,now),true);
@@ -60,8 +63,9 @@ test('Tamil daily reading translates summary and details and keeps language cach
  globalThis.fetch=async(url,options)=>{
   if(String(url).endsWith('/token'))return Response.json({access_token:'test',expires_in:3600});
   if(String(url).includes('/daily-horoscope'))return Response.json({success:1,data:{date,sign:'Aries',prediction:{personal:'general reading.',emotions:'love reading.',profession:'career reading.',health:'health reading.'}}});
+  if(JSON.parse(options.body).input[0].content.startsWith('Rewrite the supplied astrology reading'))return new Response(null,{status:503});
   translated++;const texts=JSON.parse(JSON.parse(options.body).input[1].content);
-  return Response.json({output_text:JSON.stringify(texts.map((_,i)=>'தமிழ் பலன் '+i))});
+  return Response.json({output_text:JSON.stringify(texts.map((_,i)=>'தமிழ் பலன் '+i+'.'))});
  };
  try{
   const req=language=>new Request('https://test',{method:'POST',body:JSON.stringify({sign:'aries',date,language})});
@@ -70,4 +74,19 @@ test('Tamil daily reading translates summary and details and keeps language cach
   for(const section of ta.sections){assert.match(section.text,/தமிழ்/);assert.match(section.details,/தமிழ்/);}
   await daily(req('ta'));assert.equal(translated,1);
  }finally{globalThis.fetch=original;}
+});
+
+test('daily Tamil rejects unfinished, mixed-language and duplicate summaries',async()=>{
+ const old=globalThis.fetch;process.env.OPENROUTER_API_KEY='test';
+ const texts=['general','detail','emotion','detail'];
+ try {
+  for(const output of [
+    ['தமிழ் பலன்','தமிழ் விவரம்.','உணர்வு பலன்.','உணர்வு விவரம்.'],
+    ['தமிழ் spreadsheet.','தமிழ் விவரம்.','உணர்வு பலன்.','உணர்வு விவரம்.'],
+    ['தமிழ் பலன்.','தமிழ் விவரம்.','தமிழ் பலன்.','உணர்வு விவரம்.']
+  ]) {
+    globalThis.fetch=async()=>Response.json({output_text:JSON.stringify(output)});
+    await assert.rejects(()=>tamilTranslation(texts,true));
+  }
+ } finally {globalThis.fetch=old;}
 });

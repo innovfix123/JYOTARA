@@ -7,6 +7,7 @@ import {once} from 'node:events';
 test('public HTTP authenticates before admission, serves policies and accepts reports',async()=>{
   if(!(process.env.DATABASE_URL ?? '').includes('jyotara_qa_http_20260915'))throw Error('Dedicated HTTP QA database required');
   Object.assign(process.env,{PORT:'0',JYOTARA_PUBLIC_ACCESS:'true',JYOTARA_OTP_ENABLED:'true',JYOTARA_PHONE_AUTH_KEY:'synthetic-http-test-secret-for-otp',AUTHKEY_KEY:'synthetic',AUTHKEY_SID:'123',JYOTARA_CHART_TICKET_KEY:'ab'.repeat(32)});
+  Object.assign(process.env,{JYOTARA_LIVE_PAYMENTS_ENABLED:'true',RAZORPAY_LIVE_KEY_ID:'rzp_live_Synthetic',RAZORPAY_LIVE_KEY_SECRET:'synthetic',RAZORPAY_LIVE_WEBHOOK_SECRET:'synthetic',JYOTARA_COIN_WALLET_ENABLED:'true'});
   delete process.env.JYOTARA_PUBLIC_CHAT_ENABLED;
   delete process.env.JYOTARA_TESTER_CODES_SHA256;
   delete process.env.JYOTARA_TESTER_EXPIRES_AT;
@@ -25,7 +26,7 @@ test('public HTTP authenticates before admission, serves policies and accepts re
     assert.match(await deletion.text(),/mailto:jyotara29@gmail.com/);
     assert.match(deletion.headers.get('content-security-policy')!,/frame-ancestors 'none'/);
     assert.deepEqual(await (await post('/api/auth/config')).json(),{enabled:true});
-    for(const path of ['/api/astrology/kundli','/api/guidance','/api/locations','/api/kundli/matching','/api/horoscope/daily','/api/answers/report'])
+    for(const path of ['/api/astrology/kundli','/api/guidance','/api/locations','/api/kundli/matching','/api/horoscope/daily','/api/answers/report','/api/wallet/status','/api/wallet/create','/api/support/list','/api/explore/panchang'])
       assert.equal((await post(path)).status,401,path);
     assert.equal((await database.pool.query('SELECT * FROM tester_daily_usage')).rowCount,0);
     assert.equal((await post('/api/auth/send',{mobile:'bad'})).status,422);
@@ -34,18 +35,28 @@ test('public HTTP authenticates before admission, serves policies and accepts re
     await database.pool.query('INSERT INTO phone_login_sessions VALUES($1,$2,$3,$4)',[createHash('sha256').update(token).digest('hex'),'owner','public-v1',Date.now()+60000]);
     await database.pool.query("INSERT INTO phone_profile_owners VALUES('other-chart','other')");
     assert.equal((await post('/api/auth/session',{},token)).status,200);
+    const wallet=await post('/api/wallet/status',{},token);
+    assert.equal(wallet.status,200);
+    const walletBody=await wallet.json() as {mode:string,balance:number};
+    assert.equal(walletBody.mode,'live');assert.equal(walletBody.balance,0);
+    assert.equal((await post('/api/payments/test/history',{},token)).status,404);
     assert.equal((await post('/api/guidance',{},token,'nirayana_pilot_session=other-chart')).status,403);
     await database.pool.query("INSERT INTO phone_profile_owners VALUES('own-chart','owner')");
     const locked=await post('/api/guidance',{question:'A paid question'},token,'nirayana_pilot_session=own-chart');
     assert.equal(locked.status,403);
-    assert.equal((await locked.json()).code,'chat_not_available');
+    assert.equal((await locked.json() as {code?:string}).code,'chat_not_available');
     assert.equal((await database.pool.query('SELECT * FROM tester_daily_usage')).rowCount,0);
+    process.env.JYOTARA_PUBLIC_CHAT_ENABLED='true';
+    const unpaid=await post('/api/guidance',{question:'Career guidance',requestId:'synthetic-request-0001'},token,'nirayana_pilot_session=own-chart');
+    assert.match((await unpaid.json() as {error:string}).error,/Confirm the coin price/);
+    const matching=await fetch(base+'/api/kundli/matching',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,'X-Jyotara-Wallet-Mode':'test'},body:'{}'});
+    assert.match((await matching.json() as {error:string}).error,/Confirm the coin price/);
     // Non-chat routes still reach their validation rather than the paid-chat gate.
     const free=await post('/api/locations',{},token);
-    assert.notEqual((await free.json()).code,'chat_not_available');
+    assert.notEqual((await free.json() as {code?:string}).code,'chat_not_available');
     const report={answer:'Synthetic HTTP report',guide:'Guide',reason:'harmful',consent:true};
     assert.deepEqual(await (await post('/api/answers/report',report,token)).json(),{reported:true});
-    assert.deepEqual(await (await post('/api/auth/delete-account',{confirm:true},token)).json().then(x=>({deleted:x.deleted})),{deleted:true});
+    assert.deepEqual(await (await post('/api/auth/delete-account',{confirm:true},token)).json().then(x=>({deleted:(x as {deleted:boolean}).deleted})),{deleted:true});
     assert.equal((await post('/api/answers/report',report,token)).status,401);
     assert.equal((await database.pool.query('SELECT * FROM answer_reports')).rowCount,0);
     assert.equal((await database.pool.query("SELECT * FROM phone_accounts WHERE id='other'")).rowCount,1);

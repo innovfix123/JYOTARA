@@ -1,3 +1,4 @@
+
 import 'dart:async';
 
 import 'notification_inbox.dart';
@@ -26,7 +27,9 @@ class FirebaseServices extends ChangeNotifier {
   static const _topic = 'jyotara_updates';
   SharedPreferences? _prefs;
 
-  Future<void> initialize() async {
+  Future<void>? _initializing;
+  Future<void> initialize() => _initializing ??= _initialize();
+  Future<void> _initialize() async {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
       await Firebase.initializeApp();
@@ -123,7 +126,11 @@ class FirebaseServices extends ChangeNotifier {
     await _prefs!.setBool('firebase.analytics', enabled);
     analytics = enabled;
     if (enabled) {
-      await FirebaseAnalytics.instance.logEvent(name: 'monitoring_enabled');
+      try {
+        await FirebaseAnalytics.instance.logEvent(name: 'monitoring_enabled');
+      } catch (_) {
+        /* Consent is already saved. */
+      }
     }
     notifyListeners();
   }

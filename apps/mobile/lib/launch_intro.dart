@@ -1,4 +1,5 @@
-import 'brand_mark.dart';
+import 'bronze_theme.dart';
+import 'approved_opening.dart';
 
 import 'dart:math' as math;
 
@@ -22,7 +23,7 @@ class _LaunchIntroState extends State<LaunchIntro>
     with SingleTickerProviderStateMixin {
   late final AnimationController _animation = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1800),
+    duration: const Duration(milliseconds: 4200),
   );
   bool _ready = false;
   bool _started = false;
@@ -55,81 +56,71 @@ class _LaunchIntroState extends State<LaunchIntro>
   Widget build(BuildContext context) {
     if (_ready) return widget.child;
     return Scaffold(
-      backgroundColor: const Color(0xFF21100F),
-      body: Center(
-        child: AnimatedBuilder(
-          animation: _animation,
-          builder: (context, _) {
-            final logo = const Interval(
-              0,
-              .35,
-              curve: Curves.easeOutCubic,
-            ).transform(_animation.value);
-            final name = const Interval(
-              .3,
-              .85,
-              curve: Curves.easeOutCubic,
-            ).transform(_animation.value);
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                SizedBox(
-                  width: 280,
-                  height: 280,
-                  child: CustomPaint(painter: _LaunchOrbitPainter(logo)),
-                ),
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Opacity(
-                      opacity: logo,
-                      child: Transform.scale(
-                        scale: .85 + .15 * logo,
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFFE6B85C), Color(0xFF974D2C)],
+      backgroundColor: BronzePalette.background,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: AnimatedBuilder(
+              animation: _animation,
+              builder: (context, _) {
+                final art = const Interval(
+                  0,
+                  .72,
+                  curve: Curves.easeOutCubic,
+                ).transform(_animation.value);
+                final title = const Interval(
+                  .25,
+                  .85,
+                  curve: Curves.easeOutCubic,
+                ).transform(_animation.value);
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Opacity(
+                        opacity: title,
+                        child: Transform.translate(
+                          offset: Offset(0, 12 * (1 - title)),
+                          child: const Text(
+                            'Jyotara',
+                            style: TextStyle(
+                              fontFamily: 'JyotaraEditorial',
+                              fontSize: 38,
+                              letterSpacing: 1.5,
+                              color: BronzePalette.ink,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFE6B85C)
-                                    .withValues(alpha: .22 * logo),
-                                blurRadius: 60,
-                                spreadRadius: 12,
-                              ),
-                            ],
-                          ),
-                          child: const Padding(
-                            padding: EdgeInsets.all(7),
-                            child: BrandMark(size: 86),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                    Opacity(
-                      opacity: name,
-                      child: Transform.translate(
-                        offset: Offset(0, 12 * (1 - name)),
+                      const SizedBox(height: 30),
+                      Opacity(
+                        opacity: art,
+                        child: Transform.scale(
+                          scale: .92 + .08 * art,
+                          child: GoldenSunriseMark(progress: _animation.value),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      Opacity(
+                        opacity: title,
                         child: const Text(
-                          'Jyotara',
+                          'Ancient wisdom for a brighter you',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 3,
-                            color: Color(0xFFF7E8CA),
+                            fontFamily: 'JyotaraEditorial',
+                            fontSize: 18,
+                            color: BronzePalette.gold,
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -175,7 +166,7 @@ class _WelcomeMotionState extends State<WelcomeMotion>
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF713126), Color(0xFF321A17), Color(0xFF21100F)],
+            colors: [BronzePalette.raised, BronzePalette.background, BronzePalette.background],
           ),
         ),
         child: CustomPaint(painter: TemplePatternPainter()),
@@ -197,7 +188,7 @@ class TemplePatternPainter extends CustomPainter {
     final center = Offset(size.width * .5, size.height * .43);
     final radius = size.width * .39;
     final brass = Paint()
-      ..color = const Color(0xFFE6B85C).withValues(alpha: .3 * intensity)
+      ..color = BronzePalette.gold.withValues(alpha: .3 * intensity)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     canvas.save();
@@ -231,14 +222,14 @@ class TemplePatternPainter extends CustomPainter {
         Offset(0, -radius * 1.16),
         3,
         Paint()
-          ..color = const Color(0xFFE6B85C).withValues(alpha: .5 * intensity),
+          ..color = BronzePalette.gold.withValues(alpha: .5 * intensity),
       );
       canvas.restore();
     }
     canvas.restore();
     // A restrained repeating dot border evokes hand-drawn threshold kolams.
     final dots = Paint()
-      ..color = const Color(0xFFE6B85C).withValues(alpha: .15 * intensity);
+      ..color = BronzePalette.gold.withValues(alpha: .15 * intensity);
     for (double y = 32; y < size.height; y += 30) {
       canvas.drawCircle(Offset(17, y), 1.5, dots);
       canvas.drawCircle(Offset(size.width - 17, y), 1.5, dots);
@@ -259,7 +250,7 @@ class EntranceReveal extends StatelessWidget {
     if (MediaQuery.disableAnimationsOf(context)) return child;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 650),
+      duration: const Duration(milliseconds: 440),
       curve: Curves.easeOutCubic,
       child: child,
       builder: (_, value, child) => Opacity(
@@ -303,44 +294,14 @@ class _PressFeedbackState extends State<PressFeedback> {
   );
 }
 
-/// A restrained brass halo draws in around the existing brand mark.
-class _LaunchOrbitPainter extends CustomPainter {
-  const _LaunchOrbitPainter(this.progress);
-  final double progress;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2 - 32);
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = .8
-      ..color = const Color(0xFFE6B85C).withValues(alpha: .35 * progress);
-    for (final radius in [78.0, 94.0]) {
-      canvas.drawArc(
-        Rect.fromCircle(center: center, radius: radius),
-        -math.pi / 2,
-        math.pi * 2 * progress,
-        false,
-        paint,
-      );
-    }
-    paint.style = PaintingStyle.fill;
-    for (var i = 0; i < 12; i++) {
-      final angle = i * math.pi / 6 - math.pi / 2;
-      canvas.drawCircle(
-        center + Offset(math.cos(angle), math.sin(angle)) * 94,
-        i % 3 == 0 ? 2.3 : 1.2,
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_LaunchOrbitPainter old) => progress != old.progress;
-}
-
 /// Fixed decorative depth without an idle animation loop or input interception.
 class PremiumBackdrop extends StatelessWidget {
-  const PremiumBackdrop({super.key, required this.child});
+  const PremiumBackdrop({
+    super.key,
+    required this.child,
+    this.showPattern = true,
+  });
+  final bool showPattern;
   final Widget child;
   @override
   Widget build(BuildContext context) => Stack(
@@ -351,25 +312,88 @@ class PremiumBackdrop extends StatelessWidget {
           gradient: RadialGradient(
             center: Alignment.topRight,
             radius: 1.25,
-            colors: [Color(0xFF4A2821), Color(0xFF21100F)],
+            colors: [BronzePalette.background, BronzePalette.background],
             stops: [0, .78],
           ),
         ),
       ),
-      const Positioned(
-        top: -145,
-        right: -110,
-        width: 350,
-        height: 350,
-        child: IgnorePointer(
-          child: ExcludeSemantics(
-            child: RepaintBoundary(
-              child: CustomPaint(painter: TemplePatternPainter(intensity: .26)),
+      if (showPattern)
+        const Positioned(
+          top: -145,
+          right: -110,
+          width: 350,
+          height: 350,
+          child: IgnorePointer(
+            child: ExcludeSemantics(
+              child: RepaintBoundary(
+                child: CustomPaint(
+                  painter: TemplePatternPainter(intensity: .08),
+                ),
+              ),
             ),
           ),
         ),
-      ),
       child,
     ],
   );
+}
+
+/// Fine orbital ornament for the approved editorial home card.
+class HomeOrbitPainter extends CustomPainter {
+  const HomeOrbitPainter();
+  @override
+  void paint(Canvas canvas, Size size) {
+    final c = Offset(size.width * .88, size.height * .68);
+    final p = Paint()
+      ..color = BronzePalette.gold.withValues(alpha: .16)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = .65;
+    for (final radius in [22.0, 31.0, 42.0]) {
+      canvas.drawCircle(c, radius, p);
+    }
+    final star = Path()
+      ..moveTo(c.dx, c.dy - 13)
+      ..quadraticBezierTo(c.dx + 2, c.dy - 2, c.dx + 13, c.dy)
+      ..quadraticBezierTo(c.dx + 2, c.dy + 2, c.dx, c.dy + 13)
+      ..quadraticBezierTo(c.dx - 2, c.dy + 2, c.dx - 13, c.dy)
+      ..quadraticBezierTo(c.dx - 2, c.dy - 2, c.dx, c.dy - 13);
+    canvas.drawPath(star, p);
+    p.style = PaintingStyle.fill;
+    canvas.drawCircle(c.translate(31, 0), 3, p);
+    canvas.drawCircle(c.translate(-28, 31), 4, p);
+    canvas.drawCircle(c.translate(0, -42), 2, p);
+  }
+
+  @override
+  bool shouldRepaint(HomeOrbitPainter old) => false;
+}
+
+/// Short, quiet page motion; Android's reduced-motion preference takes priority.
+class MidnightPageTransitions extends PageTransitionsBuilder {
+  const MidnightPageTransitions();
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    if (MediaQuery.disableAnimationsOf(context)) return child;
+    final eased = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    return FadeTransition(
+      opacity: eased,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(.025, .015),
+          end: Offset.zero,
+        ).animate(eased),
+        child: child,
+      ),
+    );
+  }
 }

@@ -17,7 +17,9 @@ export async function erasePhoneAccount(db:PostgresDatabase, tokenHash:string, t
         ON CONFLICT(session_id) DO UPDATE SET expires_at=GREATEST(deleted_chart_sessions.expires_at,excluded.expires_at)`,[session,now+30*86400000]);
       await tx.query(`UPDATE guide_requests SET category='deleted',language='deleted',support_level='deleted',answer_mode='deleted',question_text=NULL,intent=NULL,research_consent_version=NULL,age_band=NULL,request_hash=NULL,response_ciphertext=NULL,response_expires_at=NULL WHERE session_id=$1`,[session]);
       await tx.query('DELETE FROM provider_reports WHERE session_id=$1',[session]);
-      await tx.query(`UPDATE profile_generations SET status='deleted',request_hash=NULL,response_ciphertext=NULL,response_expires_at=NULL,updated_at=$1 WHERE session_id=$2`,[now,session]);
+      // Corrections permit multiple records per session/day. Erase the birth-input
+      // hash with a unique opaque marker; NULL would collide in the COALESCE index.
+      await tx.query(`UPDATE profile_generations SET status='deleted',request_hash='erased:' || id,response_ciphertext=NULL,response_expires_at=NULL,updated_at=$1 WHERE session_id=$2`,[now,session]);
       await tx.query('DELETE FROM pilot_events WHERE session_id=$1',[session]);
     }
     // Remove pending OTP challenges for this phone as well as all logins.

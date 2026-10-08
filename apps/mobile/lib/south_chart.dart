@@ -1,3 +1,4 @@
+import 'bronze_theme.dart';
 import 'package:flutter/material.dart';
 
 import 'services/ui_language.dart';
@@ -8,9 +9,11 @@ class SouthIndianChart extends StatelessWidget {
     super.key,
     required this.facts,
     this.title = 'Rasi chart · South Indian layout',
+    this.onSignTap,
   });
   final Map<String, dynamic> facts;
   final String title;
+  final ValueChanged<int>? onSignTap;
   static const signs = [
     'Mesha',
     'Vrishabha',
@@ -70,35 +73,38 @@ class SouthIndianChart extends StatelessWidget {
             final occupants = planets
                 .where((p) => signIndex(p['rasi']) == sign)
                 .map((p) => p['name'].toString());
-            return Container(
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                border: Border.all(color: const Color(0xFF9A744B)),
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    UiText(
-                      signs[sign],
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFFEEC76D),
-                      ),
-                    ),
-                    if (signIndex(facts['lagna']) == sign)
-                      const UiText(
-                        'Lagnam',
-                        style: TextStyle(
+            return InkWell(
+              onTap: onSignTap == null ? null : () => onSignTap!(sign),
+              child: Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  border: Border.all(color: const Color(0xFFB79A64)),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      UiText(
+                        signs[sign],
+                        style: const TextStyle(
                           fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                          color: BronzePalette.gold,
                         ),
                       ),
-                    ...occupants.map(
-                      (name) =>
-                          UiText(name, style: const TextStyle(fontSize: 14)),
-                    ),
-                  ],
+                      if (signIndex(facts['lagna']) == sign)
+                        const UiText(
+                          'Lagnam',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ...occupants.map(
+                        (name) =>
+                            UiText(name, style: const TextStyle(fontSize: 14)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             );
