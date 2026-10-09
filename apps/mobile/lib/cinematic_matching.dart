@@ -194,7 +194,7 @@ class _CinematicMatchingAnimationState extends State<CinematicMatchingAnimation>
                 style: const TextStyle(
                   color: BronzePalette.gold,
                   fontSize: 11,
-                  letterSpacing: 1.4,
+                  letterSpacing: 0,
                 ),
               ),
               const SizedBox(height: 10),

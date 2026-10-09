@@ -10,7 +10,7 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
         style: const TextStyle(
           color: matchGold,
           fontSize: 11,
-          letterSpacing: 1.3,
+          letterSpacing: 0,
         ),
       ),
       const SizedBox(height: 9),
@@ -94,7 +94,11 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
       ),
       const SizedBox(height: 10),
       ListenableBuilder(
-        listenable: profileSession,
+        listenable: Listenable.merge([
+          profileSession,
+          if (boy != null) boy!.session,
+          if (girl != null) girl!.session,
+        ]),
         builder: (context, _) => Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -173,6 +177,8 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
     final rasi = _rasi(first);
     final rasiIndex = SouthIndianChart.signIndex(rasi);
     final name = details(first)?['nickname']?.toString();
+    final saved = first ? boy : girl;
+    final draft = first ? boyDraft : girlDraft;
     return InkWell(
       key: ValueKey(first ? 'matching-first' : 'matching-second'),
       onTap: () => choosePerson(first),
@@ -222,6 +228,28 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
                       textAlign: TextAlign.center,
                       style: const TextStyle(color: matchGold, fontSize: 12),
                     ),
+                  ] else if (details(first) != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      draft != null &&
+                              _pendingRasi.contains(matchingBirthKey(draft))
+                          ? local('Loading Rasi…', 'ராசி பெறப்படுகிறது…')
+                          : local('Rasi unavailable', 'ராசி கிடைக்கவில்லை'),
+                      key: ValueKey('matching-rasi-status-$first'),
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: matchMuted, fontSize: 12),
+                    ),
+                    if (draft != null &&
+                        !_pendingRasi.contains(matchingBirthKey(draft)))
+                      TextButton(
+                        key: ValueKey('matching-rasi-retry-$first'),
+                        onPressed: busy || _removingPerson
+                            ? null
+                            : () => _resolveRasi(draft),
+                        child: Text(
+                          local('Retry Rasi', 'ராசியை மீண்டும் பெறு'),
+                        ),
+                      ),
                   ],
                   const SizedBox(height: 3),
                   Text(
@@ -240,6 +268,31 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: matchMuted, fontSize: 11),
                   ),
+                  if (draft != null ||
+                      (saved != null &&
+                          saved.id != 'personal' &&
+                          !identical(saved.session, profileSession)))
+                    TextButton.icon(
+                      key: ValueKey(
+                        'matching-delete-selected-${first ? 'first' : 'second'}',
+                      ),
+                      onPressed: _removingPerson
+                          ? null
+                          : () => draft != null
+                                ? _removeDraftPerson(draft)
+                                : _removeSavedPerson(saved!),
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, 44),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        foregroundColor: BronzePalette.avoid,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 16),
+                      label: Text(
+                        local('Delete person', 'நபரை நீக்கு'),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                 ],
               ),
             ),

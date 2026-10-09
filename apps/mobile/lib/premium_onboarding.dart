@@ -1,4 +1,5 @@
 import 'bronze_theme.dart';
+import 'jyotara_typography.dart';
 
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -14,8 +15,9 @@ const onboardingGreen = BronzePalette.background;
 
 TextStyle onboardingHeading(double size) => TextStyle(
   fontFamily: 'JyotaraEditorial',
+  fontFamilyFallback: JyotaraFonts.fallback,
   fontSize: size,
-  height: 1.03,
+  height: 1.35,
   fontWeight: FontWeight.w500,
   color: onboardingInk,
 );
@@ -40,6 +42,7 @@ class OnboardingTheme extends StatelessWidget {
         ),
         textTheme: base.textTheme.apply(
           fontFamily: 'JyotaraSans',
+          fontFamilyFallback: JyotaraFonts.fallback,
           bodyColor: onboardingInk,
           displayColor: onboardingInk,
         ),
@@ -51,13 +54,18 @@ class OnboardingTheme extends StatelessWidget {
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: onboardingGold,
-            textStyle: const TextStyle(fontFamily: 'JyotaraSans', fontSize: 13),
+            textStyle: const TextStyle(
+              fontFamily: JyotaraFonts.app,
+              fontFamilyFallback: JyotaraFonts.fallback,
+              fontSize: 13,
+            ),
           ),
         ),
       ),
       child: DefaultTextStyle(
         style: const TextStyle(
           fontFamily: 'JyotaraSans',
+          fontFamilyFallback: JyotaraFonts.fallback,
           fontSize: 14,
           height: 1.45,
           color: onboardingInk,
@@ -436,9 +444,10 @@ class OnboardingButton extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'JyotaraEditorial',
+                fontFamilyFallback: JyotaraFonts.fallback,
                 fontWeight: FontWeight.w600,
                 fontSize: 21,
-                height: 1.05,
+                height: 1.35,
               ),
             ),
           ),

@@ -709,7 +709,7 @@ class _BirthFormState extends State<BirthForm> {
                         style: TextStyle(
                           fontFamily: 'JyotaraSans',
                           fontSize: 13,
-                          letterSpacing: 1.2,
+                          letterSpacing: 0,
                           color: onboardingMuted,
                         ),
                       ),

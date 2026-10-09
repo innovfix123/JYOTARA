@@ -94,7 +94,7 @@ void main() {
 
   for (final language in ['en', 'ta']) {
     testWidgets(
-      'Daily overlap explanation stays inside timing card $language',
+      'Daily overlap explanation stays inside opened timing guide $language',
       (tester) async {
         final prefs = UiLanguagePreferences(write: (_) async {});
         await prefs.set(language);
@@ -102,6 +102,10 @@ void main() {
           UiLanguageScope(
             preferences: prefs,
             child: MaterialApp(
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(disableAnimations: true),
+                child: child!,
+              ),
               home: DailyHoroscopeScreen(
                 readCity: () async => jsonEncode({
                   'name': 'Bengaluru',
@@ -121,12 +125,15 @@ void main() {
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 800));
-        await tester.ensureVisible(find.byKey(const Key('dailyPlan')));
+        await tester.ensureVisible(find.byKey(const Key('dailySeeYourDay')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('dailySeeYourDay')));
+        await tester.pumpAndSettle();
         final note = find.byKey(const Key('dailyTimingOverlap'));
         expect(note, findsOneWidget);
         expect(
           find.descendant(
-            of: find.byKey(const Key('dailyPlan')),
+            of: find.byKey(const Key('dailyTimingGuide')),
             matching: note,
           ),
           findsOneWidget,
@@ -150,6 +157,10 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         home: DailyHoroscopeScreen(
           readCity: () async =>
               jsonEncode({'name': 'Bengaluru', 'lat': 12.97, 'lon': 77.59}),
@@ -165,6 +176,10 @@ void main() {
     );
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 800));
+    await tester.ensureVisible(find.byKey(const Key('dailySeeYourDay')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('dailySeeYourDay')));
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('dailyTimingOverlap')), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());

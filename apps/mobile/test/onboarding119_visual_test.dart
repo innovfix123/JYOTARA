@@ -15,8 +15,8 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     for (final f in {
-      'JyotaraEditorial': 'CormorantGaramond',
-      'JyotaraSans': 'Manrope',
+      'JyotaraEditorial': 'Inter-Regular',
+      'JyotaraSans': 'Inter-Regular',
     }.entries) {
       final loader = FontLoader(f.key)
         ..addFont(rootBundle.load('assets/fonts/${f.value}.ttf'));

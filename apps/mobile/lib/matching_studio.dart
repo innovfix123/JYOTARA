@@ -217,7 +217,7 @@ class ApprovedMatchingReport extends StatelessWidget {
           style: const TextStyle(
             color: matchGold,
             fontSize: 11,
-            letterSpacing: 1.2,
+            letterSpacing: 0,
           ),
         ),
         const SizedBox(height: 9),

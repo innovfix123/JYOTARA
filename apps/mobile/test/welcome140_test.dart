@@ -235,8 +235,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.runAsync(() async {
       for (final f in {
-        'JyotaraEditorial': 'CormorantGaramond',
-        'JyotaraSans': 'Manrope',
+        'JyotaraEditorial': 'Inter-Regular',
+        'JyotaraSans': 'Inter-Regular',
       }.entries) {
         await (FontLoader(
           f.key,

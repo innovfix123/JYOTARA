@@ -84,40 +84,15 @@ class _MessageBubbleState extends State<_MessageBubble>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         for (var i = 0; i < _visible; i++)
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (!widget.message.fromUser)
-                SizedBox(
-                  width: 30,
-                  child: i == 0
-                      ? Padding(
-                          padding: const EdgeInsets.only(top: 9, right: 7),
-                          child: Icon(
-                            Icons.auto_awesome_outlined,
-                            size: 19,
-                            color: gold.withValues(alpha: .8),
-                          ),
-                        )
-                      : null,
-                ),
-              Expanded(
-                child: _MessagePiece(
-                  message: ChatMessage(
-                    fromUser: widget.message.fromUser,
-                    text: _parts[i],
-                    label: i == 0 ? widget.message.label : null,
-                  ),
-                  onReport: i == _parts.length - 1 ? widget.onReport : null,
-                ),
-              ),
-            ],
+          _MessagePiece(
+            message: ChatMessage(
+              fromUser: widget.message.fromUser,
+              text: _parts[i],
+              label: i == 0 ? widget.message.label : null,
+            ),
+            onReport: i == _parts.length - 1 ? widget.onReport : null,
           ),
-        if (_visible < _parts.length)
-          const Padding(
-            padding: EdgeInsets.only(left: 30),
-            child: _TypingBubble(),
-          ),
+        if (_visible < _parts.length) const _TypingBubble(),
       ],
     );
   }
@@ -132,19 +107,18 @@ class _MessagePiece extends StatelessWidget {
     alignment: message.fromUser ? Alignment.centerRight : Alignment.centerLeft,
     child: Container(
       constraints: BoxConstraints(
-        maxWidth: MediaQuery.sizeOf(context).width * .82,
+        maxWidth: MediaQuery.sizeOf(context).width * .88,
       ),
-      margin: const EdgeInsets.only(bottom: 7),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 13),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: message.fromUser ? BronzePalette.raised : BronzePalette.card,
+        color: message.fromUser ? AskPalette.user : AskPalette.reply,
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(17),
           topRight: const Radius.circular(17),
           bottomLeft: Radius.circular(message.fromUser ? 17 : 5),
           bottomRight: Radius.circular(message.fromUser ? 5 : 17),
         ),
-        border: Border.all(color: BronzePalette.border.withValues(alpha: .7)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +127,7 @@ class _MessagePiece extends StatelessWidget {
             Text(
               publicReadingText(message.label!),
               style: const TextStyle(
-                color: gold,
+                color: AskPalette.action,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: .5,
@@ -164,7 +138,13 @@ class _MessagePiece extends StatelessWidget {
           SelectionArea(
             child: Text(
               publicReadingText(message.text),
-              style: const TextStyle(fontSize: 15, height: 1.5, color: bodyInk),
+              style: const TextStyle(
+                fontFamily: 'JyotaraChat',
+                fontFamilyFallback: ['JyotaraTamil'],
+                fontSize: 15,
+                height: 1.55,
+                color: AskPalette.ink,
+              ),
             ),
           ),
           if (onReport != null)
@@ -175,7 +155,11 @@ class _MessagePiece extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(minHeight: 28, minWidth: 32),
                 onPressed: onReport,
-                icon: const Icon(Icons.flag_outlined, size: 14, color: muted),
+                icon: const Icon(
+                  Icons.flag_outlined,
+                  size: 14,
+                  color: AskPalette.muted,
+                ),
               ),
             ),
         ],
@@ -219,9 +203,8 @@ class _TypingBubbleState extends State<_TypingBubble> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
         decoration: BoxDecoration(
-          color: BronzePalette.card,
+          color: AskPalette.reply,
           borderRadius: BorderRadius.circular(17),
-          border: Border.all(color: BronzePalette.border),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -234,7 +217,9 @@ class _TypingBubbleState extends State<_TypingBubble> {
                   height: 6,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: gold.withValues(alpha: i == _dot ? .95 : .35),
+                    color: AskPalette.action.withValues(
+                      alpha: i == _dot ? .95 : .35,
+                    ),
                   ),
                 ),
               ),

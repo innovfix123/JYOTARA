@@ -12,6 +12,9 @@ import 'launch_intro.dart';
 import 'coin_wallet.dart';
 import 'services/ui_language.dart';
 import 'services/user_journey.dart';
+import 'daily_timing_data.dart';
+import 'daily_timing_guide.dart';
+import 'saved_profile_actions.dart';
 
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -432,6 +435,9 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
   String? language, error, calendarError, city;
   double? latitude, longitude;
   bool busy = false, calendarBusy = false;
+  late final Future<void> cityRestoration;
+  Future<void>? readingLoad, calendarLoad;
+  String? readingRequestDate, calendarRequestDate;
   final readings = <int, Map<String, dynamic>>{};
   Map<String, dynamic>? calendar;
   String local(String en, String ta) =>
@@ -455,7 +461,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
     sign = initial < 0 ? 0 : initial;
     profileRasi = profileSession.facts?['rashi']?.toString();
     profileSession.addListener(profileChanged);
-    _restoreCity();
+    cityRestoration = _restoreCity();
   }
 
   void profileChanged() {
@@ -513,9 +519,32 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load() => readingLoad = _loadReading();
+
+  Future<void> selectedTimingSourcesReady() async {
+    await cityRestoration;
+    while (mounted) {
+      final selectedReading = readingLoad, selectedCalendar = calendarLoad;
+      await Future.wait<void>([?selectedReading, ?selectedCalendar]);
+      if (!mounted) return;
+      // Profile, language, city or date changes can replace either request.
+      // Only snapshot once both currently selected requests have settled.
+      if (selectedReading != readingLoad || selectedCalendar != calendarLoad) {
+        continue;
+      }
+      if (readingRequestDate != date || calendarRequestDate != date) {
+        _load();
+        _loadCalendar();
+        continue;
+      }
+      return;
+    }
+  }
+
+  Future<void> _loadReading() async {
     final rev = ++revision, selected = sign;
     final requestedDate = date, requestedLanguage = language;
+    readingRequestDate = requestedDate;
     setState(() {
       busy = true;
       error = null;
@@ -590,8 +619,12 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
     }
   }
 
-  Future<void> _loadCalendar() async {
+  Future<void> _loadCalendar() => calendarLoad = _loadCalendarData();
+
+  Future<void> _loadCalendarData() async {
     final rev = ++calendarRevision;
+    final requestedDate = date;
+    calendarRequestDate = requestedDate;
     setState(() {
       calendar = null;
       calendarError = null;
@@ -600,7 +633,7 @@ class _DailyHoroscopeScreenState extends State<DailyHoroscopeScreen> {
     if (city == null) return;
     try {
       final v = await widget.request('/api/explore/panchang', {
-        'date': date,
+        'date': requestedDate,
         'latitude': latitude,
         'longitude': longitude,
         'language': 'en',
@@ -793,8 +826,15 @@ class KundliLibrary {
 }
 
 class KundliLibraryScreen extends StatefulWidget {
-  const KundliLibraryScreen({super.key, this.includeOwnProfile = false});
+  const KundliLibraryScreen({
+    super.key,
+    this.includeOwnProfile = false,
+    this.loadProfiles = KundliLibrary.load,
+    this.removeProfile = KundliLibrary.remove,
+  });
   final bool includeOwnProfile;
+  final Future<List<SavedKundli>> Function() loadProfiles;
+  final Future<void> Function(SavedKundli, List<SavedKundli>) removeProfile;
   @override
   State<KundliLibraryScreen> createState() => _KundliLibraryScreenState();
 }
@@ -805,6 +845,8 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   String? error;
   bool busy = true;
   bool libraryLoaded = false;
+  bool _confirmingDeletion = false;
+  String? _loadedIndexKey;
   @override
   void initState() {
     super.initState();
@@ -812,12 +854,14 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   }
 
   Future<void> _load() async {
+    final targetKey = KundliLibrary.indexKey;
     try {
-      final value = await KundliLibrary.load();
+      final value = await widget.loadProfiles();
       if (mounted) {
         setState(() {
-          rows = value;
-          libraryLoaded = true;
+          rows = targetKey == KundliLibrary.indexKey ? value : [];
+          libraryLoaded = targetKey == KundliLibrary.indexKey;
+          _loadedIndexKey = libraryLoaded ? targetKey : null;
           error = null;
         });
       }
@@ -829,7 +873,21 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         });
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          if (targetKey != KundliLibrary.indexKey) {
+            rows = [];
+            libraryLoaded = false;
+            _loadedIndexKey = null;
+            error = savedProfileText(
+              context,
+              'Account changed. Reopen saved profiles.',
+              'கணக்கு மாறியுள்ளது. சேமித்த விவரங்களை மீண்டும் திறக்கவும்.',
+            );
+          }
+        });
+      }
     }
   }
 
@@ -862,36 +920,80 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
   }
 
   Future<void> _remove(SavedKundli row) async {
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const UiText('Delete this birth chart?'),
-        content: const UiText(
-          'This removes its saved chart from this device and the server.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const UiText('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const UiText('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (yes != true || !mounted) return;
-    setState(() => busy = true);
-    try {
-      await KundliLibrary.remove(row, rows);
+    if (busy ||
+        _confirmingDeletion ||
+        !libraryLoaded ||
+        row.id == 'personal' ||
+        identical(row.session, profileSession)) {
+      return;
+    }
+    final targetKey = _loadedIndexKey;
+    if (targetKey != KundliLibrary.indexKey) {
       await _load();
-    } catch (e) {
-      if (mounted) {
-        setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      return;
+    }
+    if (row.session.calculating ||
+        row.session.answering ||
+        row.session.deleting) {
+      setState(
+        () => error = savedProfileText(
+          context,
+          'Please wait for this person’s current request to finish.',
+          'இந்த நபரின் தற்போதைய கோரிக்கை முடியும் வரை காத்திருக்கவும்.',
+        ),
+      );
+      return;
+    }
+    setState(() => _confirmingDeletion = true);
+    try {
+      final yes = await confirmSavedProfileDeletion(
+        context,
+        name: row.session.nickname,
+      );
+      if (!yes || !mounted || targetKey != KundliLibrary.indexKey) return;
+      if (row.session.calculating ||
+          row.session.answering ||
+          row.session.deleting) {
+        setState(
+          () => error = savedProfileText(
+            context,
+            'Please wait for this person’s current request to finish.',
+            'இந்த நபரின் தற்போதைய கோரிக்கை முடியும் வரை காத்திருக்கவும்.',
+          ),
+        );
+        return;
+      }
+      setState(() => busy = true);
+      await widget.removeProfile(row, rows);
+      if (!mounted || targetKey != KundliLibrary.indexKey) return;
+      await _load();
+    } catch (_) {
+      if (mounted && targetKey == KundliLibrary.indexKey) {
+        setState(
+          () => error = savedProfileText(
+            context,
+            'This person could not be deleted. Please retry.',
+            'இந்த நபரின் விவரங்களை நீக்க முடியவில்லை. மீண்டும் முயலுங்கள்.',
+          ),
+        );
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          _confirmingDeletion = false;
+          if (targetKey != KundliLibrary.indexKey) {
+            rows = [];
+            libraryLoaded = false;
+            _loadedIndexKey = null;
+            error = savedProfileText(
+              context,
+              'Account changed. Reopen saved profiles.',
+              'கணக்கு மாறியுள்ளது. சேமித்த விவரங்களை மீண்டும் திறக்கவும்.',
+            );
+          }
+        });
+      }
     }
   }
 
@@ -964,64 +1066,72 @@ class _KundliLibraryScreenState extends State<KundliLibraryScreen> {
         ))
           Card(
             margin: const EdgeInsets.only(bottom: 12),
-            child: ListTile(
-              title: UiText(
-                row.session.nickname.isEmpty
-                    ? 'Unfinished Birth Chart'
-                    : row.session.nickname,
-              ),
-              subtitle: UiText(
-                '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? uiText(context, 'Add birth details')}\n${row.session.birthplaceLabel ?? uiText(context, 'Birthplace not saved')}',
-              ),
-              isThreeLine: true,
-              onTap: busy
-                  ? null
-                  : () => row.session.facts == null
-                        ? _edit(row)
-                        : Navigator.push(
-                            context,
-                            MaterialPageRoute<void>(
-                              builder: (_) => Scaffold(
-                                appBar: AppBar(
-                                  title: UiText(row.session.nickname),
-                                ),
-                                body: ListView(
-                                  padding: EdgeInsets.fromLTRB(
-                                    20,
-                                    20,
-                                    20,
-                                    20 +
-                                        MediaQuery.viewPaddingOf(context)
-                                            .bottom,
-                                  ),
-                                  children: [
-                                    SouthIndianChart(facts: row.session.facts!),
-                                    const SizedBox(height: 16),
-                                    UiText(
-                                      row.session.birthTimeKnown
-                                          ? 'Calculated from the saved birth details.'
-                                          : 'Birth time is unknown. Time-sensitive chart details are limited.',
+            child: Column(
+              children: [
+                ListTile(
+                  key: ValueKey('library-profile-${row.id}'),
+                  title: UiText(
+                    row.session.nickname.isEmpty
+                        ? 'Unfinished Birth Chart'
+                        : row.session.nickname,
+                  ),
+                  subtitle: UiText(
+                    '${row.session.birthInput?.indiaDateTime.toString().substring(0, 10) ?? uiText(context, 'Add birth details')}\n${row.session.birthplaceLabel ?? uiText(context, 'Birthplace not saved')}',
+                  ),
+                  isThreeLine: true,
+                  onTap: busy
+                      ? null
+                      : () => row.session.facts == null
+                            ? _edit(row)
+                            : Navigator.push(
+                                context,
+                                MaterialPageRoute<void>(
+                                  builder: (_) => Scaffold(
+                                    appBar: AppBar(
+                                      title: UiText(row.session.nickname),
                                     ),
-                                  ],
+                                    body: ListView(
+                                      padding: EdgeInsets.fromLTRB(
+                                        20,
+                                        20,
+                                        20,
+                                        20 +
+                                            MediaQuery.viewPaddingOf(context)
+                                                .bottom,
+                                      ),
+                                      children: [
+                                        SouthIndianChart(
+                                          facts: row.session.facts!,
+                                        ),
+                                        const SizedBox(height: 16),
+                                        UiText(
+                                          row.session.birthTimeKnown
+                                              ? 'Calculated from the saved birth details.'
+                                              : 'Birth time is unknown. Time-sensitive chart details are limited.',
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
-                            ),
-                          ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
+                  trailing: IconButton(
                     tooltip: uiText(context, 'Edit birth chart'),
                     onPressed: busy ? null : () => _edit(row),
                     icon: const Icon(Icons.edit_outlined),
                   ),
-                  IconButton(
-                    tooltip: uiText(context, 'Delete birth chart'),
-                    onPressed: busy ? null : () => _remove(row),
-                    icon: const Icon(Icons.delete_outline),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: SavedProfileDeleteButton(
+                      key: ValueKey('library-delete-profile-${row.id}'),
+                      name: row.session.nickname,
+                      onPressed: busy ? null : () => _remove(row),
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         const SizedBox(height: 18),
@@ -1067,6 +1177,10 @@ class _MatchingScreenState extends State<MatchingScreen> {
   Map<String, dynamic>? boyDraft, girlDraft;
   final Set<String> _pendingRasi = {};
   bool consent = false, busy = false;
+  bool _removingPerson = false;
+  Completer<void>? _draftRemoval;
+  String? _loadedPeopleKey;
+  int _loadRevision = 0;
   String connectionType = 'My Crush';
   List<Map<String, dynamic>> people = [];
   String get peopleKey => accountStorage.key('jyotara.matching.people.v1');
@@ -1086,11 +1200,14 @@ class _MatchingScreenState extends State<MatchingScreen> {
   }
 
   Future<void> _load() async {
+    final targetKey = peopleKey;
+    final loadRevision = ++_loadRevision;
     try {
       final saved = await widget.loadKundlis();
-      final savedPeople = await KundliLibrary.storage.read(key: peopleKey);
-      if (mounted) {
+      final savedPeople = await KundliLibrary.storage.read(key: targetKey);
+      if (mounted && targetKey == peopleKey && loadRevision == _loadRevision) {
         setState(() {
+          _loadedPeopleKey = targetKey;
           people = savedPeople == null
               ? []
               : (jsonDecode(savedPeople) as List)
@@ -1107,8 +1224,29 @@ class _MatchingScreenState extends State<MatchingScreen> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => error = 'Could not open saved birth charts.');
+      if (mounted && targetKey == peopleKey && loadRevision == _loadRevision) {
+        setState(() => error = 'Could not open saved birth charts.');
+      }
     }
+  }
+
+  bool _ensureMatchingOwner() {
+    if (_loadedPeopleKey == peopleKey) return true;
+    if (!mounted) return false;
+    setState(() {
+      _loadedPeopleKey = null;
+      rows = [];
+      people = [];
+      boy = null;
+      girl = null;
+      boyDraft = null;
+      girlDraft = null;
+      consent = false;
+      result = null;
+      error = null;
+    });
+    unawaited(_load());
+    return false;
   }
 
   Map<String, dynamic> _input(SavedKundli row) {
@@ -1143,16 +1281,23 @@ class _MatchingScreenState extends State<MatchingScreen> {
   }
 
   Future<void> _resolveRasi(Map<String, dynamic> person) async {
+    if (!mounted || !_ensureMatchingOwner()) return;
     final key = matchingBirthKey(person);
     if (person['rasiBirthKey'] == key &&
         SouthIndianChart.signIndex(person['calculatedRasi']) >= 0) {
       return;
     }
     if (!_pendingRasi.add(key)) return;
+    if (mounted) setState(() {});
     final storageKey = peopleKey;
     final owner = accountStorage.account;
     try {
       final rasi = await widget.resolveRasi(Map<String, dynamic>.from(person));
+      // Merge only after a confirmed local removal publishes its final state.
+      // This prevents another person's late enrichment from restoring it.
+      while (_draftRemoval != null) {
+        await _draftRemoval!.future;
+      }
       if (!mounted ||
           storageKey != peopleKey ||
           accountStorage.account != owner ||
@@ -1177,10 +1322,12 @@ class _MatchingScreenState extends State<MatchingScreen> {
       // guessed sign or repeated automatic provider request on failure.
     } finally {
       _pendingRasi.remove(key);
+      if (mounted) setState(() {});
     }
   }
 
   Future<void> choosePerson(bool male) async {
+    if (busy || _removingPerson || !_ensureMatchingOwner()) return;
     final choice = await showModalBottomSheet<Object>(
       context: context,
       isScrollControlled: true,
@@ -1224,84 +1371,41 @@ class _MatchingScreenState extends State<MatchingScreen> {
                   onTap: (male ? girl : boy)?.id == row.id
                       ? null
                       : () => Navigator.pop(context, row),
-                  trailing: row.id == 'personal'
+                  trailing:
+                      row.id == 'personal' ||
+                          identical(row.session, profileSession)
                       ? null
-                      : IconButton(
+                      : TextButton.icon(
                           key: ValueKey('matching-delete-${row.id}'),
-                          tooltip: local(
-                            'Delete saved person',
-                            'சேமித்தவரை நீக்கு',
-                          ),
                           icon: const Icon(Icons.delete_outline, size: 19),
-                          onPressed: () async {
-                            Navigator.pop(context);
-                            await _removeSavedPerson(row);
-                          },
+                          label: Text(local('Delete', 'நீக்கு')),
+                          onPressed: _removingPerson
+                              ? null
+                              : () async {
+                                  Navigator.pop(context);
+                                  await _removeSavedPerson(row);
+                                },
                         ),
                 ),
               for (final person in people)
                 ListTile(
+                  key: ValueKey('matching-local-${matchingBirthKey(person)}'),
                   leading: const Icon(Icons.person_outline),
                   title: Text('${person['nickname']}'),
                   subtitle: Text('${person['birthplaceLabel'] ?? ''}'),
                   onTap: () => Navigator.pop(context, person),
-                  trailing: IconButton(
-                    tooltip: local('Remove saved person', 'சேமித்தவரை நீக்கு'),
-                    icon: const Icon(Icons.close, size: 18),
-                    onPressed: () async {
-                      final targetKey = peopleKey;
-                      userJourney.event(
-                        'matching.delete',
-                        metadata: {'feature': 'matching', 'outcome': 'started'},
-                      );
-                      final updated = people
-                          .where((p) => !_samePerson(p, person))
-                          .toList();
-                      try {
-                        await accountStorage.writeKey(
-                          targetKey,
-                          jsonEncode(updated),
-                        );
-                        if (mounted && targetKey == peopleKey) {
-                          userJourney.event(
-                            'matching.delete',
-                            metadata: {
-                              'feature': 'matching',
-                              'outcome': 'success',
-                            },
-                          );
-                          setState(() {
-                            people = updated;
-                            if (boyDraft != null &&
-                                _samePerson(boyDraft!, person)) {
-                              boyDraft = null;
-                            }
-                            if (girlDraft != null &&
-                                _samePerson(girlDraft!, person)) {
-                              girlDraft = null;
-                            }
-                            consent = false;
-                            result = null;
-                            error = null;
-                          });
-                          if (context.mounted) Navigator.pop(context);
-                        }
-                      } catch (_) {
-                        if (mounted && targetKey == peopleKey) {
-                          userJourney.event(
-                            'matching.delete',
-                            metadata: {
-                              'feature': 'matching',
-                              'outcome': 'failed',
-                              'error': 'storage',
-                            },
-                          );
-                          await _notice(
-                            'Could not save changes. Please retry.',
-                          );
-                        }
-                      }
-                    },
+                  trailing: TextButton.icon(
+                    key: ValueKey(
+                      'matching-delete-local-${matchingBirthKey(person)}',
+                    ),
+                    icon: const Icon(Icons.delete_outline, size: 19),
+                    label: Text(local('Delete', 'நீக்கு')),
+                    onPressed: _removingPerson
+                        ? null
+                        : () async {
+                            Navigator.pop(context);
+                            await _removeDraftPerson(person);
+                          },
                   ),
                 ),
             ],
@@ -1309,7 +1413,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
         ),
       ),
     );
-    if (!mounted || choice == null) return;
+    if (!mounted || !_ensureMatchingOwner() || choice == null) return;
     if (choice == 'new' || choice == 'edit') {
       await _enterBirth(male, fresh: choice == 'new');
       return;
@@ -1334,52 +1438,139 @@ class _MatchingScreenState extends State<MatchingScreen> {
       a['nickname'] == b['nickname'];
 
   Future<void> _removeSavedPerson(SavedKundli row) async {
-    final targetKey = peopleKey;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialog) => AlertDialog(
-        title: Text(local('Delete this saved person?', 'சேமித்தவரை நீக்கவா?')),
-        content: Text(
-          local(
-            'Their saved birth chart will be removed from this device and the server.',
-            'அவரது சேமித்த ஜாதகம் இந்தச் சாதனத்திலிருந்தும் சேவையகத்திலிருந்தும் நீக்கப்படும்.',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialog, false),
-            child: const UiText('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialog, true),
-            child: const UiText('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted || targetKey != peopleKey) return;
-    userJourney.event(
-      'matching.delete',
-      metadata: {'feature': 'matching', 'outcome': 'started'},
-    );
+    if (busy ||
+        _removingPerson ||
+        row.id == 'personal' ||
+        identical(row.session, profileSession) ||
+        !_ensureMatchingOwner()) {
+      return;
+    }
+    setState(() => _removingPerson = true);
     try {
-      await widget.removeKundli(
-        row,
-        rows.where((r) => r.id != 'personal').toList(),
+      final targetKey = _loadedPeopleKey!;
+      if (row.session.calculating ||
+          row.session.answering ||
+          row.session.deleting) {
+        await _notice(
+          local(
+            'Please wait for this person’s current request to finish before deleting.',
+            'இந்த நபரின் தற்போதைய கோரிக்கை முடிந்தபின் நீக்குங்கள்.',
+          ),
+        );
+        return;
+      }
+      final confirmed = await confirmSavedProfileDeletion(
+        context,
+        name: row.session.nickname,
+        tamil: readingLanguage(context) == 'ta',
+        includesServer: row.session.canDeleteServer,
       );
-      if (!mounted || targetKey != peopleKey) return;
+      if (!mounted ||
+          !_ensureMatchingOwner() ||
+          targetKey != peopleKey ||
+          !confirmed) {
+        return;
+      }
+      if (row.session.calculating ||
+          row.session.answering ||
+          row.session.deleting) {
+        await _notice(
+          local(
+            'Please wait for this person’s current request to finish before deleting.',
+            'இந்த நபரின் தற்போதைய கோரிக்கை முடிந்தபின் நீக்குங்கள்.',
+          ),
+        );
+        return;
+      }
+      userJourney.event(
+        'matching.delete',
+        metadata: {'feature': 'matching', 'outcome': 'started'},
+      );
+      try {
+        await widget.removeKundli(
+          row,
+          rows.where((r) => r.id != 'personal').toList(),
+        );
+        if (!mounted || !_ensureMatchingOwner() || targetKey != peopleKey) {
+          return;
+        }
+        userJourney.event(
+          'matching.delete',
+          metadata: {'feature': 'matching', 'outcome': 'success'},
+        );
+        setState(() {
+          if (boy?.id == row.id) boy = null;
+          if (girl?.id == row.id) girl = null;
+          consent = false;
+          result = null;
+          error = null;
+        });
+        await _load();
+      } catch (_) {
+        if (mounted && targetKey == peopleKey) {
+          userJourney.event(
+            'matching.delete',
+            metadata: {
+              'feature': 'matching',
+              'outcome': 'failed',
+              'error': 'unknown',
+            },
+          );
+          await _notice(
+            local(
+              'Could not delete the saved person. Please retry.',
+              'சேமித்தவரை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+            ),
+          );
+        }
+      }
+    } finally {
+      if (mounted) {
+        _ensureMatchingOwner();
+        setState(() => _removingPerson = false);
+      }
+    }
+  }
+
+  Future<void> _removeDraftPerson(Map<String, dynamic> person) async {
+    if (busy || _removingPerson || !_ensureMatchingOwner()) return;
+    setState(() => _removingPerson = true);
+    final targetKey = _loadedPeopleKey!;
+    try {
+      final confirmed = await confirmSavedProfileDeletion(
+        context,
+        name: '${person['nickname'] ?? ''}',
+        tamil: readingLanguage(context) == 'ta',
+        includesServer: false,
+      );
+      if (!mounted ||
+          !_ensureMatchingOwner() ||
+          targetKey != peopleKey ||
+          !confirmed) {
+        return;
+      }
+      userJourney.event(
+        'matching.delete',
+        metadata: {'feature': 'matching', 'outcome': 'started'},
+      );
+      final updated = people.where((p) => !_samePerson(p, person)).toList();
+      _draftRemoval = Completer<void>();
+      await accountStorage.writeKey(targetKey, jsonEncode(updated));
+      if (!mounted || !_ensureMatchingOwner() || targetKey != peopleKey) return;
       userJourney.event(
         'matching.delete',
         metadata: {'feature': 'matching', 'outcome': 'success'},
       );
       setState(() {
-        if (boy?.id == row.id) boy = null;
-        if (girl?.id == row.id) girl = null;
+        people = updated;
+        if (boyDraft != null && _samePerson(boyDraft!, person)) boyDraft = null;
+        if (girlDraft != null && _samePerson(girlDraft!, person)) {
+          girlDraft = null;
+        }
         consent = false;
         result = null;
         error = null;
       });
-      await _load();
     } catch (_) {
       if (mounted && targetKey == peopleKey) {
         userJourney.event(
@@ -1387,7 +1578,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
           metadata: {
             'feature': 'matching',
             'outcome': 'failed',
-            'error': 'unknown',
+            'error': 'storage',
           },
         );
         await _notice(
@@ -1396,6 +1587,13 @@ class _MatchingScreenState extends State<MatchingScreen> {
             'சேமித்தவரை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
           ),
         );
+      }
+    } finally {
+      _draftRemoval?.complete();
+      _draftRemoval = null;
+      if (mounted) {
+        _ensureMatchingOwner();
+        setState(() => _removingPerson = false);
       }
     }
   }
@@ -1560,7 +1758,7 @@ class _MatchingScreenState extends State<MatchingScreen> {
   }
 
   Future<void> _match() async {
-    if (busy) return;
+    if (busy || _removingPerson || !_ensureMatchingOwner()) return;
     userJourney.tap('match', feature: 'matching');
     if ((boy == null && boyDraft == null) ||
         (girl == null && girlDraft == null)) {

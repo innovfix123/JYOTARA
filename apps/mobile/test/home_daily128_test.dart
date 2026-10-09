@@ -31,8 +31,8 @@ void main() {
       fontFamily: 'sans-serif',
     );
     for (final f in {
-      'JyotaraEditorial': 'CormorantGaramond',
-      'JyotaraSans': 'Manrope',
+      'JyotaraEditorial': 'Inter-Regular',
+      'JyotaraSans': 'Inter-Regular',
     }.entries) {
       await (FontLoader(
         f.key,
@@ -123,6 +123,10 @@ void main() {
           key: key,
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
             theme: ThemeData.dark().copyWith(
               textTheme: ThemeData.dark().textTheme.apply(
                 fontFamily: 'JyotaraSans',
@@ -175,7 +179,13 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pump();
+      await tester.ensureVisible(find.byKey(const Key('dailySeeYourDay')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('dailySeeYourDay')));
+      await tester.pumpAndSettle();
       expect(find.text('10:30 AM–12:00 PM'), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const Key('dailyApproach')));
       await tester.tap(find.byKey(const Key('dailyApproach')));
       await tester.pump();
@@ -262,6 +272,10 @@ void main() {
         UiLanguageScope(
           preferences: prefs,
           child: MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
             home: DailyHoroscopeScreen(
               readCity: () async =>
                   jsonEncode({'name': 'Chennai', 'lat': 13.08, 'lon': 80.27}),
@@ -323,8 +337,14 @@ void main() {
       expect(find.text('English must not replace Tamil.'), findsNothing);
       expect(find.text('உடல்'), findsOneWidget);
       expect(find.text('சென்னை'), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const Key('dailySeeYourDay')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('dailySeeYourDay')));
+      await tester.pumpAndSettle();
       expect(find.textContaining('மதியம்'), findsWidgets);
       expect(find.textContaining(' PM'), findsNothing);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
       await tester.ensureVisible(find.byKey(const Key('dailyFullReading')));
       await tester.pump();

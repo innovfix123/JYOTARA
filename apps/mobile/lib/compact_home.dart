@@ -9,7 +9,7 @@ bool _homeTamil(BuildContext context) =>
 final requestedAskGroup = ValueNotifier<String>('All');
 const compactEditorial = TextStyle(
   fontFamily: 'JyotaraEditorial',
-  fontFamilyFallback: ['sans-serif'],
+  fontFamilyFallback: JyotaraFonts.fallback,
   color: bodyInk,
   fontWeight: FontWeight.w500,
 );
@@ -23,7 +23,7 @@ TextStyle _homeType(
   double height = 1.35,
 }) => TextStyle(
   fontFamily: 'JyotaraSans',
-  fontFamilyFallback: const ['sans-serif'],
+  fontFamilyFallback: JyotaraFonts.fallback,
   fontSize: size,
   color: color,
   fontWeight: weight,

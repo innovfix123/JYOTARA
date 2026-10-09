@@ -1,4 +1,5 @@
 import 'bronze_theme.dart';
+import 'jyotara_typography.dart';
 import 'rasi_emblem.dart';
 import 'south_chart.dart';
 import 'birth_form.dart';
@@ -38,6 +39,7 @@ class AccountScreen extends StatelessWidget {
       child: DefaultTextStyle(
         style: const TextStyle(
           fontFamily: 'JyotaraSans',
+          fontFamilyFallback: JyotaraFonts.fallback,
           fontSize: 14,
           fontWeight: FontWeight.w400,
           color: BronzePalette.ink,

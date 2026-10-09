@@ -230,9 +230,9 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final font = FontLoader('JyotaraEditorial')
-      ..addFont(rootBundle.load('assets/fonts/CormorantGaramond.ttf'));
+      ..addFont(rootBundle.load('assets/fonts/Inter-Regular.ttf'));
     final sans = FontLoader('JyotaraSans')
-      ..addFont(rootBundle.load('assets/fonts/Manrope.ttf'));
+      ..addFont(rootBundle.load('assets/fonts/Inter-Regular.ttf'));
     await font.load();
     await sans.load();
     await tester.pumpWidget(

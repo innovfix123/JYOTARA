@@ -42,7 +42,10 @@ void main() {
       );
       await tester.tap(find.byTooltip('Chat options'));
       await tester.pumpAndSettle();
-      expect(find.text('End chat'), findsOneWidget);
+      expect(
+        find.widgetWithText(PopupMenuItem<String>, 'End chat'),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
       session.dispose();

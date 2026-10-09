@@ -7,6 +7,7 @@ import 'birth_form.dart';
 import 'discovery_screens.dart';
 import 'main.dart' show Guide, ChatScreen, profileSession;
 import 'services/profile_session.dart';
+import 'saved_profile_actions.dart';
 
 String chatProfileDetails(ProfileSession session) {
   final birth = session.birthInput;
@@ -27,9 +28,15 @@ String chatProfileDetails(ProfileSession session) {
 }
 
 class ChatProfilePicker extends StatefulWidget {
-  const ChatProfilePicker({super.key, required this.guide, this.loadProfiles});
+  const ChatProfilePicker({
+    super.key,
+    required this.guide,
+    this.loadProfiles,
+    this.removeProfile = KundliLibrary.remove,
+  });
   final Guide guide;
   final Future<List<SavedKundli>> Function()? loadProfiles;
+  final Future<void> Function(SavedKundli, List<SavedKundli>) removeProfile;
   @override
   State<ChatProfilePicker> createState() => _ChatProfilePickerState();
 }
@@ -38,7 +45,9 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
   List<SavedKundli> profiles = [];
   SavedKundli? selected;
   bool busy = true;
+  bool _confirmingDeletion = false;
   String? error;
+  String? _loadedIndexKey;
   @override
   void initState() {
     super.initState();
@@ -46,6 +55,7 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
   }
 
   Future<void> _load() async {
+    final targetKey = KundliLibrary.indexKey;
     setState(() {
       busy = true;
       error = null;
@@ -59,7 +69,10 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
             ];
       if (!mounted) return;
       setState(() {
-        profiles = rows;
+        profiles = targetKey == KundliLibrary.indexKey ? rows : [];
+        _loadedIndexKey = targetKey == KundliLibrary.indexKey
+            ? targetKey
+            : null;
         selected = null;
       });
     } catch (_) {
@@ -67,7 +80,21 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
         setState(() => error = 'Profiles could not be opened. Please retry.');
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted) {
+        setState(() {
+          busy = false;
+          if (targetKey != KundliLibrary.indexKey) {
+            profiles = [];
+            selected = null;
+            _loadedIndexKey = null;
+            error = savedProfileText(
+              context,
+              'Account changed. Reopen saved profiles.',
+              'கணக்கு மாறியுள்ளது. சேமித்த விவரங்களை மீண்டும் திறக்கவும்.',
+            );
+          }
+        });
+      }
     }
   }
 
@@ -96,6 +123,87 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
       ),
     );
     if (mounted) setState(() {});
+  }
+
+  Future<void> _remove(SavedKundli row) async {
+    if (busy ||
+        _confirmingDeletion ||
+        row.id == 'personal' ||
+        identical(row.session, profileSession)) {
+      return;
+    }
+    final targetKey = _loadedIndexKey;
+    if (targetKey != KundliLibrary.indexKey) {
+      await _load();
+      return;
+    }
+    if (row.session.calculating ||
+        row.session.answering ||
+        row.session.deleting) {
+      setState(
+        () => error = savedProfileText(
+          context,
+          'Please wait for this person’s current request to finish.',
+          'இந்த நபரின் தற்போதைய கோரிக்கை முடியும் வரை காத்திருக்கவும்.',
+        ),
+      );
+      return;
+    }
+    setState(() => _confirmingDeletion = true);
+    try {
+      final confirmed = await confirmSavedProfileDeletion(
+        context,
+        name: row.session.nickname,
+      );
+      if (!confirmed || !mounted || targetKey != KundliLibrary.indexKey) return;
+      if (row.session.calculating ||
+          row.session.answering ||
+          row.session.deleting) {
+        setState(
+          () => error = savedProfileText(
+            context,
+            'Please wait for this person’s current request to finish.',
+            'இந்த நபரின் தற்போதைய கோரிக்கை முடியும் வரை காத்திருக்கவும்.',
+          ),
+        );
+        return;
+      }
+      setState(() => busy = true);
+      await widget.removeProfile(
+        row,
+        profiles.where((person) => person.id != 'personal').toList(),
+      );
+      if (!mounted || targetKey != KundliLibrary.indexKey) return;
+      if (selected?.id == row.id) selected = null;
+      await _load();
+    } catch (_) {
+      if (mounted && targetKey == KundliLibrary.indexKey) {
+        setState(
+          () => error = savedProfileText(
+            context,
+            'This person could not be deleted. Please retry.',
+            'இந்த நபரின் விவரங்களை நீக்க முடியவில்லை. மீண்டும் முயலுங்கள்.',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          busy = false;
+          _confirmingDeletion = false;
+          if (targetKey != KundliLibrary.indexKey) {
+            profiles = [];
+            selected = null;
+            _loadedIndexKey = null;
+            error = savedProfileText(
+              context,
+              'Account changed. Reopen saved profiles.',
+              'கணக்கு மாறியுள்ளது. சேமித்த விவரங்களை மீண்டும் திறக்கவும்.',
+            );
+          }
+        });
+      }
+    }
   }
 
   @override
@@ -169,6 +277,19 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
                             icon: const Icon(Icons.edit_outlined),
                           ),
                         ),
+                        if (row.id != 'personal' &&
+                            !identical(row.session, profileSession))
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                              child: SavedProfileDeleteButton(
+                                key: ValueKey('chat-delete-profile-${row.id}'),
+                                name: row.session.nickname,
+                                onPressed: busy ? null : () => _remove(row),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

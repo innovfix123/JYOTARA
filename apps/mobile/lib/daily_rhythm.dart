@@ -88,6 +88,161 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
     return '${value.hour % 12 == 0 ? 12 : value.hour % 12}:${value.minute.toString().padLeft(2, '0')} ${value.hour < 12 ? local('AM', 'காலை') : local('PM', 'பிற்பகல்')}';
   }
 
+  Future<void> _openTimingGuide() async {
+    final guide = _prepareTimingGuide();
+    var recordedGuide = false;
+    userJourney.event(
+      'daily.open',
+      metadata: {'feature': 'daily', 'control': 'guide', 'outcome': 'started'},
+    );
+    await Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => DailyTimingExperience(
+          title: local(
+            day == 0 ? 'Today’s timings' : 'Tomorrow’s timings',
+            day == 0 ? 'இன்றைய நேரங்கள்' : 'நாளைய நேரங்கள்',
+          ),
+          tamil: readingLanguage(context) == 'ta',
+          onVideoEvent: (outcome, durationMs) => userJourney.event(
+            'daily.expand',
+            metadata: {
+              'feature': 'daily',
+              'control': 'primary',
+              'outcome': outcome,
+              'durationMs': durationMs,
+            },
+          ),
+          guideBuilder: (_) {
+            userJourney.screen('reading');
+            return FutureBuilder<Widget?>(
+              future: guide,
+              builder: (_, snapshot) {
+                final ready = snapshot.data;
+                if (ready != null) {
+                  if (!recordedGuide) {
+                    recordedGuide = true;
+                    userJourney.event(
+                      'daily.open',
+                      metadata: {
+                        'feature': 'daily',
+                        'control': 'guide',
+                        'outcome': 'success',
+                      },
+                    );
+                  }
+                  return ready;
+                }
+                return Center(
+                  key: const Key('dailyTimingGuideLoading'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (snapshot.connectionState != ConnectionState.done)
+                          const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
+                        Text(
+                          local(
+                            snapshot.connectionState == ConnectionState.done
+                                ? 'Guide unavailable. Please return to Daily and retry.'
+                                : 'Loading your timings and reading…',
+                            snapshot.connectionState == ConnectionState.done
+                                ? 'வழிகாட்டல் கிடைக்கவில்லை. தினசரி பக்கத்தில் மீண்டும் முயற்சிக்கவும்.'
+                                : 'உங்கள் நேரங்களும் பலனும் ஏற்றப்படுகின்றன…',
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+      ),
+    );
+    if (mounted) userJourney.screen('daily');
+  }
+
+  Future<Widget?> _prepareTimingGuide() async {
+    await selectedTimingSourcesReady();
+    if (!mounted) return null;
+    return _timingGuide();
+  }
+
+  Widget _timingGuide() {
+    final selectedDate = date;
+    final tamil = readingLanguage(context) == 'ta';
+    final rows = (calendar?['timings'] as List? ?? []).whereType<Map>();
+    Map? find(String name) {
+      for (final row in rows) {
+        if (row['name'] == name) return row;
+      }
+      return null;
+    }
+
+    final good = find('Abhijit Muhurta'), avoid = find('Rahu Kalam');
+    final goodWindow = DailyTimingWindow.fromProvider(good);
+    final avoidWindow = DailyTimingWindow.fromProvider(avoid);
+    final tips = <String>[];
+    final sections = (readings[sign]?['sections'] as List? ?? [])
+        .whereType<Map>();
+    for (final title in ['General', 'Career', 'Love', 'Health']) {
+      for (final row in sections) {
+        if (row['title'] != title) continue;
+        final text = '${row['text'] ?? ''}'.trim();
+        if (text.isEmpty ||
+            (readingLanguage(context) == 'ta' &&
+                RegExp(r'[A-Za-z]').hasMatch(text))) {
+          continue;
+        }
+        final point = _oneSentence(text);
+        if (!tips.contains(point)) tips.add(point);
+      }
+      if (tips.length >= 3) break;
+    }
+    return DailyTimingGuide(
+      date: selectedDate,
+      tomorrow: day != 0,
+      tamil: tamil,
+      city:
+          (city == null ? null : _dailyCityLabel(city!)) ??
+          local(
+            'Choose current city for timings',
+            'நேரங்களுக்கு தற்போதைய ஊரைத் தேர்வுசெய்க',
+          ),
+      focus: goodWindow,
+      caution: avoidWindow,
+      focusRange: goodWindow == null
+          ? local('Focus time unavailable', 'கவன நேரம் கிடைக்கவில்லை')
+          : _timingRange(good!),
+      cautionRange: avoidWindow == null
+          ? local('Caution time unavailable', 'நிதான நேரம் கிடைக்கவில்லை')
+          : _timingRange(avoid!),
+      overlap: dailyTimingOverlapExplanation(
+        good,
+        avoid,
+        tamil: readingLanguage(context) == 'ta',
+        clock: _clock,
+      ),
+      guidance: tips.take(3).toList(),
+      clock: (now) {
+        final value = now.toUtc().add(DailyTimingWindow.indiaOffset);
+        final period = value.hour < 12
+            ? (tamil ? 'காலை' : 'AM')
+            : (tamil ? 'பிற்பகல்' : 'PM');
+        return '${value.hour % 12 == 0 ? 12 : value.hour % 12}:${value.minute.toString().padLeft(2, '0')} $period';
+      },
+      onShare: (outcome) => userJourney.event(
+        'interaction.tap',
+        metadata: {'feature': 'daily', 'control': 'share', 'outcome': outcome},
+      ),
+    );
+  }
+
   Widget _dailyLayout() {
     const readingTopics = [
       ('General', 'Overview', 'ஒரு பார்வை'),
@@ -103,20 +258,6 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
     final rows = (calendar?['timings'] as List? ?? [])
         .whereType<Map>()
         .toList();
-    Map? find(String name) {
-      for (final row in rows) {
-        if (row['name'] == name) return row;
-      }
-      return null;
-    }
-
-    final avoid = find('Rahu Kalam'), good = find('Abhijit Muhurta');
-    final overlapExplanation = dailyTimingOverlapExplanation(
-      good,
-      avoid,
-      tamil: readingLanguage(context) == 'ta',
-      clock: _clock,
-    );
     return Scaffold(
       backgroundColor: BronzePalette.background,
       appBar: MainTabScope.contains(context)
@@ -183,7 +324,7 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
                           ),
                           style: const TextStyle(
                             fontFamily: 'JyotaraEditorial',
-                            fontFamilyFallback: ['sans-serif'],
+                            fontFamilyFallback: ['JyotaraTamil'],
                             fontSize: 30,
                             height: 1.1,
                             color: bodyInk,
@@ -249,76 +390,54 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
                     child: LinearProgressIndicator(minHeight: 2),
                   ),
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Expanded(
-                      child: _timingLabel(
-                        local('FOCUS TIME', 'கவனமாகச் செயல்பட'),
-                        good,
-                        _dailyGold,
-                        local(
-                          'Focus on work or important conversations.',
-                          'வேலை அல்லது முக்கிய உரையாடலில் கவனம் செலுத்துங்கள்.',
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            local(
+                              'See when to focus and when to take things slowly.',
+                              'எப்போது கவனம் செலுத்தலாம், எப்போது நிதானமாக இருக்கலாம் எனப் பாருங்கள்.',
+                            ),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              color: muted,
+                              height: 1.6,
+                            ),
+                          ),
+                          const SizedBox(height: 9),
+                          FilledButton.icon(
+                            key: const Key('dailySeeYourDay'),
+                            onPressed: _openTimingGuide,
+                            icon: const Icon(
+                              Icons.play_arrow_outlined,
+                              size: 18,
+                            ),
+                            label: Text(
+                              local(
+                                day == 0 ? 'See your day' : 'See tomorrow',
+                                day == 0
+                                    ? 'இன்றைய நாளைப் பாருங்கள்'
+                                    : 'நாளையைப் பாருங்கள்',
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(
-                      child: _timingLabel(
-                        local('TAKE IT SLOW', 'நிதானமாக இருங்கள்'),
-                        avoid,
-                        BronzePalette.avoid,
-                        local(
-                          'Take your time before a big decision.',
-                          'முக்கிய முடிவை எடுக்கும் முன் நிதானமாக யோசியுங்கள்.',
-                        ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.asset(
+                        dailyTimingImageAsset,
+                        width: 64,
+                        height: 84,
+                        fit: BoxFit.cover,
+                        excludeFromSemantics: true,
                       ),
                     ),
-                  ],
-                ),
-                if (overlapExplanation != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Text(
-                      overlapExplanation,
-                      key: const Key('dailyTimingOverlap'),
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: muted,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                const SizedBox(height: 11),
-                SizedBox(
-                  height: 14,
-                  child: CustomPaint(
-                    painter: _DailyTimePainter(
-                      avoid: avoid,
-                      good: good,
-                      date: date,
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    for (final item in [
-                      ('6 AM', 'காலை 6'),
-                      ('12 PM', 'மதியம் 12'),
-                      ('6 PM', 'மாலை 6'),
-                      ('12 AM', 'இரவு 12'),
-                    ])
-                      Expanded(
-                        child: Text(
-                          local(item.$1, item.$2),
-                          textAlign: item.$1 == '6 AM'
-                              ? TextAlign.start
-                              : item.$1 == '12 AM'
-                              ? TextAlign.end
-                              : TextAlign.center,
-                          style: const TextStyle(fontSize: 13, color: muted),
-                        ),
-                      ),
                   ],
                 ),
                 TextButton.icon(
@@ -630,32 +749,6 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
     );
   }
 
-  Widget _timingLabel(String label, Map? row, Color color, String hint) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 14, letterSpacing: .8, color: color),
-          ),
-          const SizedBox(height: 5),
-          Text(
-            row == null
-                ? local('Not available', 'கிடைக்கவில்லை')
-                : _timingRange(row),
-            style: const TextStyle(
-              fontSize: 14,
-              color: bodyInk,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            hint,
-            style: const TextStyle(fontSize: 14, color: muted, height: 1.4),
-          ),
-        ],
-      );
   String _timingRange(Map row) {
     if (readingLanguage(context) != 'ta')
       return '${_clock(row['start'])}–${_clock(row['end'])}';
@@ -699,50 +792,6 @@ extension _DailyRhythmLayout on _DailyHoroscopeScreenState {
         }[name] ??
         name,
   );
-}
-
-class _DailyTimePainter extends CustomPainter {
-  const _DailyTimePainter({this.avoid, this.good, required this.date});
-  final Map? avoid, good;
-  final String date;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final track = Rect.fromLTWH(0, 6, size.width, 5);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(track, const Radius.circular(3)),
-      Paint()..color = const Color(0xFF4B4438),
-    );
-    final midnight = DateTime.parse('${date}T06:00:00+05:30');
-    for (final item in [
-      (avoid, BronzePalette.avoid),
-      (good, BronzePalette.gold),
-    ]) {
-      final a = DateTime.tryParse('${item.$1?['start']}'),
-          b = DateTime.tryParse('${item.$1?['end']}');
-      if (a == null || b == null) continue;
-      final start = (a.difference(midnight).inMinutes / 1080).clamp(0.0, 1.0),
-          end = (b.difference(midnight).inMinutes / 1080).clamp(0.0, 1.0);
-      if (end > start) {
-        canvas.drawRect(
-          Rect.fromLTWH(start * size.width, 6, (end - start) * size.width, 5),
-          Paint()..color = item.$2,
-        );
-      }
-    }
-    final position = DateTime.now().difference(midnight).inMinutes / 1080;
-    if (position >= 0 && position <= 1) {
-      canvas.drawLine(
-        Offset(position * size.width, 1),
-        Offset(position * size.width, 16),
-        Paint()
-          ..color = bodyInk
-          ..strokeWidth = 2,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DailyTimePainter oldDelegate) => true;
 }
 
 /// Exact approved lotus artwork, softly masked with native water motion.
