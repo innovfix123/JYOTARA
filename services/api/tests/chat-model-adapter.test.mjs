@@ -6,7 +6,8 @@ const {chatEditorModel,chatModelParameters,chatUsageMetadata}=await import(modul
 test('chat override is independent of the global feature model',()=>{
  assert.equal(chatEditorModel({OPENROUTER_MODEL:'google/gemini-2.5-flash',OPENROUTER_CHAT_MODEL:'openai/gpt-6.1-sol'}),'openai/gpt-6.1-sol');
  assert.equal(chatEditorModel({OPENROUTER_MODEL:'google/gemini-2.5-flash'}),'google/gemini-2.5-flash');
- assert.equal(chatEditorModel({}),'openai/gpt-6.1-sol');
+ assert.equal(chatEditorModel({}),'google/gemini-3.8-flash');
+ assert.equal(chatEditorModel({OPENROUTER_MODEL:'google/gemini-2.5-flash',OPENROUTER_CHAT_MODEL:'google/gemini-3.8-flash'}),'google/gemini-3.8-flash');
 });
 
 test('reasoning requirements and sampling controls follow the model capabilities',()=>{

@@ -1,5 +1,5 @@
 /** Only chat editors use this setting. Other feature models remain independent. */
-export const DEFAULT_CHAT_EDITOR_MODEL = 'openai/gpt-6.1-sol';
+export const DEFAULT_CHAT_EDITOR_MODEL = 'google/gemini-3.8-flash';
 
 export function chatEditorModel(config:{OPENROUTER_CHAT_MODEL?:string;OPENROUTER_MODEL?:string}):string {
   return config.OPENROUTER_CHAT_MODEL || config.OPENROUTER_MODEL || DEFAULT_CHAT_EDITOR_MODEL;
