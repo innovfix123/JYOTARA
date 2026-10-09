@@ -1,4 +1,5 @@
 import 'bronze_theme.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -149,10 +150,13 @@ class _PhoneAccessScreenState extends State<PhoneAccessScreen> {
       _applyReceivedCode();
     });
     if (mounted) setState(() => _startingSms = false);
+    // A restored challenge came from a consented send. Reuse that consent
+    // only for an explicit resend to the same number.
+    final resumingSameNumber = access.codeSent && access.mobile == mobile;
     if (!mounted ||
         attempt != _smsAttempt ||
         _phone.text != mobile ||
-        !_termsAccepted) {
+        (!_termsAccepted && !resumingSameNumber)) {
       if (mounted) _maybeRequestCode();
       return;
     }
