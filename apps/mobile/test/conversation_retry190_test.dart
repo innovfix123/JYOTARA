@@ -75,6 +75,7 @@ void main() {
     await original.flushStorage();
     original.conversation('Vetri')
       ..depth = 'standard'
+      ..billingSession = 'a' * 32
       ..billingAcknowledged = true
       ..acceptedGeneralCoins = 8
       ..acceptedRelationshipCoins = 12
@@ -86,10 +87,12 @@ void main() {
     await restored.restore();
     final chat = restored.conversation('Vetri');
     expect(chat.billingAcknowledged, isTrue);
+    expect(chat.billingSession, 'a' * 32);
     expect(chat.acceptedGeneralCoins, 8);
     expect(chat.acceptedRelationshipCoins, 12);
     restored.startNewConversation('Vetri');
     expect(chat.billingAcknowledged, isFalse);
+    expect(chat.billingSession, isNull);
     expect(chat.acceptedGeneralCoins, isNull);
     expect(chat.acceptedRelationshipCoins, isNull);
     await restored.flushStorage();
@@ -173,12 +176,14 @@ void main() {
     const question = 'How can I prepare for interviews?';
     chat.messages.add(const ChatMessage(fromUser: true, text: question));
     chat.changed();
+    var billingSession = 'b' * 32;
     Future<GuidanceResponse> ask(ProfileSession session) => session.ask(
       category: 'Career',
       question: question,
       responseStyle: 'english',
       guide: 'Vetri',
       depth: 'standard',
+      billingSession: billingSession,
     );
     await expectLater(ask(original), throwsA(isA<JyotaraApiException>()));
     expect(
@@ -187,6 +192,8 @@ void main() {
       reason: 'Uncertain delivery must not auto-resubmit a paid request',
     );
     expect(sent.single['responseMode'], 'conversation');
+    expect(sent.single['billingVersion'], 2);
+    expect(sent.single['billingSession'], 'b' * 32);
     expect(sent.single['conversationHistory'], hasLength(32));
     expect(sent.single['conversationHistory'].first, {
       'role': 'user',
@@ -215,10 +222,13 @@ void main() {
       hasLength(1),
       reason: 'Restoring a recovery record must not send it',
     );
+    billingSession = 'c' * 32;
     await ask(restored);
     expect(sent, hasLength(2));
     for (final field in [
       'requestId',
+      'billingVersion',
+      'billingSession',
       'responseMode',
       'conversationHistory',
       'conversationMemory',

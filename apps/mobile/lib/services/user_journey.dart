@@ -100,6 +100,7 @@ class UserJourney with WidgetsBindingObserver {
     'payment.checkout',
     'settings.change',
     'notification.open',
+    'notification.received',
     'notification.permission',
     'support.send',
     'api.request',

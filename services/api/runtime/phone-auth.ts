@@ -45,6 +45,7 @@ export class PhoneAuth {
     }
     if(path==='/api/auth/logout') {
       const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];
+      if(token)await this.db.pool.query('UPDATE notification_devices SET enabled=0,updated_at=$1 WHERE login_hash=$2',[this.now(),digest(token)]);
       if(token)await this.db.pool.query('DELETE FROM phone_login_sessions WHERE token_hash=$1 AND tester_key=$2',[digest(token),tester]);
       return response({success:true});
     }

@@ -9,19 +9,20 @@ import 'package:jyotara/payment_support.dart';
 import 'package:jyotara/discovery_screens.dart';
 
 class MatchWallet extends AccountService {
-  MatchWallet()
+  MatchWallet({this.quoteCost})
     : super(
         token: () => 'token',
         tester: () => 'tester',
         account: () => 'account',
       );
+  final int? quoteCost;
   @override
   Future<Map<String, dynamic>> post(
     String path,
     Map<String, dynamic> body,
   ) async => {
     'category': 'Basic matching',
-    'cost': 20,
+    'cost': quoteCost ?? matchingCoinCost,
     'canProceed': true,
     'quote': 'fresh-quote',
     'balance': 1000,
@@ -38,14 +39,16 @@ void main() {
       );
       Map<String, dynamic>? sent;
       String? mode;
+      String? catalog;
       final client = MockClient((request) async {
         mode = request.headers['X-Jyotara-Wallet-Mode'];
+        catalog = request.headers['X-Jyotara-Wallet-Catalog'];
         sent = jsonDecode(request.body) as Map<String, dynamic>;
         return http.Response(
           jsonEncode({
             'score': 18,
             'maximum': 36,
-            'wallet': {'coins': 20},
+            'wallet': {'coins': matchingCoinCost},
           }),
           200,
         );
@@ -56,6 +59,7 @@ void main() {
         'consent': true,
       }, client: client);
       expect(mode, 'live');
+      expect(catalog, minuteBillingEnabled ? '2' : null);
       expect(sent?['coinQuote'], 'fresh-quote');
       expect(result['score'], 18);
       expect(find.byType(AlertDialog), findsNothing);
@@ -63,6 +67,30 @@ void main() {
       coinAccount = null;
     },
   );
+  testWidgets('a stale Matching price is rejected before the provider call', (
+    tester,
+  ) async {
+    coinAccount = MatchWallet(quoteCost: matchingCoinCost + 1);
+    await tester.pumpWidget(
+      MaterialApp(navigatorKey: coinNavigator, home: const Scaffold()),
+    );
+    var called = false;
+    final client = MockClient((request) async {
+      called = true;
+      return http.Response('{}', 200);
+    });
+    await expectLater(
+      discoveryRequest('/api/kundli/matching', {
+        'boy': {'nickname': 'A'},
+        'girl': {'nickname': 'B'},
+        'consent': true,
+      }, client: client),
+      throwsException,
+    );
+    expect(called, false);
+    expect(find.byType(AlertDialog), findsNothing);
+    coinAccount = null;
+  });
   for (final score in [18, 27]) {
     testWidgets('matching percentage is calculated from score $score', (
       tester,

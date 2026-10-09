@@ -150,6 +150,19 @@ Future<void> main() async {
     tester: () => testerAccess.code,
     account: () => phoneAccess.accountId,
   );
+  firebaseServices.accountApi = coinAccount;
+  firebaseServices.language = () => uiLanguagePreferences.value;
+  phoneAccess.addListener(() => unawaited(firebaseServices.syncDevice()));
+  uiLanguagePreferences.addListener(
+    () => unawaited(firebaseServices.syncDevice()),
+  );
+  firebaseServices.opened.stream.listen((feature) {
+    requestedMainTab.value = feature == 'chat'
+        ? 3
+        : feature == 'daily' || feature == 'welcome'
+        ? 1
+        : 0;
+  });
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: canvasColor,
@@ -804,6 +817,10 @@ class _MainShellState extends State<MainShell>
   void initState() {
     super.initState();
     requestedMainTab.addListener(_routeTab);
+    if (!const bool.fromEnvironment('JYOTARA_OFFLINE_QA'))
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(firebaseServices.offerNotifications(context));
+      });
   }
 
   void _routeTab() {
@@ -1068,12 +1085,16 @@ class _GuidesScreenState extends State<GuidesScreen> {
                       Text(
                         ex(
                           context,
-                          'General questions: ${remoteConfig.cost('generalStandard', 10)} coins per answer. '
-                              'Relationship questions: ${remoteConfig.cost('relationshipStandard', 15)} coins per answer. '
-                              'Only completed answers are charged.',
-                          'பொதுவான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('generalStandard', 10)} நாணயங்கள். '
-                              'உறவு தொடர்பான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('relationshipStandard', 15)} நாணயங்கள். '
-                              'முழுமையான பதில்களுக்கு மட்டுமே கட்டணம்.',
+                          minuteBillingEnabled
+                              ? '40 coins per started chat minute. The next minute is charged only when you ask again. Waiting for an answer is not charged. Limited general guidance stays free.'
+                              : 'General questions: ${remoteConfig.cost('generalStandard', 10)} coins per answer. '
+                                    'Relationship questions: ${remoteConfig.cost('relationshipStandard', 15)} coins per answer. '
+                                    'Only completed answers are charged.',
+                          minuteBillingEnabled
+                              ? 'உரையாடலின் ஒவ்வொரு தொடங்கிய நிமிடத்துக்கும் 40 நாணயங்கள். மீண்டும் கேள்வி கேட்டால் மட்டுமே அடுத்த நிமிடத்துக்குக் கட்டணம். பதிலுக்காகக் காத்திருக்கும் நேரத்துக்குக் கட்டணம் இல்லை. பொதுவான வழிகாட்டல் இலவசம்.'
+                              : 'பொதுவான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('generalStandard', 10)} நாணயங்கள். '
+                                    'உறவு தொடர்பான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('relationshipStandard', 15)} நாணயங்கள். '
+                                    'முழுமையான பதில்களுக்கு மட்டுமே கட்டணம்.',
                         ),
                         key: const Key('chatPriceNotice'),
                         style: const TextStyle(
@@ -1259,6 +1280,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       } else {
         _session.startNewConversation(widget.guide.conversationKey);
       }
+    }
+    if (minuteBillingEnabled) {
+      _conversation.billingSession ??= requestId().substring(0, 32);
     }
     // One customer-facing conversation mode. Existing pending request receipts
     // retain their original depth in ProfileSession for recovery.
@@ -1715,6 +1739,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ? const []
               : List<String>.unmodifiable(turn.userMessages),
           clientRequestId: turn.legacy ? null : turn.id,
+          billingSession: minuteBillingEnabled && !turn.legacy
+              ? sentConversation.billingSession
+              : null,
           onDeliveryState: (state) {
             if (sentRevision != sentSession.revision ||
                 turn.state != 'sending') {
@@ -1911,6 +1938,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
       if (confirmed != true || !mounted) return;
+      if (minuteBillingEnabled && _conversation.billingSession != null) {
+        await coinAccount?.post('/api/wallet/end-chat', {
+          'billingSession': _conversation.billingSession,
+        });
+        coinWalletRevision.value++;
+      }
       _idleTimer?.cancel();
       _idleReady = false;
       for (final turn in _conversation.turns.where((t) => t.waiting)) {
@@ -2000,6 +2033,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       // Let PopScope observe the confirmed end before requesting navigation.
       await WidgetsBinding.instance.endOfFrame;
       if (mounted) Navigator.of(context).maybePop();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: UiText('Could not end chat. Please try again.'),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _ending = false);

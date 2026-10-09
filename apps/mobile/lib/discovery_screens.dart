@@ -107,6 +107,7 @@ Future<Map<String, dynamic>> discoveryRequest(
       Uri.parse(defaultApiBaseUrl).resolve(path),
       headers: {
         'Content-Type': 'application/json',
+        if (minuteBillingEnabled) 'X-Jyotara-Wallet-Catalog': '2',
         if (coinWalletEnabled && path == '/api/kundli/matching')
           'X-Jyotara-Wallet-Mode': walletMode,
         if (const bool.fromEnvironment('JYOTARA_REQUIRE_PHONE_AUTH'))

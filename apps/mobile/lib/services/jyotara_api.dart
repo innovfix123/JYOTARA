@@ -286,6 +286,7 @@ class JyotaraApiClient {
     List<String> previousUserMessages = const [],
     List<Map<String, String>> conversationHistory = const [],
     String? responseMode,
+    String? billingSession,
     List<String> conversationMemory = const [],
     Map<String, dynamic>? reportPerson,
     String? guide,
@@ -347,6 +348,10 @@ class JyotaraApiClient {
         // exposing a model key in the app.
         'responseStyle': responseStyle,
         'responseMode': ?responseMode,
+        if (billingSession != null) ...{
+          'billingVersion': 2,
+          'billingSession': billingSession,
+        },
         if (conversationMemory.isNotEmpty)
           'conversationMemory': conversationMemory,
         'chartTicket': chartTicket,
@@ -485,6 +490,8 @@ class JyotaraApiClient {
             _baseUri.resolve(path),
             headers: {
               'Content-Type': 'application/json',
+              if (const bool.fromEnvironment('JYOTARA_MINUTE_BILLING'))
+                'X-Jyotara-Wallet-Catalog': '2',
               'X-Jyotara-Wallet-Mode': const String.fromEnvironment(
                 'JYOTARA_WALLET_MODE',
                 defaultValue: 'test',

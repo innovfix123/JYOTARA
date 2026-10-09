@@ -9,7 +9,7 @@ export const defaults = {
  exploreCards:[] as {title:string;body:string}[],
  supportEmail:'jyotara29@gmail.com',
  welcome:{english:'',tamil:'',tanglish:''},
- costs:{generalStandard:10,generalDetailed:20,relationshipStandard:15,relationshipDetailed:30,matching:20},
+ costs:{generalStandard:10,generalDetailed:20,relationshipStandard:15,relationshipDetailed:30,matching:20,matchingV2:15,explore:5},
 };
 export type AppConfig=typeof defaults;
 const object=(v:unknown):v is Record<string,any>=>!!v&&typeof v==='object'&&!Array.isArray(v);

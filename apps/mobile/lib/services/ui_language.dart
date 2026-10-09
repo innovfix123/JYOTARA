@@ -88,6 +88,7 @@ class UiText extends StatelessWidget {
 const tamilUi = <String, String>{
   'Choose someone to talk to.': 'பேச ஒரு வழிகாட்டியைத் தேர்ந்தெடுங்கள்.',
   'Start chat': 'உரையாடலைத் தொடங்குங்கள்',
+  'Could not end chat. Please try again.': 'உரையாடலை முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
   'End chat': 'உரையாடலை முடிக்கவும்',
   'Use End chat to finish your conversation.':
       'உரையாடலை முடிக்க மேலே உள்ள முடிக்கும் பொத்தானைப் பயன்படுத்துங்கள்.',
@@ -264,6 +265,7 @@ const tamilUi = <String, String>{
       'Jyotara மேம்பட செயலியின் பயன்பாடு மற்றும் சாதனத் தகவல்களைப் பகிரவும்.',
   'Crash reports': 'செயலி செயலிழப்பு அறிக்கைகள்',
   'Share technical error and device reports to help fix crashes.': 'செயலிழப்புகளைச் சரிசெய்ய தொழில்நுட்பப் பிழை மற்றும் சாதன அறிக்கைகளைப் பகிரவும்.',
+  'Chat: 40 coins per started minute. The next minute is charged only when you ask again. Waiting for an answer is not charged. Limited general guidance stays free.': 'உரையாடலின் ஒவ்வொரு தொடங்கிய நிமிடத்துக்கும் 40 நாணயங்கள். மீண்டும் கேள்வி கேட்டால் மட்டுமே அடுத்த நிமிடத்துக்குக் கட்டணம். பதிலுக்காகக் காத்திருக்கும் நேரத்துக்குக் கட்டணம் இல்லை. பொதுவான வழிகாட்டல் இலவசம்.',
   'App notifications': 'செயலி அறிவிப்புகள்',
   'Receive Jyotara updates. You can turn these off at any time.':
       'Jyotara அறிவிப்புகளைப் பெறவும். எப்போது வேண்டுமானாலும் நிறுத்தலாம்.',

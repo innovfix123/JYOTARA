@@ -1,13 +1,15 @@
-
 import 'dart:async';
 
 import 'notification_inbox.dart';
+import 'user_journey.dart';
+import '../payment_support.dart';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 @pragma('vm:entry-point')
@@ -18,7 +20,7 @@ Future<void> firebaseBackgroundMessage(RemoteMessage message) async {
 
 final firebaseServices = FirebaseServices();
 
-class FirebaseServices extends ChangeNotifier {
+class FirebaseServices extends ChangeNotifier with WidgetsBindingObserver {
   bool ready = false;
   bool analytics = false;
   bool crashReports = false;
@@ -26,6 +28,121 @@ class FirebaseServices extends ChangeNotifier {
   final incoming = StreamController<RemoteMessage>.broadcast();
   static const _topic = 'jyotara_updates';
   SharedPreferences? _prefs;
+  AccountService? accountApi;
+  String Function()? language;
+  final opened = StreamController<String>.broadcast();
+  bool _registering = false;
+  String? _registration;
+  Future<void> offerNotifications(BuildContext context) async {
+    await initialize();
+    if (!ready ||
+        notifications ||
+        _prefs?.containsKey('firebase.notifications') == true ||
+        _prefs?.getBool('firebase.notificationOffer') == true ||
+        !context.mounted) {
+      return;
+    }
+    await _prefs!.setBool('firebase.notificationOffer', true);
+    if (!context.mounted) return;
+    final tamil = language?.call() == 'ta';
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          tamil
+              ? 'உங்கள் நாளுக்குச் சிறிய வழிகாட்டல்'
+              : 'A little guidance for your day',
+        ),
+        content: Text(
+          tamil
+              ? 'தினசரி வழிகாட்டல் மற்றும் நினைவூட்டல்களை இயக்கவா? காலை 9 முதல் இரவு 9 வரை தினமும் அதிகபட்சம் இரண்டு. அமைப்புகளில் நிறுத்தலாம்.'
+              : 'Enable daily and feature reminders? Up to two per day, between 9 am and 9 pm. You can turn them off in Settings.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(tamil ? 'இப்போது வேண்டாம்' : 'Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(tamil ? 'நினைவூட்டல்களை இயக்கு' : 'Enable reminders'),
+          ),
+        ],
+      ),
+    );
+    userJourney.event(
+      'notification.permission',
+      metadata: {
+        'feature': 'notification',
+        'outcome': accepted == true ? 'started' : 'cancelled',
+      },
+    );
+    if (accepted == true) {
+      try {
+        final enabled = await setNotifications(true);
+        userJourney.event(
+          'notification.permission',
+          metadata: {
+            'feature': 'notification',
+            'outcome': enabled ? 'success' : 'blocked',
+          },
+        );
+      } catch (_) {
+        /* Settings remains available to retry. */
+      }
+    }
+  }
+
+  Future<void> syncDevice() async {
+    final api = accountApi;
+    if (ready &&
+        !notifications &&
+        api?.token() != null &&
+        _prefs?.getBool('firebase.notifications') == false) {
+      try {
+        await api!.post('/api/notifications/disable', {});
+        await FirebaseMessaging.instance.setAutoInitEnabled(false);
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {
+        /* Retry revocation on the next resume. */
+      }
+    }
+    if (!ready || !notifications || api == null || api.token() == null) {
+      _registration = null;
+      return;
+    }
+    if (_registering) return;
+    _registering = true;
+    try {
+      final permission = await FirebaseMessaging.instance
+          .getNotificationSettings();
+      if (permission.authorizationStatus != AuthorizationStatus.authorized) {
+        await api.post('/api/notifications/disable', {});
+        _registration = null;
+        return;
+      }
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null) return;
+      final owner = api.account(), lang = language?.call() ?? 'en';
+      final stamp = '$owner:$token:$lang';
+      if (_registration == stamp) return;
+      await api.post('/api/notifications/register', {
+        'token': token,
+        'language': lang,
+        'build': 146,
+      });
+      if (owner == api.account()) _registration = stamp;
+    } catch (_) {
+      /* Registration retries on resume; never block app use. */
+    } finally {
+      _registering = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(syncDevice());
+  }
 
   Future<void>? _initializing;
   Future<void> initialize() => _initializing ??= _initialize();
@@ -49,10 +166,17 @@ class FirebaseServices extends ChangeNotifier {
       );
       FirebaseMessaging.onBackgroundMessage(firebaseBackgroundMessage);
       await notificationInbox.restore();
+      WidgetsBinding.instance.addObserver(this);
+      FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+        _registration = null;
+        unawaited(syncDevice());
+      });
       FirebaseMessaging.onMessage.listen(_receive);
-      FirebaseMessaging.onMessageOpenedApp.listen(_receive);
+      FirebaseMessaging.onMessageOpenedApp.listen(
+        (message) => _receive(message, wasOpened: true),
+      );
       final initial = await FirebaseMessaging.instance.getInitialMessage();
-      if (initial != null) await _receive(initial);
+      if (initial != null) await _receive(initial, wasOpened: true);
       final previousHandler = FlutterError.onError;
       FlutterError.onError = (details) {
         previousHandler?.call(details);
@@ -79,10 +203,42 @@ class FirebaseServices extends ChangeNotifier {
       ready = false;
     }
     notifyListeners();
+    await syncDevice();
   }
 
-  Future<void> _receive(RemoteMessage message) async {
+  Future<void> _receive(RemoteMessage message, {bool wasOpened = false}) async {
     if (!notifications) return;
+    final campaign = message.data['campaignId'];
+    if (campaign is String && RegExp(r'^[a-f0-9]{32}$').hasMatch(campaign)) {
+      try {
+        final result = await accountApi?.post('/api/notifications/event', {
+          'id': campaign,
+          'event': wasOpened ? 'opened' : 'received',
+        });
+        if (result?['accepted'] != true) return;
+      } catch (_) {
+        return;
+      }
+    }
+    userJourney.event(
+      wasOpened ? 'notification.open' : 'notification.received',
+      metadata: {
+        'feature': 'notification',
+        'source': 'push',
+        if (campaign is String && RegExp(r'^[a-f0-9]{32}$').hasMatch(campaign))
+          'requestRef': campaign,
+      },
+    );
+    if (wasOpened && message.data['feature'] is String) {
+      if ({
+        'welcome',
+        'daily',
+        'matching',
+        'chat',
+      }.contains(message.data['feature'])) {
+        opened.add(message.data['feature']);
+      }
+    }
     final title = message.notification?.title?.trim() ?? '';
     final body = message.notification?.body?.trim() ?? '';
     if (title.isEmpty && body.isEmpty) return;
@@ -93,6 +249,7 @@ class FirebaseServices extends ChangeNotifier {
             '${message.sentTime?.millisecondsSinceEpoch}:$title:$body',
         title: title.isEmpty ? 'Jyotara' : title,
         body: body,
+        account: campaign == null ? null : accountApi?.account(),
         time: message.sentTime ?? DateTime.now(),
       ),
     );
@@ -168,11 +325,29 @@ class FirebaseServices extends ChangeNotifier {
         rethrow;
       }
     } else {
-      await FirebaseMessaging.instance.setAutoInitEnabled(false);
-      await FirebaseMessaging.instance.deleteToken();
+      // Save the user's choice before any network operation. An offline phone
+      // must still stop accepting reminders and revoke its FCM registration.
+      await _prefs!.setBool('firebase.notifications', false);
+      notifications = false;
+      _registration = null;
+      notifyListeners();
+      try {
+        if (accountApi?.token() != null) {
+          await accountApi!.post('/api/notifications/disable', {});
+        }
+      } catch (_) {
+        /* Revocation retries on resume. */
+      }
+      try {
+        await FirebaseMessaging.instance.setAutoInitEnabled(false);
+        await FirebaseMessaging.instance.deleteToken();
+      } catch (_) {
+        /* The saved opt-out remains authoritative locally. */
+      }
     }
     await _prefs!.setBool('firebase.notifications', enabled);
     notifications = enabled;
+    await syncDevice();
     notifyListeners();
     return true;
   }

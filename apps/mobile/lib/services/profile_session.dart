@@ -83,6 +83,7 @@ class ProfileSession extends ChangeNotifier {
           'rating': conversation.rating,
           'depth': conversation.depth,
           'billingAcknowledged': conversation.billingAcknowledged,
+          'billingSession': conversation.billingSession,
           'acceptedGeneralCoins': conversation.acceptedGeneralCoins,
           'acceptedRelationshipCoins': conversation.acceptedRelationshipCoins,
           'updatedAt': conversation.updatedAt?.toIso8601String(),
@@ -115,6 +116,7 @@ class ProfileSession extends ChangeNotifier {
               .toList(),
         }),
       ),
+      'billingSessions': _billingSessions,
       'requestIds': Map<String, String>.from(_requestIds),
       'conversationContexts': _conversationContexts,
       'conversationModes': _conversationModes,
@@ -253,6 +255,11 @@ class ProfileSession extends ChangeNotifier {
         final conversation = GuideConversation()
           ..language = chat['language'] as String
           ..ended = chat['ended'] == true
+          ..billingSession =
+              chat['billingSession'] is String &&
+                  RegExp(r'^[a-f0-9]{32}$').hasMatch(chat['billingSession'])
+              ? chat['billingSession'] as String
+              : null
           ..billingAcknowledged =
               chat['billingAcknowledged'] == true &&
               chat['acceptedGeneralCoins'] is int &&
@@ -444,6 +451,16 @@ class ProfileSession extends ChangeNotifier {
       _conversationMemory
         ..clear()
         ..addAll(restoredMemory);
+      _billingSessions.clear();
+      if (saved['billingSessions'] case final Map sessions) {
+        for (final entry in sessions.entries) {
+          if (entry.key is String &&
+              entry.value is String &&
+              _requestIds.containsKey(entry.key) &&
+              RegExp(r'^[a-f0-9]{32}$').hasMatch(entry.value))
+            _billingSessions[entry.key] = entry.value;
+        }
+      }
       _reportPeople.clear();
       final people = saved['reportPeople'];
       if (people is Map) {
@@ -576,6 +593,7 @@ class ProfileSession extends ChangeNotifier {
   int _revision = 0;
   int get revision => _revision;
   final _conversations = <String, GuideConversation>{};
+  final _billingSessions = <String, String>{};
   final _requestIds = <String, String>{};
   final _reportPeople = <String, Map<String, dynamic>>{};
   final _requestContexts = <String, List<String>>{};
@@ -634,6 +652,9 @@ class ProfileSession extends ChangeNotifier {
     final originalTurns = failed
         ? null
         : _conversationContexts.remove(receipt.key);
+    final originalBilling = failed
+        ? null
+        : _billingSessions.remove(receipt.key);
     final originalMode = failed ? null : _conversationModes.remove(receipt.key);
     final originalMemory = failed
         ? null
@@ -652,6 +673,8 @@ class ProfileSession extends ChangeNotifier {
       for (final turn in target.turns.where((turn) => turn.id == receipt.id)) {
         turn.state = 'uncertain';
       }
+      if (originalBilling != null)
+        _billingSessions.putIfAbsent(receipt.key, () => originalBilling);
       if (originalMode != null) {
         _conversationModes.putIfAbsent(receipt.key, () => originalMode);
       }
@@ -689,6 +712,7 @@ class ProfileSession extends ChangeNotifier {
     chat.ended = false;
     chat.rating = null;
     chat.billingAcknowledged = false;
+    chat.billingSession = null;
     chat.acceptedGeneralCoins = null;
     chat.acceptedRelationshipCoins = null;
     chat.changed();
@@ -958,6 +982,7 @@ class ProfileSession extends ChangeNotifier {
       if (revision != _revision) return;
       if (_profileKey != key) {
         _clearConversations();
+        _billingSessions.clear();
         _requestIds.clear();
         _reportPeople.clear();
         _requestContexts.clear();
@@ -1066,6 +1091,7 @@ class ProfileSession extends ChangeNotifier {
     String? upgradeFrom,
     List<String> userMessageBatch = const [],
     String? clientRequestId,
+    String? billingSession,
     void Function(String state)? onDeliveryState,
   }) async {
     var chart = _facts;
@@ -1298,6 +1324,11 @@ class ProfileSession extends ChangeNotifier {
             'place': birthplaceLabel!,
           });
         }
+        if (billingSession != null) {
+          if (!RegExp(r'^[a-f0-9]{32}$').hasMatch(billingSession))
+            throw const JyotaraApiException('Reopen this chat.');
+          _billingSessions[requestKey] = billingSession;
+        }
         final random = Random.secure();
         _requestIds[requestKey] =
             clientRequestId ??
@@ -1334,6 +1365,7 @@ class ProfileSession extends ChangeNotifier {
         previousUserMessages: _requestContexts[requestKey] ?? const [],
         conversationHistory: _conversationContexts[requestKey] ?? const [],
         responseMode: _conversationModes[requestKey],
+        billingSession: _billingSessions[requestKey],
         conversationMemory: _conversationMemory[requestKey] ?? const [],
         reportPerson: _reportPeople[requestKey],
         guide: requestGuide,
@@ -1463,6 +1495,7 @@ class ProfileSession extends ChangeNotifier {
     researchConsent = false;
     _revision++;
     _clearConversations();
+    _billingSessions.clear();
     _requestIds.clear();
     _reportPeople.clear();
     _requestContexts.clear();

@@ -17,6 +17,7 @@ import 'launch_intro.dart';
 import 'services/ui_language.dart';
 import 'services/profile_session.dart';
 import 'chat_availability.dart';
+import 'coin_wallet.dart' show coinWalletEnabled;
 
 String ex(BuildContext c, String en, String ta) =>
     readingLanguage(c) == 'ta' ? ta : en;
@@ -529,6 +530,14 @@ class ExploreQuickPage extends StatelessWidget {
                     ),
                   ),
                 ),
+              const SizedBox(height: 12),
+              ReadingPanel(
+                session: session,
+                title: ex(context, 'Know myself', 'என்னை அறிந்துகொள்வோம்'),
+                topic: 'Daily',
+                question: 'Explain my personality and strengths based on my birth chart.',
+                language: readingLanguage(context),
+              ),
             ] else if (kind == 'star') ...[
               const Center(child: Text('✨', style: TextStyle(fontSize: 72))),
               Text(
@@ -1286,6 +1295,12 @@ class _ReadingPanelState extends State<ReadingPanel> {
                           context,
                           'Preparing your reading…',
                           'வாசிப்பு தயாராகிறது…',
+                        )
+                      : coinWalletEnabled && widget.session.birthTimeKnown
+                      ? ex(
+                          context,
+                          'Open reading · ${remoteConfig.cost('explore', 5)} coins',
+                          'வாசிப்பைத் திறக்க · ${remoteConfig.cost('explore', 5)} நாணயங்கள்',
                         )
                       : ex(context, 'Open reading', 'வாசிப்பைத் திறக்க'),
                 ),

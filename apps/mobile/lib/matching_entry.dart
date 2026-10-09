@@ -153,8 +153,8 @@ extension _PremiumMatchingEntry on _MatchingScreenState {
       const SizedBox(height: 9),
       Text(
         local(
-          '${coinWalletEnabled ? remoteConfig.cost('matching', 20) : 20} coins per match · 8 chart factors',
-          'ஒரு பொருத்தத்திற்கு ${coinWalletEnabled ? remoteConfig.cost('matching', 20) : 20} நாணயங்கள் · 8 காரணிகள்',
+          '$matchingCoinCost coins per match · 8 chart factors',
+          'ஒரு பொருத்தத்திற்கு $matchingCoinCost நாணயங்கள் · 8 காரணிகள்',
         ),
         textAlign: TextAlign.center,
         style: const TextStyle(color: matchMuted, fontSize: 11),

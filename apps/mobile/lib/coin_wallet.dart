@@ -16,12 +16,24 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'payment_support.dart';
 import 'launch_intro.dart';
 
+const minuteBillingEnabled = bool.fromEnvironment('JYOTARA_MINUTE_BILLING');
+int get matchingCoinCost => minuteBillingEnabled
+    ? remoteConfig.cost('matchingV2', 15)
+    : remoteConfig.cost('matching', 20);
+const chatCoinsPerMinute = 40;
 const coinWalletEnabled = bool.fromEnvironment('JYOTARA_COIN_WALLET');
 // Receipt amounts are server-authoritative; free allowance is not a paid answer.
 String coinReceiptLabel(Map<String, dynamic> receipt) {
   final depth = receipt['depth'];
   if (receipt['coins'] == 0 && receipt['freeReason'] == 'general_guidance') {
     return '$depth · General guidance · Free';
+  }
+  if (receipt['billingVersion'] == 2) {
+    return receipt['status'] == 'failed'
+        ? 'Not charged'
+        : receipt['coins'] == 0
+        ? 'Included in chat'
+        : '${receipt['coins']} coins · Chat minute';
   }
   if (receipt['status'] == 'failed') return '$depth · Not charged';
   if (receipt['trial'] == true && receipt['coins'] == 0) {
@@ -86,26 +98,32 @@ class CoinChatConsent {
   ) =>
       owner != null &&
       owner == account &&
-      payload['depth'] == depth &&
-      payload['upgradeFrom'] == upgrade &&
-      quote['depth'] == depth &&
-      quote['cost'] is num &&
-      quote['cost'] >= 0 &&
-      quote['cost'] <= maximum &&
-      (quote['cost'] == 0 ||
-          quote['cost'] ==
-              (upgrade != null
-                  ? maximum
-                  : ([
-                          'Love',
-                          'Relationships',
-                          'Breakup',
-                          'Marriage',
-                        ].contains(quote['category'])
-                        ? (relationshipCoins ?? (depth == 'detailed' ? 30 : 15))
-                        : (generalCoins ??
-                              (depth == 'detailed' ? 20 : 10))))) &&
-      quote['canProceed'] == true;
+      (payload['billingVersion'] == 2
+          ? quote['billingVersion'] == 2 &&
+                quote['coinsPerMinute'] == chatCoinsPerMinute &&
+                [0, chatCoinsPerMinute].contains(quote['cost']) &&
+                quote['canProceed'] == true
+          : (payload['depth'] == depth &&
+                payload['upgradeFrom'] == upgrade &&
+                quote['depth'] == depth &&
+                quote['cost'] is num &&
+                quote['cost'] >= 0 &&
+                quote['cost'] <= maximum &&
+                (quote['cost'] == 0 ||
+                    quote['cost'] ==
+                        (upgrade != null
+                            ? maximum
+                            : ([
+                                    'Love',
+                                    'Relationships',
+                                    'Breakup',
+                                    'Marriage',
+                                  ].contains(quote['category'])
+                                  ? (relationshipCoins ??
+                                        (depth == 'detailed' ? 30 : 15))
+                                  : (generalCoins ??
+                                        (depth == 'detailed' ? 20 : 10))))) &&
+                quote['canProceed'] == true));
 }
 
 Future<T> withCoinChatConsent<T>(
@@ -136,7 +154,7 @@ Future<Map<String, dynamic>> confirmCoins(
   if (q['reopening'] == true) return {...payload, 'coinQuote': q['quote']};
   // The matching action itself displays the fixed price; no duplicate popup.
   if (action == 'matching') {
-    if (q['category'] != 'Basic matching' || q['cost'] != 20) {
+    if (q['category'] != 'Basic matching' || q['cost'] != matchingCoinCost) {
       throw const AccountServiceError(
         'Matching price changed. Please reopen matching before continuing.',
       );
@@ -147,7 +165,7 @@ Future<Map<String, dynamic>> confirmCoins(
         builder: (ctx) => AlertDialog(
           title: const Text('Not enough coins'),
           content: Text(
-            'Matching needs 20 coins. Your balance is ${q['balance']} coins. No coins used.',
+            'Matching needs ${q['cost']} coins. Your balance is ${q['balance']} coins. No coins used.',
           ),
           actions: [
             TextButton(
@@ -695,7 +713,17 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
       _key,
       '$_key.qr',
       for (final method in ['checkout', 'qr'])
-        for (final pack in ['starter', 'regular', 'plus', 'premium', 'max'])
+        for (final pack in {
+          'starter',
+          'regular',
+          'plus',
+          'premium',
+          'max',
+          ...(_data?['packs'] as List? ?? []).map((p) => p['id'] as String),
+          ...(_data?['orders'] as List? ?? [])
+              .map((p) => p['pack_id'])
+              .whereType<String>(),
+        })
           '$_key.$method.$pack',
     ]) {
       final raw = await _store.read(key: key);
@@ -793,9 +821,11 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
                     backgroundColor: _packColors(p['id'])[0],
                     foregroundColor: BronzePalette.ink,
                     side: BorderSide(
-                      color: _packColors(
-                        p['id'],
-                      )[1].withValues(alpha: p['id'] == 'regular' ? .8 : .28),
+                      color: _packColors(p['id'])[1].withValues(
+                        alpha: ['regular', 'minuteplus'].contains(p['id'])
+                            ? .8
+                            : .28,
+                      ),
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -827,7 +857,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            if (p['id'] == 'regular')
+                            if (['regular', 'minuteplus'].contains(p['id']))
                               const Padding(
                                 padding: EdgeInsets.only(top: 4),
                                 child: Text(
@@ -873,7 +903,9 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
           style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
         ),
         Text(
-          "Chat: ${remoteConfig.cost('generalStandard', 10)} coins · Relationships: ${remoteConfig.cost('relationshipStandard', 15)} coins\nMatching: ${remoteConfig.cost('matching', 20)} coins per new result. Failed readings and saved answers cost nothing.",
+          minuteBillingEnabled
+              ? 'Chat: 40 coins per started minute, beginning with a useful answer. Another minute is charged only when you ask again after the paid minute. Waiting for the server and confirmed failed answers are not charged. Limited general guidance remains free. Matching: $matchingCoinCost coins per new result. Personal Explore readings: ${remoteConfig.cost('explore', 5)} coins per new reading. Daily horoscope stays free.'
+              : "Chat: ${remoteConfig.cost('generalStandard', 10)} coins · Relationships: ${remoteConfig.cost('relationshipStandard', 15)} coins\nMatching: $matchingCoinCost coins per new result. Failed readings and saved answers cost nothing.",
         ),
         const SizedBox(height: 24),
         const Text(

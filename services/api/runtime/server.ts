@@ -1,3 +1,4 @@
+import {EngagementNotifications} from './engagement-notifications';
 import {userJourney} from './user-journey';
 import {withFinancialRequest,markRequestState,recordWalletOutcome,cleanupFinancialContent} from './financial-tracking';
 import {guidanceStatus} from './guidance-status';
@@ -47,6 +48,7 @@ const testCoinWallet = new CoinWallet(database,process.env,testPayments);
 const livePayments = new LivePayments(database,process.env);
 const liveCoinWallet = new CoinWallet(database,process.env,livePayments,'live');
 if(publicAccess && !phoneAuth.configured())throw new Error('Public access requires configured phone authentication');
+const engagementNotifications=new EngagementNotifications(database,process.env);
 const authPaths = new Set(['/api/auth/config', '/api/auth/reviewer', '/api/auth/reviewer-delete', '/api/auth/send', '/api/auth/verify', '/api/auth/verify-deletion', '/api/auth/session', '/api/auth/logout', '/api/auth/delete-account']);
 export const server = createServer(async (incoming, outgoing) => {
   outgoing.setHeader('X-Content-Type-Options', 'nosniff');
@@ -96,6 +98,7 @@ export const server = createServer(async (incoming, outgoing) => {
       outgoing.end(JSON.stringify({ access: 'granted', expiresAt: samsungTester ? process.env.JYOTARA_SAMSUNG_TESTER_EXPIRES_AT : process.env.JYOTARA_TESTER_EXPIRES_AT }));
       return;
     }
+    const isNotification=incoming.method==='POST'&&['/api/notifications/register','/api/notifications/disable','/api/notifications/event'].includes(path);
     const isJourney = incoming.method === 'POST' && path === '/api/user-journey';
     const isGuidanceStatus = incoming.method === 'POST' && path === '/api/guidance/status';
     const liveWalletRequested=publicRequest || incoming.headers['x-jyotara-wallet-mode']==='live';
@@ -106,23 +109,23 @@ export const server = createServer(async (incoming, outgoing) => {
     const isBackup = incoming.method === 'POST' && path === '/api/account/profile';
     const isReport = incoming.method === 'POST' && path === '/api/answers/report';
     const isPayment=incoming.method==='POST' && ['/api/payments/test/create','/api/payments/test/verify','/api/payments/test/refresh','/api/payments/test/history'].includes(path);
-    const isWallet=incoming.method==='POST' && ['/api/wallet/status','/api/wallet/quote','/api/wallet/create','/api/wallet/verify','/api/wallet/refresh'].includes(path);
+    const isWallet=incoming.method==='POST' && ['/api/wallet/status','/api/wallet/quote','/api/wallet/create','/api/wallet/verify','/api/wallet/refresh','/api/wallet/end-chat'].includes(path);
     const isSupport=incoming.method==='POST' && ['/api/support/create','/api/support/list'].includes(path);
     if((isPayment&&!samsungTester)||((isWallet||isSupport||path==='/api/explore/panchang')&&!samsungTester&&!publicRequest)){outgoing.writeHead(404);outgoing.end();return;}
-    const handler = isGuidanceStatus ? (request:Request)=>guidanceStatus(request,database,account!,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY??'') : isJourney ? (request:Request)=>userJourney(request,database,tester) : isBackup ? (request:Request)=>accountProfileBackup(request,database,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY,tester) : isWallet ? (request:Request)=>coinWallet.handle(request,tester) : isPayment ? (request:Request)=>testPayments.handle(request,tester) : isSupport ? (request:Request)=>supportTickets(request,database,tester,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY) : isReport ? (request:Request) => reportAnswer(request,database,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY,tester) : isAuth ? (request: Request) => phoneAuth.handle(request, tester) : routes[`${incoming.method} ${path}`];
+    const handler = isNotification ? (request:Request)=>engagementNotifications.handle(request,account!) : isGuidanceStatus ? (request:Request)=>guidanceStatus(request,database,account!,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY??'') : isJourney ? (request:Request)=>userJourney(request,database,tester) : isBackup ? (request:Request)=>accountProfileBackup(request,database,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY,tester) : isWallet ? (request:Request)=>coinWallet.handle(request,tester) : isPayment ? (request:Request)=>testPayments.handle(request,tester) : isSupport ? (request:Request)=>supportTickets(request,database,tester,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY) : isReport ? (request:Request) => reportAnswer(request,database,process.env.JYOTARA_CHART_TICKET_KEY ?? process.env.NIRAYANA_CHART_TICKET_KEY,tester) : isAuth ? (request: Request) => phoneAuth.handle(request, tester) : routes[`${incoming.method} ${path}`];
     if (!handler) { outgoing.writeHead(404); outgoing.end(); return; }
     // Authenticate before creating ownership or consuming paid-request budgets.
     const probe=new Request('http://localhost'+path,{headers:typeof incoming.headers.authorization==='string'?{authorization:incoming.headers.authorization}:{}});
     const account=!isAuth ? await phoneAuth.account(probe,tester) : null;
     // Shared demo OTP identities can never operate a live-money wallet.
     if(account?.startsWith('office_demo_'))coinWallet=testCoinWallet;
-    const requiresPhone=isGuidanceStatus || isJourney || !!samsungTester || isWallet || isPayment || isSupport || publicRequest || typeof incoming.headers.authorization==='string' || incoming.headers['x-jyotara-phone-auth']==='required';
+    const requiresPhone=isNotification || isGuidanceStatus || isJourney || !!samsungTester || isWallet || isPayment || isSupport || publicRequest || typeof incoming.headers.authorization==='string' || incoming.headers['x-jyotara-phone-auth']==='required';
     if(!isAuth && requiresPhone && !account) {
       outgoing.writeHead(401,{'Content-Type':'application/json'});
       outgoing.end(JSON.stringify({error:'Phone sign-in expired. Please sign in again.',code:'phone_auth_required'}));
       return;
     }
-    if(!isAuth && !isJourney && !isBackup && !isReport && !isWallet && !isPayment && !isSupport && phoneAuth.configured() && !await phoneAuth.ownProfile(incoming.headers.cookie ?? '',account,!!account)) {
+    if(!isAuth && !isNotification && !isJourney && !isBackup && !isReport && !isWallet && !isPayment && !isSupport && phoneAuth.configured() && !await phoneAuth.ownProfile(incoming.headers.cookie ?? '',account,!!account)) {
       outgoing.writeHead(403,{'Content-Type':'application/json'});
       outgoing.end(JSON.stringify({error:'Sign in with the phone account that owns this profile.',code:'phone_auth_required'}));
       return;
@@ -139,7 +142,7 @@ export const server = createServer(async (incoming, outgoing) => {
     // Never grant this exemption from a client header alone.
     const walletMeteredMatching = !!((samsungTester || publicRequest) && account && incoming.method === 'POST'
       && path === '/api/kundli/matching' && coinWallet.enabled());
-    const admission = isAuth || isJourney || isGuidanceStatus || isBackup || isReport || isWallet || isPayment || isSupport ? 200 : await admitTesterRequest(database, tester, path, incoming.headers.cookie ?? '',Date.now(),(publicRequest || path === '/api/horoscope/daily' || path === '/api/explore/panchang') ? account ?? undefined : undefined,walletMeteredMatching);
+    const admission = isAuth || isNotification || isJourney || isGuidanceStatus || isBackup || isReport || isWallet || isPayment || isSupport ? 200 : await admitTesterRequest(database, tester, path, incoming.headers.cookie ?? '',Date.now(),(publicRequest || path === '/api/horoscope/daily' || path === '/api/explore/panchang') ? account ?? undefined : undefined,walletMeteredMatching);
     if (admission !== 200) {
       outgoing.writeHead(admission, { 'Content-Type': 'application/json' });
       outgoing.end(JSON.stringify({ error: admission === 429
@@ -190,10 +193,13 @@ export const server = createServer(async (incoming, outgoing) => {
     outgoing.end(JSON.stringify({ error: 'Jyotara is temporarily unavailable.' }));
   }
 });
+const notificationTimer=setInterval(()=>void engagementNotifications.tick().catch(()=>console.warn('Notification scheduling unavailable')),60000);
+notificationTimer.unref();
 const cleanupTimer=setInterval(()=>{
   void cleanDivineSessions().catch(()=>console.warn('Provider cleanup unavailable'));
   void database.pool.query('DELETE FROM user_journey_events WHERE received_at<$1',[Date.now()-90*86400000]).catch(()=>console.warn('Journey retention cleanup unavailable'));
   void database.pool.query('DELETE FROM answer_reports WHERE created_at<$1',[Date.now()-90*86400000]).catch(()=>console.warn('Report retention cleanup unavailable'));
+  void database.pool.query('DELETE FROM notification_campaigns WHERE created_at<$1',[Date.now()-90*86400000]).catch(()=>console.warn('Notification retention unavailable'));
   void cleanupFinancialContent(database).catch(()=>console.warn('Service metadata retention cleanup unavailable'));
 },3600000);
 cleanupTimer.unref();

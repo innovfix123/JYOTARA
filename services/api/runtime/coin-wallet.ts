@@ -14,6 +14,8 @@ import {recordWalletOutcome} from './financial-tracking';
 import {localConversationAcknowledgement} from '../lib/conversation-acknowledgement';
 
 export const coinPacks=[{id:'starter',rupees:49,coins:50},{id:'regular',rupees:149,coins:200},{id:'plus',rupees:299,coins:450},{id:'premium',rupees:499,coins:800},{id:'max',rupees:999,coins:1800}];
+export const minuteCoinPacks=[{id:'minuteentry',rupees:25,coins:40},{id:'minutestarter',rupees:49,coins:80},{id:'minuteregular',rupees:99,coins:170},{id:'minuteplus',rupees:199,coins:360},{id:'minutepremium',rupees:499,coins:960},{id:'minutemax',rupees:999,coins:2000}];
+export const minuteRate=40;
 export const coinCost=(category:string,depth:string)=>{const c=appConfig().costs;return ['Love','Relationships','Breakup','Marriage'].includes(category)?(depth==='detailed'?c.relationshipDetailed:c.relationshipStandard):(depth==='detailed'?c.generalDetailed:c.generalStandard);};
 const error=(message:string,status=422)=>Response.json({error:message},{status});
 const stable=(v:any):string=>JSON.stringify(v&&typeof v==='object'?(Array.isArray(v)?v.map(x=>JSON.parse(stable(x))):Object.fromEntries(Object.keys(v).sort().filter(k=>v[k]!==undefined).map(k=>[k,JSON.parse(stable(v[k]))]))):v??null);
@@ -48,9 +50,13 @@ export class CoinWallet {
   delete b.chartTicket; // Access renewal must not turn a retry into a new purchase.
   b.depth=b.depth??'standard';return b;
  }
+ catalog(request:Request){return request.headers.get('x-jyotara-wallet-catalog')==='2'?minuteCoinPacks:coinPacks;}
  async price(tx:any,account:string,action:string,input:any,request?:Request){
   if(!['guidance','matching'].includes(action)||!input||typeof input!=='object'||Array.isArray(input))throw Error('Choose a valid reading.');
   if(action==='guidance'&&input.responseMode==='conversation'&&(input.depth==='detailed'||input.upgradeFrom!=null))throw Error('Conversational answers use the standard price and do not support paid upgrades.');
+  const timed=action==='guidance'&&input.billingVersion===2;
+  if(input.billingVersion!==undefined&&input.billingVersion!==2)throw Error('Unsupported chat billing.');
+  if(timed&&(!/^[a-f0-9]{32}$/.test(input.billingSession??'')||input.depth!=='standard'||input.responseMode!=='conversation'||input.upgradeFrom))throw Error('Reopen chat before continuing.');
   const body=this.clean(action,input),hash=this.hash([action,body]);
   const requestId=action==='matching'?'match-'+hash:body.requestId;
   if(typeof requestId!=='string'||!rid.test(requestId))throw Error('A saved request ID is required.');
@@ -74,7 +80,10 @@ export class CoinWallet {
   const safetyQuestion=relationshipFollowup(String(body.question??''))?[...priorUserStatements,body.question].join('\n'):String(body.question??'');
   const safe=action==='guidance'&&(inferIntent(category as GuidanceCategory,safetyQuestion)==='high_stakes'||['privacy','no_contact'].includes(relationshipResponse(category,String(body.question??''),priorUserStatements,responseStyle(body.responseStyle,body.language))?.kind??''));
   const binding=this.hash([body.profileId,body.question,body.guide,body.responseStyle,body.language]);
-  let cost=action==='matching'?appConfig().costs.matching:coinCost(category,depth),trial=false,chargedCategory=category;
+  const costs=appConfig().costs;
+  // Old APKs only accept their displayed 20-coin Matching quote.
+  const matchingCost=request?.headers.get('x-jyotara-wallet-catalog')==='2'?costs.matchingV2:costs.matching;
+  let cost=action==='matching'?matchingCost:coinCost(category,depth),trial=false,chargedCategory=category;
   if(body.upgradeFrom){
    const parent=(await tx.query(`SELECT * FROM ${this.usageTable} WHERE id=$1 AND account_id=$2 AND action='guidance' AND depth='standard' AND status='complete'`,[body.upgradeFrom,account])).rows[0];
    if(action!=='guidance'||depth!=='detailed'||!parent||!parent.result_ciphertext||parent.binding_hash!==binding)throw Error('Choose the same Standard answer to upgrade.');
@@ -87,6 +96,8 @@ export class CoinWallet {
    const own=(await tx.query(`SELECT id FROM ${this.usageTable} WHERE account_id=$1 AND trial=1 AND status IN ('reserved','complete')`,[account])).rows.length;
    if(!own&&Number(used)<100){cost=0;trial=true;}
   }
+  const personalReading=action==='guidance'&&request?.headers.get('x-jyotara-wallet-catalog')==='2'&&!body.guide&&body.responseMode===undefined&&!body.upgradeFrom;
+  if(personalReading){cost=appConfig().costs.explore;trial=false;}
   let unknownTime=false;
   if(action==='guidance' && request){
    const sessionId=(request.headers.get('cookie')??'').split(';').map(s=>s.trim()).find(s=>s.startsWith('nirayana_pilot_session='))?.slice('nirayana_pilot_session='.length);
@@ -110,15 +121,25 @@ export class CoinWallet {
   // same classifier gates a local response after protected route validation.
   // A batch containing a real question still uses the normal answer price.
   if(safe||unknownTime||localConversationAcknowledgement(body)!==null){cost=0;trial=false;}
+  let minute:any=null;
+  if(timed){
+   trial=false;
+   const minuteBinding=this.hash([body.profileId,body.guide]);
+   minute=(await tx.query('SELECT * FROM minute_chat_sessions WHERE account_id=$1 AND mode=$2 AND id=$3 FOR UPDATE',[account,this.mode,body.billingSession])).rows[0];
+   if(minute&&(minute.binding_hash!==minuteBinding||minute.ended===1)&&!existing)throw Error('This chat has ended or changed. Reopen the guide.');
+   if(minute?.pending_usage&&!existing)throw Error('Your previous question is still being answered. Retry its saved request.');
+   cost=safe||unknownTime||localConversationAcknowledgement(body)!==null?0:minute?.window_until>Date.now()?0:minuteRate;
+   if(!minute)minute={id:body.billingSession,binding_hash:minuteBinding,window_until:0};
+  }
   if(existing){cost=Number(existing.cost);trial=existing.trial===1;}
-  return {requestId,hash,binding,category:chargedCategory,depth,cost,trial,existing,legacy,upgradeFrom:body.upgradeFrom??null};
+  return {requestId,hash,binding,category:chargedCategory,depth,cost,trial,existing,legacy,upgradeFrom:body.upgradeFrom??null,minute,personalReading};
  }
  async handle(request:Request,tester:string){
   if(!this.enabled())return error('Coin wallet is not available.',503);
-  const body=await jsonObject(request);if(!body)return error('Invalid request.');
+  const body:any=await jsonObject(request);if(!body)return error('Invalid request.');
   const account=await this.gateway.account(this.db.pool,request,tester);if(!account)return error('Sign in again.',401);
   const action=new URL(request.url).pathname.split('/').pop();
-  if(action==='status')return this.db.transaction(async tx=>Response.json({mode:this.mode,balance:await this.balance(tx,account),packs:coinPacks.filter(p=>!appConfig().disabledPacks.includes(p.id)),
+  if(action==='status')return this.db.transaction(async tx=>Response.json({mode:this.mode,balance:await this.balance(tx,account),billing:{version:2,coinsPerMinute:minuteRate,policy:'question_started_minute'},packs:this.catalog(request).filter(p=>!appConfig().disabledPacks.includes(p.id)),
    orders:(await tx.query(`SELECT id,pack_id,amount,coins,CASE WHEN payment_method='review_grant' THEN 'complimentary' ELSE status END AS status,payment_method,refund_review,created_at,updated_at FROM ${this.ordersTable} WHERE account_id=$1 ORDER BY created_at DESC LIMIT 30`,[account])).rows,
    activity:(await tx.query(`SELECT id,action,category,depth,cost,status,trial,created_at FROM ${this.usageTable} WHERE account_id=$1 ORDER BY created_at DESC LIMIT 30`,[account])).rows}));
   if(action==='quote'){
@@ -128,8 +149,13 @@ export class CoinWallet {
     const encoded=Buffer.from(JSON.stringify(data)).toString('base64url');
     const quote=encoded+'.'+createHmac('sha256',this.secret).update(encoded).digest('hex');
     const already=!!p.existing && !(body.action==='matching'&&p.existing.status==='failed');
-    return Response.json({quote,category:p.category,depth:p.depth,cost:already?0:p.cost,originalCost:p.cost,balance,trial:p.trial,reopening:already,status:p.existing?.status??'new',canProceed:already||balance>=p.cost,mode:this.mode});
+    return Response.json({quote,category:p.category,depth:p.depth,cost:already?0:p.cost,originalCost:p.cost,balance,trial:p.trial,reopening:already,status:p.existing?.status??'new',canProceed:already||balance>=p.cost,mode:this.mode,...(p.minute?{billingVersion:2,coinsPerMinute:minuteRate}: {})});
    });}catch(e){return error((e as Error).message);}
+  }
+  if(action==='end-chat'){
+   if(!/^[a-f0-9]{32}$/.test(body.billingSession??''))return error('Invalid chat.');
+   await this.db.pool.query('UPDATE minute_chat_sessions SET ended=1,updated_at=$1 WHERE account_id=$2 AND mode=$3 AND id=$4',[Date.now(),account,this.mode,body.billingSession]);
+   return Response.json({ended:true,balance:await this.balance(this.db.pool,account)});
   }
   if(action==='create')return this.create(request,tester,body,account);
   if(action==='verify'||action==='refresh'){
@@ -164,7 +190,8 @@ export class CoinWallet {
  }
  async create(request:Request,tester:string,body:any,account:string){
   const method=body.paymentMethod??'checkout';if(!['checkout','qr'].includes(method))return error('Choose a payment method.');
-  const pack=coinPacks.find(p=>p.id===body.packId);if(!pack||typeof body.requestId!=='string'||!rid.test(body.requestId))return error('Choose a pack.');
+  const previous=(await this.db.pool.query(`SELECT pack_id FROM ${this.ordersTable} WHERE account_id=$1 AND request_id=$2`,[account,body.requestId??''])).rows[0];
+  const pack=(previous?[...coinPacks,...minuteCoinPacks]:this.catalog(request)).find(p=>p.id===body.packId);if(!pack||typeof body.requestId!=='string'||!rid.test(body.requestId))return error('Choose a pack.');
   const reserved=await this.db.transaction(async tx=>{
    const old=(await tx.query(`SELECT * FROM ${this.ordersTable} WHERE account_id=$1 AND request_id=$2`,[account,body.requestId])).rows[0];
    if(old)return {row:old,fresh:false};
@@ -212,7 +239,7 @@ export class CoinWallet {
   if(!row?.provider_order)return error('Order unavailable.',404);
   if(request.method==='GET')return walletCheckoutPage(row,this.keyId!);
   if(request.method!=='POST')return error('Method not allowed.',405);
-  const body=await jsonObject(request);if(!body)return error('Invalid request.');
+  const body:any=await jsonObject(request);if(!body)return error('Invalid request.');
   try{
    if(body.paymentId){
     if(typeof body.paymentId!=='string'||!/^pay_[A-Za-z0-9]+$/.test(body.paymentId)||!validSignature(this.keySecret!,row.provider_order+'|'+body.paymentId,body.signature))return error('Payment verification failed.',400);
@@ -274,6 +301,11 @@ export class CoinWallet {
     const lots=(await tx.query(`SELECT id,remaining FROM ${this.ordersTable} WHERE account_id=$1 AND status='paid' AND remaining>0 ORDER BY created_at,id FOR UPDATE`,[account])).rows;
     for(const lot of lots){const coins=Math.min(needed,Number(lot.remaining));if(!coins)break;allocations.push({id:lot.id,coins});needed-=coins;await tx.query(`UPDATE ${this.ordersTable} SET remaining=remaining-$1 WHERE id=$2`,[coins,lot.id]);}
     const row=(await tx.query(`INSERT INTO ${this.usageTable}(id,account_id,request_id,payload_hash,action,category,depth,cost,trial,upgrade_from,binding_hash,allocations,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13) RETURNING *`,[randomUUID(),account,price.requestId,price.hash,action,price.category,price.depth,price.cost,price.trial?1:0,price.upgradeFrom,price.binding,JSON.stringify(allocations),Date.now()])).rows[0];
+    if(price.minute){
+     await tx.query('INSERT INTO minute_chat_sessions(account_id,mode,id,binding_hash,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT DO NOTHING',[account,this.mode,body.billingSession,price.minute.binding_hash,Date.now()]);
+     await tx.query('UPDATE minute_chat_sessions SET pending_usage=$1,updated_at=$2 WHERE account_id=$3 AND mode=$4 AND id=$5',[row.id,Date.now(),account,this.mode,body.billingSession]);
+     await tx.query(`UPDATE ${this.usageTable} SET billing_session=$1 WHERE id=$2`,[body.billingSession,row.id]);
+    }
     if(action==='guidance')await tx.query(`UPDATE ${this.usageTable} SET session_id=$1 WHERE id=$2`,[/nirayana_pilot_session=([A-Za-z0-9_-]+)/.exec(request.headers.get('cookie')??'')?.[1]??null,row.id]);
     return {...price,row,fresh:true};
    });
@@ -287,6 +319,9 @@ export class CoinWallet {
    catch{return error('Your saved comparison is safe. The selected language is unavailable right now; retry without paying again.',503);}
   }
   if(action==='matching'&&!p.fresh)return error('This comparison is pending or previously failed. Contact support; it will not be charged again.',409);
+  // A confirmed, refunded minute attempt cannot later turn into an unbilled
+  // provider answer. New questions get a new reservation and saved request ID.
+  if((p.minute||p.personalReading)&&!p.fresh&&p.row.status==='failed')return error('This attempt was not charged. Send a new question.',422);
   let outgoing=request;let earlyResponse:Response|undefined;
   if(action==='matching')outgoing=new Request(request.url,{method:'POST',headers:request.headers,body:JSON.stringify({...this.clean(action,body),language:'en'})});
   if(action==='guidance'&&p.upgradeFrom){
@@ -307,6 +342,15 @@ export class CoinWallet {
     if(!success)for(const lot of JSON.parse(current.allocations))await tx.query(`UPDATE ${this.ordersTable} SET remaining=remaining+$1 WHERE id=$2 AND status='paid'`,[lot.coins,lot.id]);
     const context={category:body.category,conversationHistory:body.conversationHistory??[],previousUserMessages:body.previousUserMessages??[],...(body.responseMode!==undefined?{responseMode:body.responseMode}:{}),...(body.conversationMemory!==undefined?{conversationMemory:body.conversationMemory}:{})};
     const cipher=success?await sealReply(this.secret,current.id,action==='matching'?result:context):null;
+    if(current.billing_session){
+     // Server time, one charge per paid window. Provider latency does not consume
+     // the window; no debit runs merely because time passed or the app closed.
+     const minute=(await tx.query('SELECT * FROM minute_chat_sessions WHERE account_id=$1 AND mode=$2 AND id=$3 FOR UPDATE',[account,this.mode,current.billing_session])).rows[0];
+     if(minute?.pending_usage===current.id){
+      const until=success&&Number(current.cost)===minuteRate?Date.now()+60000:success&&minute.window_until>Number(current.created_at)?Number(minute.window_until)+Math.max(0,Date.now()-Number(current.created_at)):Number(minute?.window_until??0);
+      await tx.query('UPDATE minute_chat_sessions SET pending_usage=NULL,window_until=$1,updated_at=$2 WHERE account_id=$3 AND mode=$4 AND id=$5',[until,Date.now(),account,this.mode,current.billing_session]);
+     }
+    }
     return (await tx.query(`UPDATE ${this.usageTable} SET status=$1,result_ciphertext=$2,updated_at=$3 WHERE id=$4 RETURNING *`,[success?'complete':'failed',cipher,Date.now(),current.id])).rows[0];
    }return current;
   });
@@ -316,7 +360,7 @@ export class CoinWallet {
    try{return Response.json({...await matchingLanguage(result,body.language),wallet:this.receipt(row)});}
    catch{return error('Your comparison was saved. The selected language is unavailable right now; retry without paying again.',503);}
   }
-  return Response.json({...result,wallet:{...this.receipt(row),...(body.responseMode==='conversation'?{canUpgrade:false}:{}),...(result?.answerMode==='limited_guidance'?{canUpgrade:false,freeReason:'general_guidance'}:{}),question:body.question,style:body.responseStyle}},{status:response.status,headers:response.headers});
+  return Response.json({...result,wallet:{...this.receipt(row),...(body.responseMode==='conversation'?{canUpgrade:false}:{}),...(p.minute?{billingVersion:2,coinsPerMinute:minuteRate}:{}),...(result?.answerMode==='limited_guidance'?{canUpgrade:false,freeReason:'general_guidance'}:{}),question:body.question,style:body.responseStyle}},{status:response.status,headers:response.headers});
  }
  receipt(row:any){return {id:row.id,trial:row.status==='complete'&&row.trial===1,coins:row.status==='complete'?Number(row.cost):0,category:row.category,depth:row.depth,status:row.status,canUpgrade:appConfig().features.detailed&&row.status==='complete'&&row.action==='guidance'&&row.depth==='standard',upgradeCost:coinCost(row.category,'detailed')-coinCost(row.category,'standard'),mode:this.mode};}
 }

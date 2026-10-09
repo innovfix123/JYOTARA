@@ -1,5 +1,8 @@
 package `in`.innovfix.jyotara
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import android.app.Activity
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -28,6 +31,10 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            manager.createNotificationChannel(NotificationChannel("jyotara_updates", "Jyotara reminders", NotificationManager.IMPORTANCE_DEFAULT))
+        }
         MetaMeasurement(this, flutterEngine.dartExecutor.binaryMessenger)
         CoupleShare(this, flutterEngine.dartExecutor.binaryMessenger)
         otpChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "jyotara/otp-autofill")

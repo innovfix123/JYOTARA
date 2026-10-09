@@ -1,3 +1,4 @@
+import 'coin_wallet.dart' show minuteBillingEnabled;
 import 'services/remote_config.dart';
 import 'services/user_journey.dart';
 
@@ -38,7 +39,11 @@ class AccountService {
     String path,
     Map<String, dynamic> body,
   ) async {
-    final feature = path.startsWith('/api/support/') ? 'support' : 'wallet';
+    final feature = path.startsWith('/api/notifications/')
+        ? 'notification'
+        : path.startsWith('/api/support/')
+        ? 'support'
+        : 'wallet';
     final event = path.endsWith('/create')
         ? (feature == 'support' ? 'support.send' : 'payment.start')
         : path.endsWith('/verify')
@@ -70,6 +75,7 @@ class AccountService {
             headers: {
               'Content-Type': 'application/json',
               'X-Jyotara-Wallet-Mode': walletMode,
+              if (minuteBillingEnabled) 'X-Jyotara-Wallet-Catalog': '2',
               'Authorization': 'Bearer ${token()}',
               if (tester() != null) 'X-Jyotara-Tester-Code': tester()!,
             },

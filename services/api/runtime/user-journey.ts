@@ -12,7 +12,7 @@ export const journeyEvents = new Set([
  'matching.start','matching.complete','matching.add','matching.delete','matching.share',
  'daily.open','daily.expand','explore.open','explore.reading',
  'payment.start','payment.verify','payment.refresh','payment.checkout',
- 'settings.change','notification.open','notification.permission','support.send',
+ 'settings.change','notification.open','notification.received','notification.permission','support.send',
  'api.request','api.result','app.error',
 ]);
 export const journeyScreens = new Set([

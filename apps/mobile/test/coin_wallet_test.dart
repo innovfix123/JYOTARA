@@ -68,16 +68,40 @@ class SwitchingWallet extends FakeWallet {
 class NativeWallet extends FakeWallet {
   bool verified = false;
   @override
-  Future<Map<String, dynamic>> post(String path, Map<String, dynamic> body) async {
-    if (path.endsWith('/create')) return {'id':'local-order','orderId':'order_123',
-      'keyId':'rzp_${walletMode}_example','mode':walletMode,'currency':'INR','amount':14900,'coins':200};
+  Future<Map<String, dynamic>> post(
+    String path,
+    Map<String, dynamic> body,
+  ) async {
+    if (path.endsWith('/create'))
+      return {
+        'id': 'local-order',
+        'orderId': 'order_123',
+        'keyId': 'rzp_${walletMode}_example',
+        'mode': walletMode,
+        'currency': 'INR',
+        'amount': 14900,
+        'coins': 200,
+      };
     if (path.endsWith('/verify')) {
-      assert(body['id'] == 'local-order' && body['paymentId'] == 'pay_123' && body['signature'] == 'signature');
+      assert(
+        body['id'] == 'local-order' &&
+            body['paymentId'] == 'pay_123' &&
+            body['signature'] == 'signature',
+      );
       verified = true;
-      return {'balance':400};
+      return {'balance': 400};
     }
     final data = await super.post(path, body);
-    data['orders'] = verified ? [{'id':'local-order','status':'paid','amount':14900,'coins':200}] : [];
+    data['orders'] = verified
+        ? [
+            {
+              'id': 'local-order',
+              'status': 'paid',
+              'amount': 14900,
+              'coins': 200,
+            },
+          ]
+        : [];
     return data;
   }
 }
@@ -99,34 +123,46 @@ void main() {
   );
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('razorpay_flutter'),
           (_) async => null,
         );
   });
-  testWidgets('native checkout verifies callback before showing credited coins', (tester) async {
-    FlutterSecureStorage.setMockInitialValues({});
-    final api = NativeWallet();
-    bool opened = false;
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('razorpay_flutter'), (call) async {
-        if (call.method != 'open') return null;
-        opened = true;
-        expect(call.arguments['order_id'], 'order_123');
-        expect(call.arguments['amount'], 14900);
-        expect(api.verified, false);
-        return {'type':0,'data':{'razorpay_order_id':'order_123',
-          'razorpay_payment_id':'pay_123','razorpay_signature':'signature'}};
-      });
-    await tester.pumpWidget(MaterialApp(home: CoinWalletScreen(api: api)));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('₹149'));
-    await tester.pumpAndSettle();
-    expect(opened, true);
-    expect(api.verified, true);
-    expect(find.text('Payment verified. Coins added.'), findsOneWidget);
-  });
+  testWidgets(
+    'native checkout verifies callback before showing credited coins',
+    (tester) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final api = NativeWallet();
+      bool opened = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(const MethodChannel('razorpay_flutter'), (
+            call,
+          ) async {
+            if (call.method != 'open') return null;
+            opened = true;
+            expect(call.arguments['order_id'], 'order_123');
+            expect(call.arguments['amount'], 14900);
+            expect(api.verified, false);
+            return {
+              'type': 0,
+              'data': {
+                'razorpay_order_id': 'order_123',
+                'razorpay_payment_id': 'pay_123',
+                'razorpay_signature': 'signature',
+              },
+            };
+          });
+      await tester.pumpWidget(MaterialApp(home: CoinWalletScreen(api: api)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('₹149'));
+      await tester.pumpAndSettle();
+      expect(opened, true);
+      expect(api.verified, true);
+      expect(find.text('Payment verified. Coins added.'), findsOneWidget);
+    },
+  );
   testWidgets(
     'switching packs preserves old retry and clears completed purchases',
     (tester) async {
@@ -266,6 +302,44 @@ void main() {
         throwsA(isA<AccountServiceError>()),
       );
       expect(find.byType(AlertDialog), findsNothing);
+    },
+  );
+  test(
+    'minute consent permits only the disclosed 40-coin rate for its owner',
+    () {
+      const consent = CoinChatConsent('owner', 'standard', 15);
+      const payload = {'billingVersion': 2, 'depth': 'standard'};
+      final quote = {
+        'billingVersion': 2,
+        'coinsPerMinute': 40,
+        'cost': 40,
+        'canProceed': true,
+      };
+      expect(consent.accepts('owner', payload, quote), isTrue);
+      expect(consent.accepts('owner', payload, {...quote, 'cost': 0}), isTrue);
+      for (final invalid in [
+        {...quote, 'cost': 41},
+        {...quote, 'cost': -1},
+        {...quote, 'coinsPerMinute': 80},
+        {...quote, 'billingVersion': 3},
+        {...quote, 'canProceed': false},
+      ]) {
+        expect(consent.accepts('owner', payload, invalid), isFalse);
+      }
+      expect(consent.accepts('another-owner', payload, quote), isFalse);
+      expect(consent.accepts(null, payload, quote), isFalse);
+      expect(
+        coinReceiptLabel({'billingVersion': 2, 'status': 'failed', 'coins': 0}),
+        'Not charged',
+      );
+      expect(
+        coinReceiptLabel({
+          'billingVersion': 2,
+          'status': 'complete',
+          'coins': 0,
+        }),
+        'Included in chat',
+      );
     },
   );
   test('chat consent is account, depth and upgrade bound', () {

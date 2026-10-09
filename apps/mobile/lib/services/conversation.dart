@@ -86,6 +86,7 @@ class GuideConversation extends ChangeNotifier {
   int? rating;
   String? depth;
   bool billingAcknowledged = false;
+  String? billingSession;
   int? acceptedGeneralCoins;
   int? acceptedRelationshipCoins;
   DateTime? updatedAt;

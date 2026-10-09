@@ -1,3 +1,4 @@
+import 'coin_wallet.dart' show minuteBillingEnabled;
 import 'chat_availability.dart';
 import 'services/ui_language.dart';
 
@@ -235,6 +236,13 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
                     fontSize: 27,
                   ),
                 ),
+                if (minuteBillingEnabled)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 12),
+                    child: UiText(
+                      'Chat: 40 coins per started minute. The next minute is charged only when you ask again. Waiting for an answer is not charged. Limited general guidance stays free.',
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
                   onPressed: busy
