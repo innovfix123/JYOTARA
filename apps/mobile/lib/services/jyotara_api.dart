@@ -291,6 +291,8 @@ class JyotaraApiClient {
     String? guide,
     String? depth,
     String? upgradeFrom,
+    List<String> userMessageBatch = const [],
+    void Function(String state)? onDeliveryState,
   }) async {
     final language = responseStyle == 'english' ? 'en' : 'ta';
     if (chartTicket == null ||
@@ -301,31 +303,69 @@ class JyotaraApiClient {
         'A protected birth profile is required before asking.',
       );
     }
-    final response = await _post('/api/guidance', {
-      'category': category,
-      'guide': ?guide,
-      'depth': ?depth,
-      'upgradeFrom': ?upgradeFrom,
-      'question': question,
-      'language': language,
-      // The current pilot accepts ta/en. The mobile contract carries the
-      // requested response style so the backend can add Tanglish without ever
-      // exposing a model key in the app.
-      'responseStyle': responseStyle,
-      'responseMode': ?responseMode,
-      if (conversationMemory.isNotEmpty)
-        'conversationMemory': conversationMemory,
-      'chartTicket': chartTicket,
-      'profileId': profileId,
-      'researchConsent': researchConsent,
-      'ageBand': ?ageBand,
-      'requestId': ?requestId,
-      'reportPerson': ?reportPerson,
-      if (conversationHistory.isNotEmpty)
-        'conversationHistory': conversationHistory,
-      if (previousUserMessages.isNotEmpty)
-        'previousUserMessages': List<String>.from(previousUserMessages),
-    });
+    var finished = false, checking = false;
+    Timer? statusTimer;
+    if (onDeliveryState != null && requestId != null) {
+      statusTimer = Timer.periodic(const Duration(seconds: 2), (_) async {
+        if (finished || checking) return;
+        checking = true;
+        try {
+          final status = await _post('/api/guidance/status', {
+            'profileId': profileId,
+            'chartTicket': chartTicket,
+            'requestId': requestId,
+          });
+          if (!finished &&
+              status['requestId'] == requestId &&
+              status['profileId'] == profileId &&
+              [
+                'received',
+                'processing',
+                'complete',
+              ].contains(status['state'])) {
+            onDeliveryState(status['state'] as String);
+          }
+        } catch (_) {
+          /* No confirmed receipt means no invented delivery tick. */
+        } finally {
+          checking = false;
+        }
+      });
+    }
+    late Map<String, dynamic> response;
+    try {
+      response = await _post('/api/guidance', {
+        'category': category,
+        'guide': ?guide,
+        'depth': ?depth,
+        'upgradeFrom': ?upgradeFrom,
+        'question': question,
+        if (userMessageBatch.isNotEmpty) 'userMessageBatch': userMessageBatch,
+        'language': language,
+        // The current pilot accepts ta/en. The mobile contract carries the
+        // requested response style so the backend can add Tanglish without ever
+        // exposing a model key in the app.
+        'responseStyle': responseStyle,
+        'responseMode': ?responseMode,
+        if (conversationMemory.isNotEmpty)
+          'conversationMemory': conversationMemory,
+        'chartTicket': chartTicket,
+        'profileId': profileId,
+        'researchConsent': researchConsent,
+        if (researchConsent && userMessageBatch.isNotEmpty)
+          'researchConsentVersion': 'research-conversation-v2',
+        'ageBand': ?ageBand,
+        'requestId': ?requestId,
+        'reportPerson': ?reportPerson,
+        if (conversationHistory.isNotEmpty)
+          'conversationHistory': conversationHistory,
+        if (previousUserMessages.isNotEmpty)
+          'previousUserMessages': List<String>.from(previousUserMessages),
+      }, onDispatch: () => onDeliveryState?.call('sent'));
+    } finally {
+      finished = true;
+      statusTimer?.cancel();
+    }
     if (response['profileId'] != profileId) {
       throw const JyotaraApiException(
         'The answer did not match your birth profile. Please reopen your profile.',
@@ -402,8 +442,9 @@ class JyotaraApiClient {
 
   Future<Map<String, dynamic>> _post(
     String path,
-    Map<String, dynamic> body,
-  ) async {
+    Map<String, dynamic> body, {
+    void Function()? onDispatch,
+  }) async {
     final sessionRevision = _sessionRevision;
     if (coinWalletEnabled &&
         path == '/api/guidance' &&
@@ -421,7 +462,7 @@ class JyotaraApiClient {
         );
       }
     }
-    final feature = path == '/api/guidance'
+    final feature = path.startsWith('/api/guidance')
         ? 'chat'
         : path.contains('/profile') || path == '/api/astrology/kundli'
         ? 'profile'
@@ -438,6 +479,7 @@ class JyotaraApiClient {
     );
     late http.Response response;
     try {
+      onDispatch?.call();
       response = await _client
           .post(
             _baseUri.resolve(path),
@@ -457,7 +499,15 @@ class JyotaraApiClient {
             },
             body: jsonEncode(body),
           )
-          .timeout(Duration(seconds: path == '/api/guidance' ? 75 : 40));
+          .timeout(
+            Duration(
+              seconds: path == '/api/guidance'
+                  ? 75
+                  : path == '/api/guidance/status'
+                  ? 5
+                  : 40,
+            ),
+          );
     } on TimeoutException {
       userJourney.event(
         'api.result',

@@ -1,6 +1,9 @@
 // Simplify source wording; do not calculate or add forecasts.
+import {beginProviderAttempt,finishProviderAttempt,reportedOpenRouterUsage} from './financial-tracking.ts';
 export async function plainDailySections(sections, { key = process.env.OPENROUTER_API_KEY, model = process.env.OPENROUTER_MODEL || 'openai/gpt-5.4', request = fetch } = {}) {
   if (!key) return sections;
+  const attempt=await beginProviderAttempt({provider:'openrouter',model,module:'daily-wording',reason:'wording'});
+  let outcome={status:'delivery_uncertain',errorCode:'transport'};
   try {
     const response = await request('https://openrouter.ai/api/v1/responses', {
       method: 'POST', signal: AbortSignal.timeout(18000),
@@ -12,15 +15,19 @@ export async function plainDailySections(sections, { key = process.env.OPENROUTE
         ],
       }),
     });
+    outcome={status:response.ok?'received':'provider_error',httpStatus:response.status,errorCode:response.ok?undefined:'http'};
     if (!response.ok) return sections;
     const body = await response.json();
+    outcome={...outcome,...reportedOpenRouterUsage(body),status:'completed'};
     const raw = body.output_text ?? body.output?.flatMap(x => x.content ?? []).filter(x => x.type === 'output_text').map(x => x.text).join('');
     const value = JSON.parse(raw.replace(/^\s*```(?:json)?\s*/i, '').replace(/\s*```\s*$/, ''));
     const validSentence = (text, source, maximum = 22) => typeof text === 'string' && text.trim() && text.trim().split(/\s+/).length <= maximum && /[.!?]$/.test(text.trim()) && !/[\u0b80-\u0bff]/u.test(text) && (text.match(/\d+/g) ?? []).every(n => source.includes(n));
-    if (!Array.isArray(value) || value.length !== sections.length || value.some((s, i) => s.title !== sections[i].title || !validSentence(s.summary, sections[i].details, 12) || !Array.isArray(s.points) || s.points.length < 2 || s.points.length > 3 || s.points.some(p => !validSentence(p, sections[i].details)))) return sections;
+    if (!Array.isArray(value) || value.length !== sections.length || value.some((s, i) => s.title !== sections[i].title || !validSentence(s.summary, sections[i].details, 12) || !Array.isArray(s.points) || s.points.length < 2 || s.points.length > 3 || s.points.some(p => !validSentence(p, sections[i].details)))){outcome.validation='invalid_output';return sections;}
     return sections.map((s, i) => ({ ...s, text: value[i].summary.trim(), details: value[i].points.map(p => p.trim()).join(' '), presentation: 'plain-language' }));
   } catch {
     // A wording service failure must not turn a valid provider reading into an error.
+    if(['received','completed'].includes(outcome.status)){outcome.validation='invalid_output';outcome.errorCode='invalid_json';}
     return sections;
   }
+  finally{await finishProviderAttempt(attempt,outcome);}
 }

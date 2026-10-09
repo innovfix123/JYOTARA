@@ -6,28 +6,50 @@ import 'package:jyotara/services/conversation.dart';
 import 'package:jyotara/services/profile_session.dart';
 
 void main() {
-  test('short bubbles preserve all English, Tamil and Tanglish content', () {
-    for (final answer in [
-      'Your Moon is in Meena. Take your time with this conversation.\n\nListen before replying.',
-      'உங்கள் உணர்வுகளை நிதானமாகச் சொல்லுங்கள். பதில் சொல்லும் முன் கேளுங்கள்.\n\nஅவசரம் வேண்டாம்.',
-      'Nidhanama pesunga. Avanga solradha kelunga.\n\nOru step-aa pogalam.',
-      '1. Talk with Dr. Meera. 2. Your score is 18.5 out of 36.',
-      List.filled(55, 'patiently').join(' ') + '.',
-    ]) {
-      final parts = chatReplyParts(answer);
-      expect(
-        parts.join(' ').replaceAll(RegExp(r'\s+'), ' '),
-        answer.replaceAll(RegExp(r'\s+'), ' '),
-      );
-      expect(parts.every((s) => s.trim().isNotEmpty), true);
-    }
-    expect(chatReplyParts('Score: 18.5 / 36.'), ['Score: 18.5 / 36.']);
+  test(
+    'paragraph bubbles preserve all English, Tamil and Tanglish content',
+    () {
+      for (final answer in [
+        'Your Moon is in Meena. Take your time with this conversation.\n\nListen before replying.',
+        'உங்கள் உணர்வுகளை நிதானமாகச் சொல்லுங்கள். பதில் சொல்லும் முன் கேளுங்கள்.\n\nஅவசரம் வேண்டாம்.',
+        'Nidhanama pesunga. Avanga solradha kelunga.\n\nOru step-aa pogalam.',
+        '1. Talk with Dr. Meera. 2. Your score is 18.5 out of 36.',
+        '${List.filled(55, 'patiently').join(' ')}.',
+      ]) {
+        final parts = chatReplyParts(answer);
+        expect(
+          parts.join(' ').replaceAll(RegExp(r'\s+'), ' '),
+          answer.replaceAll(RegExp(r'\s+'), ' '),
+        );
+        expect(parts.every((s) => s.trim().isNotEmpty), true);
+      }
+      expect(chatReplyParts('Score: 18.5 / 36.'), ['Score: 18.5 / 36.']);
+    },
+  );
+
+  test('sentences stay in their paragraph; legacy replies have at most five groups', () {
+    final paragraphs = List.generate(
+      12,
+      (index) =>
+          'Thought $index. Its explanation stays here. Its next step stays here.',
+    );
+    expect(chatReplyParts(paragraphs.take(4).join('\n\n')), paragraphs.take(4));
+    final parts = chatReplyParts(paragraphs.join('\n\n'));
+    expect(parts, hasLength(5));
+    expect(parts.expand((part) => part.split('\n\n')), paragraphs);
+    expect(chatReplyParts(' \n\n '), isEmpty);
   });
 
   test('more bubbles never accelerate typing or split complete thoughts', () {
-    expect(chatPartPause('A complete thought.', 3), chatPartPause('A complete thought.', 30));
-    expect(chatPartPause('A complete thought.', 30).inMilliseconds, greaterThanOrEqualTo(1400));
-    final thought = List.filled(45, 'patiently').join(' ') + '.';
+    expect(
+      chatPartPause('A complete thought.', 3),
+      chatPartPause('A complete thought.', 30),
+    );
+    expect(
+      chatPartPause('A complete thought.', 30).inMilliseconds,
+      greaterThanOrEqualTo(5000),
+    );
+    final thought = '${List.filled(45, 'patiently').join(' ')}.';
     expect(chatReplyParts(thought), [thought]);
   });
 
@@ -44,20 +66,22 @@ void main() {
       await tester.pumpAndSettle();
       final answer = ChatMessage(
         fromUser: false,
-        text: 'Take your time. Listen patiently. Share how you feel.',
+        text: 'Take your time.\n\nListen patiently.\n\nShare how you feel.',
         label: 'CHART GUIDANCE',
         wallet: {'status': 'complete', 'chargedCoins': 15},
       );
       chat.messages.add(answer);
       chat.changed();
       await tester.pump();
-      expect(find.text('Take your time.'), findsNothing);
-      expect(find.text('Listen patiently.'), findsNothing);
-      expect(find.byKey(const Key('chatTypingIndicator')), findsOneWidget);
-      await tester.pump(chatPartPause('Take your time.', 3));
       expect(find.text('Take your time.'), findsOneWidget);
       expect(find.text('Listen patiently.'), findsNothing);
-      await tester.pump(chatPartPause('Listen patiently.', 3));
+      expect(find.byKey(const Key('chatTypingIndicator')), findsOneWidget);
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.text('Take your time.'), findsOneWidget);
+      expect(find.text('Listen patiently.'), findsNothing);
+      await tester.pump(
+        chatPartPause('Listen patiently.', 3) - const Duration(seconds: 4),
+      );
       expect(find.text('Listen patiently.'), findsOneWidget);
       expect(find.text('Share how you feel.'), findsNothing);
       await tester.pump(chatPartPause('Share how you feel.', 3));
@@ -99,7 +123,7 @@ void main() {
           .add(
             const ChatMessage(
               fromUser: false,
-              text: 'First answer. Second answer.',
+              text: 'First answer.\n\nSecond answer.',
             ),
           );
       session.conversation(guides.first.conversationKey).changed();

@@ -1,9 +1,7 @@
-import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import ts from 'typescript';
-const code=ts.transpileModule(readFileSync(new URL('../lib/divine-consultation.ts',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
-const {divineBirth,divineConsultation,parseEdited,validChatText,safeProfileContext,consultationControls,deleteDivineSession,uncertaintyStrengthened}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+import {moduleFor} from './helpers/load.mjs';
+const {divineBirth,divineConsultation,parseEdited,validChatText,validConversationText,conversationReplyLimits,practicalGuidanceRequested,safeProfileContext,consultationControls,deleteDivineSession,uncertaintyStrengthened,consultationEditorRequest}=await import(moduleFor('../lib/divine-consultation.ts'));
 const person={datetime:'2001-06-12T06:20:00+05:30',latitude:13.0827,longitude:80.2707,name:'Test alias',gender:'male',place:'Chennai'};
 const input={id:'opaque-request',person,question:'Is marriage favoured?',style:'english',category:'Marriage',guide:'Tharagai',dialogue:[{role:'user',content:'My family has started looking.'}]};
 const config={DIVINE_API_KEY:'test',DIVINE_ACCESS_TOKEN:'test-token',OPENROUTER_API_KEY:'test',OPENROUTER_MODEL:'google/gemini-2.5-flash'};
@@ -226,28 +224,30 @@ test('source citations tolerate whitespace only, never altered claims',()=>{
  assert.equal(parseEdited(JSON.stringify({...edited,source_quotes:['Venus will favour commitment.']}),reading,'english'),null);
 });
 
-test('unified conversation can explain a substantive question beyond legacy depth caps without changing model or paid provider tier',async()=>{
- const answer=('Venus may favour commitment when both people are ready to discuss their expectations patiently. ').repeat(18).trim();
+test('explicit current detail request expands conversation without changing model or paid provider tier',async()=>{
+ const thought=('Venus may favour commitment when both people are ready to discuss their expectations patiently. ').repeat(3).trim();
+ const answer=Array.from({length:4},()=>thought).join('\n\n');
  const contexts=[];let reads=0;
- const result=await divineConsultation(config,{...input,depth:'standard',responseMode:'conversation',question:'Explain what the reading means for family discussions.'},db(),async(url,opts)=>{
+ const result=await divineConsultation(config,{...input,depth:'standard',responseMode:'conversation',question:'Explain in detail what the reading means for family discussions.'},db(),async(url,opts)=>{
   if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
   const body=JSON.parse(opts.body);
   if(url.includes('ask.divine')){
    reads++;assert.equal(body.depth,'standard');assert.equal(body.length_cap,'full');
    assert.ok(body.style_notes.length<=500);
    const context=JSON.parse(body.message);contexts.push(context);
-   assert.match(context.response_instructions,/depth needed/);
+   assert.match(context.response_instructions,/explicitly requested more detail/);
+   assert.match(context.response_instructions,/at most 220 words/);
    assert.doesNotMatch(context.response_instructions,/25–55|90–140|at most 45 words/);
    return Response.json({answer,credits_charged:30});
   }
   assert.equal(body.model,config.OPENROUTER_MODEL);
   assert.equal(body.reasoning.enabled,false);
-  assert.ok(body.max_tokens>3500);
+  assert.equal(body.max_tokens,2200);
   contexts.push(JSON.parse(body.messages[1].content));
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:['Venus may favour commitment']})}}]});
  });
  assert.equal(result.answer,answer);assert.equal(reads,1);
- assert.ok(answer.split(/\s+/).length>180);
+ assert.ok(answer.split(/\s+/).length>120);assert.ok(answer.split(/\s+/).length<=220);
  assert.equal(result.calls[0].credits,30);
 });
 
@@ -283,4 +283,136 @@ test('unified conversation permits brief replies and rejects runaway output rath
   assert.equal(result.answer,accepted?answer:null);
   assert.equal(edits,accepted?1:2);
  }
+});
+
+test('new GPT editor uses supported low reasoning and a strict source schema while retaining bounded depth',async()=>{
+ const model='openai/gpt-6.1-sol';
+ const messages=['My family is pressuring me.','I already told them I need time.','How can I explain that calmly?'];
+ const requestInput={...input,responseMode:'conversation',userMessageBatch:messages,question:messages.join('\n')};
+ const request=consultationEditorRequest(model,requestInput,reading);
+ assert.equal(request.model,model);assert.deepEqual(request.reasoning,{effort:'low'});
+ assert.equal(request.temperature,undefined);assert.equal(request.top_p,undefined);
+ assert.equal(request.max_tokens,1400);assert.equal(request.response_format.type,'json_schema');
+ assert.equal(request.response_format.json_schema.strict,true);
+ assert.deepEqual(request.response_format.json_schema.schema.required,['answer','source_quotes']);
+ const userContext=JSON.parse(request.messages[1].content);
+ assert.deepEqual(userContext.current_user_messages,messages);assert.equal(userContext.question,messages.join('\n'));
+ assert.match(request.messages[0].content,/latest correction/);
+ assert.match(request.messages[0].content,/maximum of 120 words and three messages/);
+ assert.match(request.messages[0].content,/Do not substitute an unsolicited study routine/);
+ let reads=0,edits=0;
+ const result=await divineConsultation({...config,OPENROUTER_CHAT_MODEL:model},requestInput,db(),async(url,options)=>{
+  if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
+  if(url.includes('ask.divine')){reads++;assert.deepEqual(JSON.parse(JSON.parse(options.body).message).current_user_messages,messages);return Response.json({answer:reading,credits_charged:30});}
+  edits++;assert.equal(JSON.parse(options.body).model,model);
+  return Response.json({id:'synthetic-generation',model,choices:[{finish_reason:'stop',message:{content:JSON.stringify(edited)}}],usage:{cost:0.005,prompt_tokens:1000,completion_tokens:200,completion_tokens_details:{reasoning_tokens:100},prompt_tokens_details:{cached_tokens:100}}});
+ });
+ assert.equal(result.answer,reading);assert.equal(reads,1);assert.equal(edits,1);
+ assert.equal(result.calls[1].costUsd,0.005);assert.equal(result.calls[1].reasoningTokens,100);
+ assert.equal(result.calls[1].generationId,'synthetic-generation');
+ assert.ok(!JSON.stringify(result.calls).includes(messages[0]));
+});
+
+test('conversation message bounds reject an explosion or oversized bubble without cutting the answer',()=>{
+ assert.equal(validConversationText('Let us look at what changed.\n\nWhat has already helped?'),true);
+ assert.equal(validConversationText(Array.from({length:6},()=>reading).join('\n\n')),false);
+ assert.equal(validConversationText('A '.repeat(181)+'thought.'),false);
+});
+
+test('conversation editor answers fully before an optional specific follow-up without extending the reply budget',()=>{
+ const request=consultationEditorRequest('openai/gpt-6.1-sol',{...input,responseMode:'conversation',category:'Career',question:'What does the reading indicate for my career?'},reading);
+ const prompt=request.messages[0].content;
+ assert.match(prompt,/Give the complete direct answer first/);
+ assert.match(prompt,/Then ask at most one relevant, specific follow-up/);
+ assert.match(prompt,/changing jobs or growth in the current role/);
+ assert.match(prompt,/Avoid generic closers/);
+ assert.match(prompt,/Never withhold the core answer, manufacture unnecessary questions/);
+ assert.match(prompt,/pressure the user to stay or spend/);
+ assert.match(prompt,/Explicit goodbyes and short factual answers need no follow-up/);
+ assert.match(prompt,/maximum of 120 words and three messages/);assert.equal(request.max_tokens,1400);
+});
+
+test('current detail and brevity requests control limits; earlier context never expands a reply',()=>{
+ const defaults=conversationReplyLimits({question:'What does this indicate for my exam?',dialogue:[{role:'user',content:'Explain in detail.'}],conversationMemory:['I like detailed answers.']});
+ assert.deepEqual(defaults,{expanded:false,maxWords:120,maxCharacters:3000,maxMessages:3,maxTokens:1400});
+ for(const question of ['Explain more about that indication.','Please explain in detail.','இன்னும் விரிவாக விளக்குங்கள்.','Konjam virivaaga sollunga.'])assert.equal(conversationReplyLimits({question}).maxWords,220);
+ assert.equal(conversationReplyLimits({question:'Explain in detail but keep the answer short.'}).expanded,false);
+ assert.equal(conversationReplyLimits({userMessageBatch:['Explain in detail.','Actually, a short answer please.']}).expanded,false);
+ assert.equal(conversationReplyLimits({userMessageBatch:['A short answer first.','Now explain more.']}).expanded,true);
+ const fourThoughts=Array(4).fill('Venus may favour commitment when both people are ready.').join('\n\n');
+ assert.equal(validConversationText(fourThoughts,{question:'What does the chart indicate?'}),false);
+ assert.equal(validConversationText(fourThoughts,{question:'Explain more.'}),true);
+ assert.equal(validConversationText(('word '.repeat(120))+'end.'),false);
+ assert.equal(validConversationText(('word '.repeat(110))+'end.\n\n'+('word '.repeat(110))+'end.',{question:'Explain more.'}),false);
+ assert.equal(practicalGuidanceRequested({question:'Does my chart indicate exam success?'}),false);
+ assert.equal(practicalGuidanceRequested({question:'How can astrology indicate my career prospects?'}),false);
+ assert.equal(practicalGuidanceRequested({question:'What can I expect from the chart?'}),false);
+ assert.equal(practicalGuidanceRequested({question:'Suggest a simple study plan.'}),true);
+ assert.equal(practicalGuidanceRequested({question:'How can I prepare for the exam?'}),true);
+});
+
+test('negated detail requests remain concise in each supported language and latest batch preference wins',()=>{
+ for(const question of [
+  "Don't explain in detail; just answer the question.",
+  'Do not give a detailed explanation.',
+  'Not in detail, please.',
+  'விரிவாக விளக்க வேண்டாம். கேள்விக்கான பதில் மட்டும் சொல்லுங்கள்.',
+  'Detaila solla vendaam. Kelvikku badhil mattum sollunga.',
+  'Virivaaga vilakkama solla thevai illai.',
+ ]){
+  const limits=conversationReplyLimits({question});
+  assert.equal(limits.expanded,false,question);assert.equal(limits.maxWords,120,question);assert.equal(limits.maxTokens,1400,question);
+  assert.equal(conversationReplyLimits({userMessageBatch:['Explain in detail.',question]}).expanded,false,question);
+ }
+ assert.equal(conversationReplyLimits({userMessageBatch:["Don't explain in detail.",'Now explain more.']}).expanded,true);
+});
+
+test('latest current refusal of practical help overrides earlier plan requests without erasing a later new request',()=>{
+ for(const refusal of [
+  'No plan or coaching. Only explain the astrological indication.',
+  "I don't want advice or a routine. Answer the astrology question only.",
+  'படிப்புத் திட்டம் வேண்டாம். ஜோதிடக் குறிப்பை மட்டும் சொல்லுங்கள்.',
+  'ஆலோசனை தேவையில்லை. ஜோதிடக் குறிப்பை மட்டும் சொல்லுங்கள்.',
+  'Plan coaching vendaam. Jothida kurippu mattum sollunga.',
+  'Study plan thevai illai. Astrology mattum sollunga.',
+ ]){
+  assert.equal(practicalGuidanceRequested({question:refusal}),false,refusal);
+  assert.equal(practicalGuidanceRequested({userMessageBatch:['Give me a study plan.',refusal]}),false,refusal);
+ }
+ assert.equal(practicalGuidanceRequested({userMessageBatch:['Give me a study plan.','I work during the day.']}),true);
+ assert.equal(practicalGuidanceRequested({userMessageBatch:['No plan or coaching.','Actually, suggest a simple study plan.']}),true);
+});
+
+test('a long default edit is repaired into the same concise grounded answer rather than silently falling back',async()=>{
+ const longAnswer=Array(4).fill('Venus may favour commitment when both people are ready to discuss their expectations patiently.').join('\n\n');
+ let reads=0,edits=0;
+ const result=await divineConsultation(config,{...input,responseMode:'conversation',question:'What does the chart indicate?'},db(),async(url,options)=>{
+  if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
+  if(url.includes('ask.divine')){reads++;return Response.json({answer:reading});}
+  edits++;const request=JSON.parse(options.body);assert.equal(request.max_tokens,1400);
+  assert.match(request.messages[0].content,/120 words and three messages/);
+  if(edits===2)assert.match(request.messages.at(-1).content,/conversation_message_bound/);
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer:edits===1?longAnswer:reading,source_quotes:[reading]})}}]});
+ });
+ assert.equal(result.answer,reading);assert.equal(reads,1);assert.equal(edits,2);assert.equal(result.calls[1].validationReason,'conversation_message_bound');
+});
+
+test('default astrology reply condenses the full source into the requested indication without volunteered exam coaching',async()=>{
+ const indication='The Mercury period may support study and careful reasoning when effort is consistent. This is a traditional indication only; it cannot establish exam selection or a pass result.';
+ const fullSource=Array(8).fill(indication).join('\n\n');
+ const answer='The supplied Mercury-period indication may support study and careful reasoning when effort is consistent.\n\nThat suggests a supportive traditional theme, with the effort condition kept in place. It does not establish exam selection or whether you will pass.\n\nThis reading supports a cautious indication, rather than a definite result.';
+ let reads=0,edits=0;
+ const requestInput={...input,category:'Education',responseMode:'conversation',question:'Does the reading show support for my banking exam?'};
+ const result=await divineConsultation(config,requestInput,db(),async(url,options)=>{
+  if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
+  if(url.includes('ask.divine')){reads++;return Response.json({answer:fullSource,credits_charged:30});}
+  edits++;const request=JSON.parse(options.body),context=JSON.parse(request.messages[1].content);
+  assert.equal(context.reading,fullSource);assert.ok(fullSource.split(/\s+/).length>220);
+  assert.equal(request.max_tokens,1400);assert.match(request.messages[0].content,/requested astrological indication/);
+  assert.match(request.messages[0].content,/only when the current user explicitly asks for practical help/);
+  return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:[indication]})}}]});
+ });
+ assert.equal(result.answer,answer);assert.equal(reads,1);assert.equal(edits,1);assert.equal(result.calls[0].credits,30);
+ assert.equal(answer.split(/\n\n/).length,3);assert.ok(answer.split(/\s+/).length<=120);
+ assert.doesNotMatch(answer,/minutes|syllabus|practice questions|error log/);
 });

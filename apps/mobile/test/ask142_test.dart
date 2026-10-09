@@ -95,14 +95,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('AI வழிகாட்டிகள்'), findsOneWidget);
       final chip = find.widgetWithText(ChoiceChip, 'வேலை & தொழில்');
-      await tester.ensureVisible(chip);
+      await tester.scrollUntilVisible(
+        chip,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('softBronzeAsk')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.tap(chip);
       await tester.pumpAndSettle();
       final guide = guides.firstWhere(
         (guide) => guide.group == 'Career & Business',
       );
       final cta = find.byKey(ValueKey('guide-chat-${guide.name}'));
-      await tester.ensureVisible(cta);
+      await tester.scrollUntilVisible(
+        cta,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const Key('softBronzeAsk')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       expect(find.text('பேசு'), findsWidgets);
       expect(find.text('மதிப்பீடுகள் இல்லை'), findsWidgets);
       await tester.tap(cta);
@@ -140,7 +158,13 @@ void main() {
       Theme.of(tester.element(input)).textTheme.bodyMedium?.fontFamily,
       'JyotaraChat',
     );
-    expect(find.text('AI guide'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('softBronzeChatHeader')),
+        matching: find.text(guides.first.category),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('A saved guide reply.'), findsOneWidget);
     expect(find.text('A saved question.'), findsOneWidget);
     expect(

@@ -1,14 +1,9 @@
 import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import ts from 'typescript';
-const encode = source => 'data:text/javascript;base64,'+Buffer.from(ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText).toString('base64');
-const client=encode(readFileSync(new URL('../lib/divine-calculations.ts',import.meta.url),'utf8'));
-const dailyCopy=encode(readFileSync(new URL('../runtime/daily-copy.mjs',import.meta.url),'utf8'));
-const source=readFileSync(new URL('../runtime/discovery.ts',import.meta.url),'utf8')
- .replace("'../lib/divine-calculations'",JSON.stringify(client))
- .replace("'./daily-copy.mjs'",JSON.stringify(dailyCopy));
-const {validDay,validBirth,daily,matching,tamilTranslation}=await import(encode(source));
+import {moduleFor} from './helpers/load.mjs';
+const discovery=moduleFor('../runtime/discovery.ts');
+const {validDay,validBirth,daily,matching,tamilTranslation}=await import(discovery);
 test('daily dates use IST and reject outside the three-day window',()=>{
  const now=Date.parse('2026-09-08T20:00:00Z');
  for(const date of ['2026-09-08','2026-09-09','2026-09-10'])assert.equal(validDay(date,now),true);
@@ -27,7 +22,7 @@ test('invalid signs never trigger provider calls',async()=>{
  assert.equal(res.status,400);
 });
 test('daily summary preserves provider differences after shared openings and decodes entities',async()=>{
- const {readingSummary,readablePrediction}=await import(encode(source));
+ const {readingSummary,readablePrediction}=await import(discovery);
  const prefix='The Sun is in Virgo. The Moon is in Leo. ';
  assert.equal(readingSummary(prefix+'Aries detail. Aries action.'),'Aries detail. Aries action.');
  assert.equal(readingSummary(prefix+'Pisces detail. Pisces action.'),'Pisces detail. Pisces action.');

@@ -1,9 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
-import ts from 'typescript';
-const code=ts.transpileModule(readFileSync(new URL('../lib/prokerala-client.ts',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText;
-const {prokeralaJson}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+import {moduleFor} from './helpers/load.mjs';
+const {prokeralaJson}=await import(moduleFor('../lib/prokerala-client.ts'));
 const input={datetime:'2002-07-29T05:00:00+05:30',latitude:11.34,longitude:77.72,language:'ta'};
 const credentials=id=>({PROKERALA_CLIENT_ID:id,PROKERALA_CLIENT_SECRET:'SYNTHETIC-SECRET'});
 test('provider requests share token, carry bounded signals and never follow redirects',async()=>{

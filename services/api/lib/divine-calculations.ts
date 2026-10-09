@@ -1,6 +1,7 @@
 /** Divine calculation adapter. The output retains Jyotara's saved-chart schema.
  * Provider fields are validated before issuing authenticated chart tickets.
  * Docs: developers.divineapi.com/openapi.yaml, verified 2026-09-14. */
+import {beginProviderAttempt,finishProviderAttempt} from '../runtime/financial-tracking';
 export type CalculationConfig = {DIVINE_API_KEY?:string; DIVINE_ACCESS_TOKEN?:string};
 export type CalculationCharge = {module:string;provider:'divine';expectedCredits:number|null;actualCredits:number|null;status:string;httpStatus?:number};
 export type BirthInput = {datetime:string;latitude:number;longitude:number};
@@ -25,17 +26,22 @@ export async function divineData(config:CalculationConfig,url:string,fields:Reco
   if(!['astroapi-3.divineapi.com','astroapi-1.divineapi.com','astroapi-5.divineapi.com'].includes(u.hostname)||u.protocol!=='https:')throw Error('Unsupported calculation endpoint');
   const charge:CalculationCharge={module:u.pathname,provider:'divine',expectedCredits:null,actualCredits:null,status:'started'};
   charges.push(charge);
+  const attempt=await beginProviderAttempt({provider:'divine',module:u.pathname,reason:'calculation'});
   try {
     const body=new URLSearchParams(Object.entries({...fields,api_key:config.DIVINE_API_KEY}).map(([k,v])=>[k,String(v)]));
     const r=await fetch(url,{method:'POST',body,headers:{Authorization:`Bearer ${config.DIVINE_ACCESS_TOKEN}`},signal:AbortSignal.timeout(18000),redirect:'error'});
     charge.httpStatus=r.status;
+    const creditHeader=r.headers.get('x-api-credits');
+    if(creditHeader!==null&&/^\d+$/.test(creditHeader)&&Number.isSafeInteger(Number(creditHeader)))charge.actualCredits=Number(creditHeader);
     if(!r.ok){charge.status='provider_error';throw Error('Calculation service is unavailable');}
     const data:any=await r.json();
+    if(Number.isSafeInteger(data.credits_charged)&&data.credits_charged>=0)charge.actualCredits=data.credits_charged;
     if(data.success!==1||!data.data||typeof data.data!=='object'){charge.status='provider_error';throw Error('Calculation service is unavailable');}
     // Never substitute an assumed credit price when this endpoint supplies none.
     charge.status='received';
     return data.data;
   }catch{if(charge.status==='started')charge.status='unknown';throw Error('Calculation service is unavailable');}
+  finally{await finishProviderAttempt(attempt,{status:charge.status,httpStatus:charge.httpStatus,credits:charge.actualCredits,errorCode:charge.status==='unknown'?'transport':charge.status==='provider_error'?'http':undefined});}
 }
 export function positions(data:any) {
   if(!Array.isArray(data?.planets))throw Error('Missing planets');

@@ -10,6 +10,8 @@ import {profileOverviewQuestion} from '../lib/profile-overview';
 import {jsonObject} from './json-object';
 import {inferIntent,type GuidanceCategory} from '../lib/astrology-evidence';
 import {matchingLanguage,validBirth} from './discovery';
+import {recordWalletOutcome} from './financial-tracking';
+import {localConversationAcknowledgement} from '../lib/conversation-acknowledgement';
 
 export const coinPacks=[{id:'starter',rupees:49,coins:50},{id:'regular',rupees:149,coins:200},{id:'plus',rupees:299,coins:450},{id:'premium',rupees:499,coins:800},{id:'max',rupees:999,coins:1800}];
 export const coinCost=(category:string,depth:string)=>{const c=appConfig().costs;return ['Love','Relationships','Breakup','Marriage'].includes(category)?(depth==='detailed'?c.relationshipDetailed:c.relationshipStandard):(depth==='detailed'?c.generalDetailed:c.generalStandard);};
@@ -104,7 +106,10 @@ export class CoinWallet {
     }
    }
   }
-  if(safe||unknownTime){cost=0;trial=false;}
+  // Only exact server-recognized acknowledgments/preferences are free. The
+  // same classifier gates a local response after protected route validation.
+  // A batch containing a real question still uses the normal answer price.
+  if(safe||unknownTime||localConversationAcknowledgement(body)!==null){cost=0;trial=false;}
   if(existing){cost=Number(existing.cost);trial=existing.trial===1;}
   return {requestId,hash,binding,category:chargedCategory,depth,cost,trial,existing,legacy,upgradeFrom:body.upgradeFrom??null};
  }
@@ -273,6 +278,7 @@ export class CoinWallet {
     return {...price,row,fresh:true};
    });
   }catch(e){return error((e as Error).message,409);}
+  await recordWalletOutcome({id:p.row.id,status:p.row.status,coins:p.row.status==='complete'?Number(p.row.cost):0});
   // Saved matching results are account-bound and encrypted. Guidance recovery
   // goes through the original handler so deleted/expired profiles stay deleted.
   if(action==='matching'&&p.row.status==='complete'&&p.row.result_ciphertext){

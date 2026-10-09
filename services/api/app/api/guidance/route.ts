@@ -1,4 +1,7 @@
 import { limitedBirthGuidance } from '@/lib/limited-birth-guidance';
+import {localConversationAcknowledgement} from '@/lib/conversation-acknowledgement';
+import {markRequestState,financialScope,storeResearchContent} from '@/runtime/financial-tracking';
+import {researchContent,researchVersion,conversationResearchVersion} from '@/runtime/research-content';
 import { divineContext } from '@/lib/divine-calculations';
 import { divineConsultation } from '@/lib/divine-consultation';
 import { profileOverviewQuestion, profileOverview } from '@/lib/profile-overview';
@@ -9,7 +12,7 @@ import { requestIdentity, reserveQuestion, sealReply, openReply, eraseGuidanceCo
 import { currentContext } from '@/db/current-context';
 import { normalizeProviderContext } from '@/lib/provider-chart';
 import { reportPerson, verifiedReportPerson } from '@/lib/marriage-report';
-import { conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, conversationMemory, relationshipFollowup, relationshipResponse, responseStyle, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
+import { normalizeUserMessageBatch, conversationTopic, providerReadingSources, previousUserMessages, conversationHistory, conversationMemory, relationshipFollowup, relationshipResponse, responseStyle, acceptableAnswer, periodClaimsAgree, tanglishUnavailable, type ResponseStyle } from '@/lib/guidance-language';
 import {
   buildTopicContext,
   buildEvidencePacket,
@@ -48,12 +51,12 @@ Karthik:"Personal growth: reflective and encouraging; explore confidence, values
 const allowedLanguages = new Set(['ta', 'en']);
 const allowedAgeBands = new Set(['13-17', '18-20', '21-27', '28-35', '36-45', '46-59', '60+']);
 const sessionCookie = 'nirayana_pilot_session';
-const researchConsentVersion = 'anonymous-questions-v1';
 
-function redactContactDetails(value: string) {
-  return value
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[email removed]')
-    .replace(/(?<!\d)(?:\+?91[-\s]?)?[6-9]\d{9}(?!\d)/g, '[phone removed]');
+async function saveResearch(secret:string,body:{researchConsent?:boolean;researchConsentVersion?:unknown;question?:string;userMessageBatch?:unknown},answer:unknown){
+ const scope=financialScope();
+ const content=researchContent(body,answer);
+ if(!scope||!content)return;
+ await storeResearchContent(await sealReply(secret,`research:${scope.id}`,content),content.consentVersion);
 }
 
 function getSession(request: Request) {
@@ -111,11 +114,13 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as null | {
     category?: GuidanceCategory;
     question?: string;
+    userMessageBatch?: unknown;
     language?: string;
     responseStyle?: string;
     birthTimeKnown?: boolean;
     chart?: ChartFacts;
     researchConsent?: boolean;
+    researchConsentVersion?: unknown;
     ageBand?: string;
     profileId?: string;
     chartTicket?: string;
@@ -129,10 +134,12 @@ export async function POST(request: Request) {
     upgradeFrom?: unknown;
     reportPerson?: unknown;
   };
-  const question = typeof body?.question === 'string' ? body.question.trim().replace(/\s+/g, ' ') : '';
-  if (!body?.category || !allowedCategories.has(body.category) || !question || [...question].length > 240) {
+  const normalized=normalizeUserMessageBatch(body?.userMessageBatch,body?.responseMode,body?.question);
+  const question=normalized?.userMessageBatch.length?normalized.question:normalized?.question.replace(/\s+/g,' ')??'';
+  if (!body?.category || !allowedCategories.has(body.category) || !normalized || !question) {
     return Response.json({ error: 'A valid category, question and calculated chart are required.' }, { status: 400 });
   }
+  body.question=question;
   if (body.depth !== undefined && !['standard','detailed'].includes(body.depth)) return Response.json({error:'Choose Standard or Detailed.'},{status:400});
   if (body.responseMode !== undefined && body.responseMode !== 'conversation') return Response.json({error:'Invalid response mode.'},{status:400});
   if (body.responseMode === 'conversation' && (body.depth === 'detailed' || body.upgradeFrom != null)) return Response.json({error:'Conversational answers use the standard price and do not support paid upgrades.'},{status:400});
@@ -171,6 +178,8 @@ export async function POST(request: Request) {
   if (memory.length) identityPayload.push({conversationMemory:memory});
   if (body.guide) identityPayload.push({guide:body.guide});
   if (body.depth) identityPayload.push({depth:body.depth});
+  if(normalized.userMessageBatch.length)identityPayload.push({userMessageBatch:normalized.userMessageBatch});
+  if(body.researchConsent===true&&body.researchConsentVersion===conversationResearchVersion)identityPayload.push({researchConsentVersion:conversationResearchVersion});
   if (body.reportPerson !== undefined) identityPayload.push({reportPerson:body.reportPerson});
   const identity = await requestIdentity(chartSecret, session.id,
     body.requestId ?? crypto.randomUUID(), identityPayload);
@@ -197,6 +206,21 @@ export async function POST(request: Request) {
     }
     return Response.json({ error: 'This question was already received. Its answer is not available yet; it has not been submitted again.', code: 'request_already_received' }, { status: 409, headers: { 'Cache-Control': 'no-store' } });
   }
+  await markRequestState('received');
+
+  // An acknowledgement is conversation, not a new astrology reading. Keep
+  // ticket/deletion checks and the same encrypted, idempotent receipt above;
+  // no provider call or chart claim is needed for this exact local whitelist.
+  // Preserve the same canonical helper input used by wallet quoting; legacy
+  // display whitespace normalization must not change whether a turn is free.
+  const acknowledgement=localConversationAcknowledgement({...body,question:normalized.question,style});
+  if(acknowledgement!==null){
+    const reply={replayed:false,answer:acknowledgement,answerMode:'limited_guidance',providerUsage:{calls:[],newProviderCalls:0},answeredAt:new Date().toISOString(),evidence:[],support:'unsupported',profileId:trusted.profileId};
+    const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,question:null,intent:'conversation_acknowledgement',consent:body.researchConsent===true?researchVersion(body.researchConsentVersion):null,ageBand,ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
+    if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+    await saveResearch(chartSecret,body,reply.answer);
+    return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
+  }
 
   // Old tickets lack the location needed to safely refresh timed context.
   // Keep natal facts, but do not reuse their one-time Panchang selection.
@@ -211,10 +235,11 @@ export async function POST(request: Request) {
   let practical = scripted && ['privacy', 'no_contact'].includes(scripted.kind) ? scripted : null;
   if (safetyPacket.intent !== 'high_stakes' && !practical && question !== profileOverviewQuestion) {
     if (!trusted.birthTimeKnown) {
-      const result = await limitedBirthGuidance(env,{question,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson});
+      const result = await limitedBirthGuidance(env,{question,userMessageBatch:normalized.userMessageBatch,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson});
       const reply={replayed:false,answer:result.answer,answerMode:'limited_guidance',providerUsage:{calls:result.calls,newProviderCalls:result.calls.length},answeredAt:new Date().toISOString(),evidence:[],support:'unsupported',profileId:trusted.profileId};
-      const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,consent:body.researchConsent===true?researchConsentVersion:null,ageBand,ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
+      const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,question:null,intent:safetyPacket.intent,consent:body.researchConsent===true?researchVersion(body.researchConsentVersion):null,ageBand,ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
       if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+      await saveResearch(chartSecret,body,reply.answer);
       return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
     }
     const reportedPerson = reportPerson(body.reportPerson);
@@ -226,20 +251,21 @@ export async function POST(request: Request) {
         hash:async values=>(await requestIdentity(chartSecret,session.id,'profile-v1',values)).hash,
         open:(id,cipher)=>openReply(chartSecret,id,cipher,2_000_000),
       }));
-    const result = verified && person ? await divineConsultation(env,{id:identity.id,person,question,style,category:body.category,guide:body.guide,profileContext:body.reportPerson as {relationshipStatus?:string;profession?:string},guideNotes:body.guide==='Nila'&&body.category==='Relationships'?'Love and trust: listen without judgement; discuss mixed signals and boundaries. Astrology cannot prove lying, cheating or another person’s private feelings.':body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,natalChart:{rashi:chart.rashi,nakshatra:chart.nakshatra,lagna:chart.lagna,lagnaLord:chart.lagnaLord,planets:chart.planets},dialogue},env.DB) : {answer:null,calls:[]};
+    const result = verified && person ? await divineConsultation(env,{id:identity.id,person,question,userMessageBatch:normalized.userMessageBatch,style,category:body.category,guide:body.guide,profileContext:body.reportPerson as {relationshipStatus?:string;profession?:string},guideNotes:body.guide==='Nila'&&body.category==='Relationships'?'Love and trust: listen without judgement; discuss mixed signals and boundaries. Astrology cannot prove lying, cheating or another person’s private feelings.':body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,natalChart:{rashi:chart.rashi,nakshatra:chart.nakshatra,lagna:chart.lagna,lagnaLord:chart.lagnaLord,planets:chart.planets},dialogue},env.DB) : {answer:null,calls:[]};
     // Missing legacy provider metadata must not strand a saved profile or ask
     // again for a time the user cannot supply. Never send guessed birth inputs.
-    const general = !verified ? await limitedBirthGuidance(env,{question,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson}) : null;
+    const general = !verified ? await limitedBirthGuidance(env,{question,userMessageBatch:normalized.userMessageBatch,style,category:body.category,guideNotes:body.guide?guideVoices[body.guide]:undefined,depth:body.depth,responseMode:body.responseMode,conversationMemory:memory,dialogue,profileContext:body.reportPerson}) : null;
     const unavailable = style==='tamil'?'இப்போது பலன் கிடைக்கவில்லை. மீண்டும் முயற்சிக்கவும்.':style==='tanglish'?'Ippo badhil kidaikkala. Meendum muyarchi pannunga.':'The reading is unavailable right now. Tap Retry to try again.';
     const calls = general?.calls ?? result.calls;
     const reply={replayed:false,answer:general?.answer||result.answer||unavailable,answerMode:general?'limited_guidance':result.answer?'provider_reading':'reading_unavailable',
       providerUsage:{calls,newProviderCalls:calls.length},answeredAt:new Date().toISOString(),
       evidence:[],support:general?'unsupported':'partially_supported',profileId:trusted.profileId};
     const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:reply.support,mode:reply.answerMode,
-      question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,
-      consent:body.researchConsent===true?researchConsentVersion:null,ageBand,
+      question:null,intent:safetyPacket.intent,
+      consent:body.researchConsent===true?researchVersion(body.researchConsentVersion):null,ageBand,
       ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
     if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+    await saveResearch(chartSecret,body,reply.answer);
     return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
   }
   // Only the profile introduction and explicit safety/privacy responses reach
@@ -258,9 +284,10 @@ export async function POST(request: Request) {
   const reply={replayed:false,answer,answerMode:mode,profileId:trusted.profileId,
     providerUsage:{calls:charges,newProviderCalls:charges.length},answeredAt:new Date().toISOString(),evidence:[],support:safetyPacket.support};
   const completed=await completeQuestion(env.DB,{id:identity.id,session:session.id,support:safetyPacket.support,mode,
-    question:body.researchConsent===true?redactContactDetails(question):null,intent:safetyPacket.intent,
-    consent:body.researchConsent===true?researchConsentVersion:null,ageBand,
+    question:null,intent:safetyPacket.intent,
+    consent:body.researchConsent===true?researchVersion(body.researchConsentVersion):null,ageBand,
     ciphertext:await sealReply(chartSecret,identity.id,reply),expiresAt:trusted.expiresAt});
   if(!completed)return Response.json({error:'This question is no longer active.',code:'request_inactive'},{status:410});
+  await saveResearch(chartSecret,body,reply.answer);
   return Response.json(reply,{headers:{'Cache-Control':'no-store'}});
 }

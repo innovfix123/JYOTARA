@@ -7,6 +7,7 @@ import 'birth_form.dart';
 import 'discovery_screens.dart';
 import 'main.dart' show Guide, ChatScreen, profileSession;
 import 'services/profile_session.dart';
+import 'services/remote_config.dart';
 import 'saved_profile_actions.dart';
 
 String chatProfileDetails(ProfileSession session) {
@@ -33,10 +34,13 @@ class ChatProfilePicker extends StatefulWidget {
     required this.guide,
     this.loadProfiles,
     this.removeProfile = KundliLibrary.remove,
+    this.generalCoins,
+    this.relationshipCoins,
   });
   final Guide guide;
   final Future<List<SavedKundli>> Function()? loadProfiles;
   final Future<void> Function(SavedKundli, List<SavedKundli>) removeProfile;
+  final int? generalCoins, relationshipCoins;
   @override
   State<ChatProfilePicker> createState() => _ChatProfilePickerState();
 }
@@ -48,9 +52,16 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
   bool _confirmingDeletion = false;
   String? error;
   String? _loadedIndexKey;
+  late final int _generalCoins, _relationshipCoins;
   @override
   void initState() {
     super.initState();
+    // Keep the chooser's disclosed price while profile selection is open.
+    _generalCoins =
+        widget.generalCoins ?? remoteConfig.cost('generalStandard', 10);
+    _relationshipCoins =
+        widget.relationshipCoins ??
+        remoteConfig.cost('relationshipStandard', 15);
     _load();
   }
 
@@ -119,6 +130,8 @@ class _ChatProfilePickerState extends State<ChatProfilePicker> {
           guide: widget.guide,
           session: row.session,
           allowProfileSwitch: true,
+          generalCoins: _generalCoins,
+          relationshipCoins: _relationshipCoins,
         ),
       ),
     );

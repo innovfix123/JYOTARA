@@ -80,6 +80,8 @@ class UserJourney with WidgetsBindingObserver {
     'chat.start',
     'chat.send',
     'chat.answer',
+    'chat.receipt',
+    'chat.present',
     'chat.end',
     'chat.back',
     'chat.settings',
@@ -202,7 +204,11 @@ class UserJourney with WidgetsBindingObserver {
   static Map<String, dynamic> safeMetadata(Map<String, dynamic> values) {
     final safe = <String, dynamic>{};
     for (final entry in values.entries) {
-      if (metadataValues[entry.key]?.contains(entry.value) == true) {
+      if (entry.key == 'requestRef' &&
+          entry.value is String &&
+          RegExp(r'^[A-Za-z0-9_-]{32}$').hasMatch(entry.value)) {
+        safe[entry.key] = entry.value;
+      } else if (metadataValues[entry.key]?.contains(entry.value) == true) {
         safe[entry.key] = entry.value;
       } else if (const {'status', 'durationMs', 'count'}.contains(entry.key) &&
           entry.value is int &&

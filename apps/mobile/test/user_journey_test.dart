@@ -84,6 +84,21 @@ void main() {
   );
 
   test(
+    'delivery trace keeps only opaque references and strips content or tokens',
+    () {
+      final ref = List.filled(16, 'ab').join();
+      expect(
+        UserJourney.safeMetadata({'requestRef': ref, 'question': 'private'}),
+        {'requestRef': ref},
+      );
+      for (final invalid in ['a' * 64, 'private question', '9000000000', '']) {
+        expect(UserJourney.safeMetadata({'requestRef': invalid}), isEmpty);
+      }
+      expect(UserJourney.events, containsAll(['chat.receipt', 'chat.present']));
+    },
+  );
+
+  test(
     'anonymous onboarding joins verified account and logout separates history',
     () async {
       token = null;

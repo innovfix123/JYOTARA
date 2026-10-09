@@ -8,6 +8,12 @@ const now=Date.now();
 const event=(overrides={})=>({id:'ab'.repeat(16),sessionId:'cd'.repeat(16),sequence:1,name:'chat.answer',screen:'chat',at:now,metadata:{outcome:'success',feature:'chat',language:'ta'},...overrides});
 const request=(events,token='a'.repeat(64),extra={})=>new Request('https://example.test/api/user-journey',{method:'POST',headers:token?{authorization:'Bearer '+token}:{},body:JSON.stringify({events,...extra})});
 
+test('chat delivery trace accepts opaque request reference without accepting content or bearer tokens',()=>{
+ const requestRef='ab'.repeat(16);
+ for(const name of ['chat.receipt','chat.present'])assert.equal(parseJourneyEvents({events:[event({name,metadata:{requestRef,count:2,status:3}})]})[0].metadata.requestRef,requestRef);
+ for(const requestRef of ['a'.repeat(64),'private question here','9000000000',''])assert.throws(()=>parseJourneyEvents({events:[event({metadata:{requestRef}})]}));
+});
+
 test('closed metadata vocabulary rejects raw personal values and forged identities',()=>{
  assert.equal(parseJourneyEvents({events:[event()]}).length,1);
  for(const metadata of [{question:'secret'},{birthTime:'12:00'},{phone:'9000000000'},{outcome:'private name'},{control:'Saran'},{status:200.5},{durationMs:86400001},{feature:'secret'}])assert.throws(()=>parseJourneyEvents({events:[event({metadata})]}));

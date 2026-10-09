@@ -1,4 +1,5 @@
 import type { D1Database } from '@cloudflare/workers-types';
+import {beginProviderAttempt,finishProviderAttempt} from '../runtime/financial-tracking';
 type Credentials = { PROKERALA_CLIENT_ID?: string; PROKERALA_CLIENT_SECRET?: string; DB?: D1Database };
 export type ProviderCharge = {module:string; expectedCredits:number; actualCredits:number|null; status:string; httpStatus?:number};
 export type ProviderAudit = {requestId:string; sessionId:string; charges?:ProviderCharge[]};
@@ -7,7 +8,9 @@ export async function meteredProkeralaFetch(credentials:Credentials, path:string
   const id=crypto.randomUUID(), charge:ProviderCharge={module:path,expectedCredits,actualCredits:null,status:'started'};
   if(credentials.DB && audit) await credentials.DB.prepare('INSERT INTO provider_usage (id,request_id,session_id,module,status,expected_credits,created_at) VALUES (?,?,?,?,?,?,?)')
     .bind(id,audit.requestId,audit.sessionId,path,'started',expectedCredits,Date.now()).run();
+  let attempt:string|null=null;
   const save=async()=>{
+    await finishProviderAttempt(attempt,{status:charge.status,httpStatus:charge.httpStatus,credits:charge.actualCredits,errorCode:charge.status==='unknown'?'transport':charge.status==='provider_error'?'http':undefined});
     audit?.charges?.push({...charge});
     if(credentials.DB && audit) await credentials.DB.prepare('UPDATE provider_usage SET status=?,http_status=?,actual_credits=? WHERE id=?')
       .bind(charge.status,charge.httpStatus??null,charge.actualCredits,id).run();
@@ -15,6 +18,7 @@ export async function meteredProkeralaFetch(credentials:Credentials, path:string
   let response:Response;
   try {
     const token=await prokeralaToken(credentials);
+    attempt=await beginProviderAttempt({provider:'prokerala',module:path,reason:'calculation'});
     response=await fetch('https://api.prokerala.com/v2'+path+'?'+params,{signal:AbortSignal.timeout(path.startsWith('/report/')?25000:12000),redirect:'manual',headers:{Authorization:'Bearer '+token}});
     charge.httpStatus=response.status;
     const reported=response.headers.get('x-api-credits');

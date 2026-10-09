@@ -1,5 +1,6 @@
 import type { D1Database } from '@cloudflare/workers-types';
 import { eraseGuidanceContent } from './guidance-requests';
+import {financialScope} from '../runtime/financial-tracking';
 
 export async function chartSessionDeleted(db: D1Database, session: string, now = Date.now()) {
   const row = await db.prepare(`SELECT 1 AS revoked FROM deleted_chart_sessions
@@ -24,5 +25,6 @@ export async function deleteChartSession(db: D1Database, session: string, now = 
       response_ciphertext = NULL, response_expires_at = NULL, updated_at = ?
       WHERE session_id = ?`).bind(now, session),
     db.prepare('DELETE FROM pilot_events WHERE session_id = ?').bind(session),
+    ...(financialScope()?[db.prepare('DELETE FROM service_requests WHERE session_id = ?').bind(session)]:[]),
   ]);
 }

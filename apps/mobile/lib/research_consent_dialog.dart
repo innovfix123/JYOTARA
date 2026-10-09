@@ -13,7 +13,7 @@ class _ResearchConsentDialogState extends State<ResearchConsentDialog> {
   bool tamil = false;
   @override
   Widget build(BuildContext context) => AlertDialog(
-    title: Text(tamil ? 'விருப்ப ஆய்வு அனுமதி' : 'Optional research questions'),
+    title: Text(tamil ? 'விருப்ப ஆய்வு அனுமதி' : 'Optional research sharing'),
     content: SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -36,8 +36,8 @@ class _ResearchConsentDialogState extends State<ResearchConsentDialog> {
           const SizedBox(height: 16),
           Text(
             tamil
-                ? 'அனுமதி அளிக்காமலும் கேள்வி கேட்கலாம். அனுமதித்தால், இனி நீங்கள் கேட்கும் கேள்விகளின் உரை, அமர்வு மற்றும் வகை விவரங்களுடன் செயலியை மேம்படுத்தும் ஆய்விற்காகச் சேமிக்கப்படலாம். வெளிப்படையான தொலைபேசி எண்களும் மின்னஞ்சல் முகவரிகளும் நீக்கப்படும்; மற்ற தனிப்பட்ட விவரங்கள் இருக்கலாம். முக்கியமான தனிப்பட்ட தகவல்களைச் சேர்க்க வேண்டாம். சேமிப்புக் கால இலக்கு 90 நாட்கள். சேவைக்கு கோரிக்கைகள் வரும்போதுதான் பழைய உரை நீக்கப்படுகிறது; தினசரி நீக்கம் உறுதி செய்யப்படவில்லை.'
-                : 'Chat works with this turned off. If enabled, future question text may be stored for product research with session and category information. Obvious phone numbers and email addresses are removed, but other personal details may remain. Do not include sensitive details. The retention target is 90 days; deletion runs when the service handles requests, not on a guaranteed daily schedule.',
+                ? 'அனுமதி அளிக்காமலும் கேள்வி கேட்கலாம். அனுமதித்தால், இனி நீங்கள் அனுப்பும் கேள்விகளும் அவற்றுக்கான பதில்களும் செயலியை மேம்படுத்தும் ஆய்விற்காக 90 நாட்கள் வரை மறையாக்கம் செய்து சேமிக்கப்படும். வெளிப்படையான தொலைபேசி எண்களும் மின்னஞ்சல் முகவரிகளும் நீக்கப்படும்; மற்ற தனிப்பட்ட விவரங்கள் இருக்கலாம். முக்கியமான தனிப்பட்ட தகவல்களைச் சேர்க்க வேண்டாம்.'
+                : 'Chat works with this turned off. If enabled, future questions and generated replies are stored encrypted for product research for up to 90 days. Obvious phone numbers and email addresses are removed, but other personal details may remain. Do not include sensitive details.',
           ),
           const SizedBox(height: 12),
           Text(
@@ -56,8 +56,8 @@ class _ResearchConsentDialogState extends State<ResearchConsentDialog> {
             contentPadding: EdgeInsets.zero,
             title: Text(
               tamil
-                  ? 'இனி கேட்கும் கேள்விகளை ஆய்விற்குப் பகிர்கிறேன்'
-                  : 'Share future questions for research',
+                  ? 'இனி வரும் கேள்விகளையும் பதில்களையும் ஆய்விற்குப் பகிர்கிறேன்'
+                  : 'Share future questions and replies for research',
             ),
             value: widget.session.researchConsent,
             onChanged: (value) =>
@@ -65,8 +65,8 @@ class _ResearchConsentDialogState extends State<ResearchConsentDialog> {
           ),
           Text(
             tamil
-                ? 'இது உங்கள் விருப்பம். இந்தச் சோதனைப் பதிப்பை மீண்டும் தொடங்கும்போதோ பிறப்பு விவரத்தை மாற்றும்போதோ அனுமதி அணைக்கப்படும். அணைத்தால் இனிவரும் கேள்விகள் பகிரப்படாது; ஏற்கெனவே பகிர்ந்தவை நீக்கப்படாது. சேவையகத் தரவை நீக்கும் வசதி இன்னும் இல்லை. அனுமதி அணைந்திருந்தாலும் ஜாதகக் கணக்கீடும் பதில் தயாரிப்பும் எங்கள் சேவை வழங்குநர்கள் மூலம் நடைபெறும்.'
-                : 'Optional. This test-build choice resets when you restart or change your profile. Turning it off stops sharing future questions; it does not delete previously shared questions. Server deletion controls are not yet available. Chart calculation and answer processing still use our service providers when this is off.',
+                ? 'இது உங்கள் விருப்பம். செயலியை மீண்டும் தொடங்கும்போதோ பிறப்பு விவரத்தை மாற்றும்போதோ அனுமதி அணைக்கப்படும். அணைத்தால் இனிவரும் உரையாடல்கள் ஆய்விற்குச் சேமிக்கப்படாது. ஏற்கெனவே சேமித்த ஆய்வுப் பிரதிகளை நீக்க, தொடர்புடைய பிறப்பு விவரத்தையோ உங்கள் கணக்கையோ நீக்கலாம். அனுமதி அணைந்திருந்தாலும் ஜாதகக் கணக்கீடும் பதில் தயாரிப்பும் எங்கள் சேவை வழங்குநர்கள் மூலம் நடைபெறும்.'
+                : 'Optional. This choice resets when you restart or change your profile. Turning it off stops future research storage. Delete the connected birth profile or your account to remove active research copies already stored. Chart calculation and answer processing still use our service providers when this is off.',
           ),
         ],
       ),

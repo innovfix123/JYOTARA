@@ -845,8 +845,16 @@ class _MainShellState extends State<MainShell>
         !remoteConfig.guideEnabled(guide.name)) {
       return;
     }
+    final generalCoins = remoteConfig.cost('generalStandard', 10);
+    final relationshipCoins = remoteConfig.cost('relationshipStandard', 15);
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => ChatProfilePicker(guide: guide)),
+      MaterialPageRoute<void>(
+        builder: (_) => ChatProfilePicker(
+          guide: guide,
+          generalCoins: generalCoins,
+          relationshipCoins: relationshipCoins,
+        ),
+      ),
     );
   }
 
@@ -1055,6 +1063,26 @@ class _GuidesScreenState extends State<GuidesScreen> {
                         fontSize: 12,
                       ),
                     ),
+                    if (coinWalletEnabled) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        ex(
+                          context,
+                          'General questions: ${remoteConfig.cost('generalStandard', 10)} coins per answer. '
+                              'Relationship questions: ${remoteConfig.cost('relationshipStandard', 15)} coins per answer. '
+                              'Only completed answers are charged.',
+                          'பொதுவான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('generalStandard', 10)} நாணயங்கள். '
+                              'உறவு தொடர்பான கேள்விகளுக்கு ஒரு பதிலுக்கு ${remoteConfig.cost('relationshipStandard', 15)} நாணயங்கள். '
+                              'முழுமையான பதில்களுக்கு மட்டுமே கட்டணம்.',
+                        ),
+                        key: const Key('chatPriceNotice'),
+                        style: const TextStyle(
+                          color: AskPalette.muted,
+                          fontSize: 12,
+                          height: 1.45,
+                        ),
+                      ),
+                    ],
                     if (legacyGuides.any(
                       (g) => profileSession
                           .conversation(g.conversationKey)
@@ -1151,12 +1179,15 @@ class ChatScreen extends StatefulWidget {
     required this.guide,
     this.session,
     this.allowProfileSwitch = false,
+    this.generalCoins,
+    this.relationshipCoins,
     super.key,
   });
 
   final Guide guide;
   final ProfileSession? session;
   final bool allowProfileSwitch;
+  final int? generalCoins, relationshipCoins;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -1171,13 +1202,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   List<ChatMessage> get _messages => _conversation.messages;
   int _boundRevision = -1;
   ChatLanguage _language = ChatLanguage.auto;
-  String _depth = 'standard';
-  bool _choosingDepth = false;
   bool _canExit = false;
   bool _ending = false;
   BuildContext? _chatUiContext;
   bool _controlsExpanded = false;
   CoinChatConsent? _coinConsent;
+  // Capture the disclosed entry schedule before any later remote refresh.
+  // Existing saved consent remains authoritative when a chat is reopened.
+  late final int _entryGeneralCoins, _entryRelationshipCoins;
   final _knownMessages = <ChatMessage>{};
   ChatMessage? _deliveryMessage;
   bool get _thinking =>
@@ -1186,6 +1218,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    _entryGeneralCoins =
+        widget.generalCoins ?? remoteConfig.cost('generalStandard', 10);
+    _entryRelationshipCoins =
+        widget.relationshipCoins ??
+        remoteConfig.cost('relationshipStandard', 15);
     WidgetsBinding.instance.addObserver(this);
     _bindConversation();
     _session.addListener(_profileChanged);
@@ -1212,11 +1249,19 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           : _session.preferredChatLanguage;
     }
     if (_conversation.ended) {
-      _session.startNewConversation(widget.guide.conversationKey);
+      if (_conversation.turns.any(
+        (turn) => ['sending', 'uncertain'].contains(turn.state),
+      )) {
+        // Opening the guide makes its saved recovery controls accessible. It
+        // never automatically resubmits a possibly paid request.
+        _conversation.ended = false;
+        _conversation.changed();
+      } else {
+        _session.startNewConversation(widget.guide.conversationKey);
+      }
     }
     // One customer-facing conversation mode. Existing pending request receipts
     // retain their original depth in ProfileSession for recovery.
-    _depth = 'standard';
     if (_conversation.depth == 'standard' &&
         _conversation.billingAcknowledged &&
         _conversation.acceptedGeneralCoins != null &&
@@ -1261,15 +1306,20 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
     }
+    _idleTimer?.cancel();
+    _idleReady = false;
+    _draining = false;
     _restoreRetryDraft();
     _deliveryMessage = null;
+    if (_conversation.turns.any((t) => t.waiting)) _armCollection();
     _knownMessages
       ..clear()
       ..addAll(_messages);
   }
 
   void _restoreRetryDraft() {
-    if (_conversation.pending ||
+    if (_conversation.turns.isNotEmpty ||
+        _conversation.pending ||
         _conversation.ended ||
         _controller.text.isNotEmpty ||
         _messages.isEmpty) {
@@ -1300,7 +1350,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           final message = fresh.last;
           // Errors and saved history stay immediately readable. Presentation
           // never changes the stored answer or the coin receipt.
-          if (!const {
+          if (!_conversation.ended &&
+              !_paused &&
+              !const {
                 'ANSWER NOT CONFIRMED',
                 'REQUEST NOT COMPLETED',
                 'INTERRUPTED REQUEST',
@@ -1325,6 +1377,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   @override
   void didChangeMetrics() => _scrollToLatest();
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _paused = false;
+      if (_conversation.turns.any((turn) => turn.waiting)) _armCollection();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.detached) {
+      _paused = true;
+      _idleTimer?.cancel();
+      _idleReady = false;
+      if (mounted) setState(() => _deliveryMessage = null);
+      _conversation.changed();
+    }
+  }
+
   void _scrollToLatest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
@@ -1342,7 +1410,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _profileChanged() {
-    if (!mounted || _boundRevision == _session.revision) return;
+    if (!mounted) return;
+    if (_boundRevision == _session.revision) {
+      if (!_session.answering) unawaited(_drainQueue());
+      return;
+    }
     setState(() {
       _controller.clear();
       _bindConversation();
@@ -1350,8 +1422,24 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   @override
+  void didUpdateWidget(covariant ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final oldSession = oldWidget.session ?? profileSession;
+    if (!identical(oldSession, _session) ||
+        oldWidget.guide.conversationKey != widget.guide.conversationKey) {
+      oldSession.removeListener(_profileChanged);
+      _conversation.removeListener(_conversationChanged);
+      _boundRevision = -1;
+      _controller.clear();
+      _bindConversation();
+      _session.addListener(_profileChanged);
+    }
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _idleTimer?.cancel();
     _inputFocus.dispose();
     _session.removeListener(_profileChanged);
     _conversation.removeListener(_conversationChanged);
@@ -1400,78 +1488,126 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     lastReply: _messages.where((m) => !m.fromUser).lastOrNull?.text,
   );
 
+  Timer? _idleTimer;
+  bool _idleReady = false, _draining = false, _paused = false;
+  static const _collectionIdle = Duration(seconds: 6);
+
+  void _armCollection() {
+    _idleTimer?.cancel();
+    _idleReady = false;
+    if (_paused ||
+        _conversation.ended ||
+        !_conversation.turns.any((t) => t.waiting)) {
+      return;
+    }
+    _idleTimer = Timer(_collectionIdle, () {
+      if (!mounted || _paused || _conversation.ended) return;
+      for (final turn in _conversation.turns.where(
+        (t) => t.state == 'collecting',
+      )) {
+        turn.state = 'queued';
+      }
+      _idleReady = true;
+      _conversation.changed();
+      unawaited(_drainQueue());
+    });
+  }
+
+  String? _messageDelivery(ChatMessage message) {
+    if (message.clientId == null) return null;
+    for (final turn in _conversation.turns) {
+      if (turn.messageIds.contains(message.clientId)) {
+        if (turn.state == 'complete' && turn.ack == 'queued') return null;
+        return ['cancelled', 'uncertain', 'failed'].contains(turn.state)
+            ? turn.state
+            : turn.ack;
+      }
+    }
+    return null;
+  }
+
   Future<void> _send([
     String? suggestion,
     Map<String, dynamic>? upgrade,
   ]) async {
-    if (!publicChatEnabled || !remoteConfig.enabled('chat')) return;
-    if (upgrade != null) return;
-    _depth = 'standard';
-    if (!remoteConfig.languageEnabled(_language.name)) {
-      _setReplyLanguage(
-        ChatLanguage.values.byName(remoteConfig.list('languages').first),
-      );
-    }
-    final text = (suggestion ?? _controller.text).trim();
-    if (text.isEmpty || _thinking || _choosingDepth || _conversation.ended) {
+    if (!publicChatEnabled ||
+        !remoteConfig.enabled('chat') ||
+        upgrade != null) {
       return;
     }
-    final detected = upgrade?['style'] is String
-        ? ChatLanguage.values.byName(upgrade!['style'])
-        : _detect(text);
-    final pendingRequest = _session.pendingGuidanceRequest(
+    final text = (suggestion ?? _controller.text).trim();
+    if (text.isEmpty ||
+        text.runes.length > 240 ||
+        _ending ||
+        _conversation.ended) {
+      return;
+    }
+    final account = coinAccount?.account();
+    final detected = _detect(text);
+    final legacyPending = _session.pendingGuidanceRequest(
       category: widget.guide.category,
       question: text,
       responseStyle: detected.name,
       guide: widget.guide.name,
     );
-    if (pendingRequest == null &&
-        coinWalletEnabled &&
+    if (coinWalletEnabled &&
+        legacyPending == null &&
         !RegExp(
           r'^(hi|hello|hey|vanakkam|வணக்கம்)[!.,\s]*$',
           caseSensitive: false,
         ).hasMatch(text) &&
-        upgrade == null &&
-        (_coinConsent == null ||
-            _coinConsent!.account != coinAccount?.account())) {
-      _choosingDepth = true;
-      final account = coinAccount?.account();
-      final generalCoins = remoteConfig.cost('generalStandard', 10);
-      final relationshipCoins = remoteConfig.cost('relationshipStandard', 15);
-      final selected = await showChatDepthPicker(
-        _chatUiContext ?? context,
+        (_coinConsent == null || _coinConsent!.account != account)) {
+      final generalCoins = _entryGeneralCoins;
+      final relationshipCoins = _entryRelationshipCoins;
+      // The guide chooser displays this price schedule before entry. Every
+      // request still verifies its server quote and available balance.
+      _conversation.depth = 'standard';
+      _conversation.billingAcknowledged = true;
+      _conversation.acceptedGeneralCoins = generalCoins;
+      _conversation.acceptedRelationshipCoins = relationshipCoins;
+      _coinConsent = CoinChatConsent(
+        account,
+        'standard',
+        generalCoins > relationshipCoins ? generalCoins : relationshipCoins,
         generalCoins: generalCoins,
         relationshipCoins: relationshipCoins,
       );
-      _choosingDepth = false;
-      if (!mounted ||
-          selected == null ||
-          _conversation.ended ||
-          account != coinAccount?.account()) {
-        return;
-      }
-      setState(() {
-        _controlsExpanded = false;
-        _depth = selected;
-        _conversation.depth = selected;
-        _conversation.billingAcknowledged = true;
-        _conversation.acceptedGeneralCoins = generalCoins;
-        _conversation.acceptedRelationshipCoins = relationshipCoins;
-        _conversation.changed();
-        _coinConsent = CoinChatConsent(
-          account,
-          selected,
-          generalCoins > relationshipCoins ? generalCoins : relationshipCoins,
-          generalCoins: generalCoins,
-          relationshipCoins: relationshipCoins,
-        );
-      });
     }
+    var turn = _conversation.turns.lastOrNull;
+    if (turn == null ||
+        turn.state != 'collecting' ||
+        turn.legacy ||
+        legacyPending != null ||
+        turn.userMessages.length >= 4 ||
+        turn.language != detected.name) {
+      if (turn?.state == 'collecting') turn!.state = 'queued';
+      turn = ChatTurn(
+        id: legacyPending?.id ?? requestId().substring(0, 32),
+        language: detected.name,
+        legacy: legacyPending != null,
+      );
+      _conversation.turns.add(turn);
+    }
+    final messageId = requestId().substring(0, 32);
+    turn.messageIds.add(messageId);
+    turn.userMessages.add(text);
+    setState(() {
+      _controlsExpanded = false;
+      _inputFocus.requestFocus();
+      _messages.add(
+        ChatMessage(fromUser: true, text: text, clientId: messageId),
+      );
+      _controller.clear();
+      _conversation.updatedAt = DateTime.now();
+    });
     userJourney.event(
       'chat.send',
       metadata: {
         'feature': 'chat',
         'control': 'send',
+        'outcome': 'pending',
+        'count': 1,
+        if (turn.id.length == 32) 'requestRef': turn.id,
         'language': detected == ChatLanguage.tamil
             ? 'ta'
             : detected == ChatLanguage.tanglish
@@ -1479,60 +1615,138 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             : 'en',
       },
     );
-    final sentRevision = _session.revision;
-    final sentConversation = _conversation;
-    setState(() {
-      _controlsExpanded = false;
-      _inputFocus.requestFocus();
-      _messages.add(ChatMessage(fromUser: true, text: text));
-      _controller.clear();
-      sentConversation.pending = true;
-      sentConversation.updatedAt = DateTime.now();
-    });
-    sentConversation.changed();
-    if (RegExp(
-      r'^(hi|hello|hey|vanakkam|வணக்கம்)[!.,\s]*$',
-      caseSensitive: false,
-    ).hasMatch(text)) {
-      _messages.add(
-        ChatMessage(
-          fromUser: false,
-          text: detected == ChatLanguage.tamil
-              ? 'வணக்கம்! எதைப் பற்றிப் பேச விரும்புகிறீர்கள்?'
-              : detected == ChatLanguage.tanglish
-              ? 'Vanakkam! Edha pathi pesa virumbureenga?'
-              : 'Hi! What would you like to talk about?',
-        ),
-      );
-      sentConversation.pending = false;
-      sentConversation.changed();
-      await _session.flushStorage();
+    _conversation.changed();
+    _armCollection();
+    _scrollToLatest();
+    await _session.flushStorage();
+  }
+
+  Future<void> _retryTurn(ChatTurn turn) async {
+    if (_ending ||
+        _conversation.ended ||
+        _conversation.pending ||
+        _deliveryMessage != null ||
+        _draining ||
+        !['uncertain', 'failed'].contains(turn.state)) {
       return;
     }
+    turn.state = 'queued';
+    _idleReady = true;
+    _conversation.changed();
+    await _drainQueue();
+  }
+
+  Future<void> _drainQueue() async {
+    if (!mounted ||
+        _draining ||
+        _paused ||
+        _ending ||
+        !_idleReady ||
+        _conversation.ended ||
+        _conversation.pending ||
+        _deliveryMessage != null ||
+        _session.answering) {
+      return;
+    }
+    final turn = _conversation.turns
+        .where((t) => !['complete', 'cancelled', 'failed'].contains(t.state))
+        .firstOrNull;
+    if (turn == null || turn.state != 'queued') return;
+    _draining = true;
+    final sentSession = _session;
+    final sentConversation = _conversation;
+    final sentRevision = _session.revision;
+    turn.state = 'sending';
+    sentConversation.pending = true;
+    sentConversation.changed();
+    final started = Stopwatch()..start();
     try {
-      final category = widget.guide.category;
-      final consent = upgrade == null
-          ? (pendingRequest == null ? _coinConsent : null)
-          : CoinChatConsent(
-              coinAccount!.account(),
-              'detailed',
-              (upgrade['upgradeCost'] as num).toInt(),
-              upgrade: upgrade['id'] as String,
-            );
+      if (turn.userMessages.length == 1 &&
+          RegExp(
+            r'^(hi|hello|hey|vanakkam|வணக்கம்)[!.,\s]*$',
+            caseSensitive: false,
+          ).hasMatch(turn.question)) {
+        turn.state = 'complete';
+        sentConversation.messages.add(
+          ChatMessage(
+            fromUser: false,
+            clientId: turn.id,
+            text: turn.language == 'tamil'
+                ? 'வணக்கம்! எதைப் பற்றிப் பேச விரும்புகிறீர்கள்?'
+                : turn.language == 'tanglish'
+                ? 'Vanakkam! Edha pathi pesa virumbureenga?'
+                : 'Hi! What would you like to talk about?',
+          ),
+        );
+        userJourney.event(
+          'chat.answer',
+          metadata: {
+            'feature': 'chat',
+            'source': 'app',
+            'outcome': 'success',
+            'count': 1,
+            if (turn.id.length == 32) 'requestRef': turn.id,
+          },
+        );
+        sentConversation.changed();
+        await sentSession.flushStorage();
+        return;
+      }
+      userJourney.event(
+        'chat.send',
+        metadata: {
+          'feature': 'chat',
+          'source': 'api',
+          'outcome': 'started',
+          'count': turn.userMessages.length,
+          if (turn.id.length == 32) 'requestRef': turn.id,
+        },
+      );
       final result = await withCoinChatConsent(
-        consent,
-        () => _session.ask(
-          category: category,
-          question: text,
-          responseStyle: detected.name,
+        _coinConsent,
+        () => sentSession.ask(
+          category: widget.guide.category,
+          question: turn.question,
+          responseStyle: turn.language,
           guide: widget.guide.name,
           conversationKey: widget.guide.conversationKey,
-          depth: pendingRequest != null
-              ? pendingRequest.depth
-              : coinWalletEnabled
-              ? _depth
-              : null,
-          upgradeFrom: pendingRequest?.upgrade,
+          depth: coinWalletEnabled ? 'standard' : null,
+          userMessageBatch: turn.legacy
+              ? const []
+              : List<String>.unmodifiable(turn.userMessages),
+          clientRequestId: turn.legacy ? null : turn.id,
+          onDeliveryState: (state) {
+            if (sentRevision != sentSession.revision ||
+                turn.state != 'sending') {
+              return;
+            }
+            const rank = {
+              'queued': 0,
+              'sent': 1,
+              'received': 2,
+              'processing': 3,
+              'complete': 4,
+            };
+            if ((rank[state] ?? 0) > (rank[turn.ack] ?? 0)) {
+              turn.ack = state;
+              if (['received', 'processing', 'complete'].contains(state)) {
+                userJourney.event(
+                  'chat.receipt',
+                  metadata: {
+                    'feature': 'chat',
+                    'source': 'api',
+                    'outcome': state == 'received'
+                        ? 'pending'
+                        : state == 'processing'
+                        ? 'started'
+                        : 'success',
+                    if (turn.id.length == 32) 'requestRef': turn.id,
+                  },
+                );
+              }
+              sentConversation.changed();
+            }
+          },
         ),
       );
       userJourney.event(
@@ -1542,6 +1756,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           'outcome': result.wallet?['status'] == 'failed'
               ? 'unavailable'
               : 'success',
+          'durationMs': started.elapsedMilliseconds,
+          if (turn.id.length == 32) 'requestRef': turn.id,
+          'count': turn.userMessages.length,
         },
       );
       coinWalletRevision.value++;
@@ -1549,16 +1766,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         unawaited(marketingAnalytics.event('chat_completed'));
         unawaited(metaMeasurement.event('chat_completed'));
       }
-      if (sentRevision != _session.revision) return;
-      if (upgrade != null && result.wallet?['status'] == 'complete') {
-        for (final m in sentConversation.messages) {
-          if (m.wallet?['id'] == upgrade['id']) m.wallet!['canUpgrade'] = false;
-        }
-      }
-      await _session.recordGuidanceResponse(
+      if (sentRevision != sentSession.revision) return;
+      await sentSession.recordGuidanceResponse(
         result,
         sentConversation,
-        detected.name,
+        turn.language,
       );
     } on JyotaraApiException catch (error) {
       userJourney.event(
@@ -1567,66 +1779,51 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           'feature': 'chat',
           'outcome': 'failed',
           'error': error.deliveryUncertain ? 'network' : 'provider',
+          'durationMs': started.elapsedMilliseconds,
+          if (turn.id.length == 32) 'requestRef': turn.id,
         },
       );
-      if (sentRevision != _session.revision) return;
-      if (!mounted) {
-        sentConversation.messages.add(
-          ChatMessage(
-            fromUser: false,
-            text: error.chatMessage,
-            label: error.chatLabel,
-          ),
-        );
-        sentConversation.changed();
-        return;
-      }
-      setState(() {
-        _controller.text = text;
-        _messages.add(
-          ChatMessage(
-            fromUser: false,
-            text: error.chatMessage,
-            label: error.chatLabel,
-          ),
-        );
-      });
+      if (sentRevision != sentSession.revision) return;
+      turn.state = error.deliveryUncertain ? 'uncertain' : 'failed';
+      sentConversation.messages.add(
+        ChatMessage(
+          fromUser: false,
+          text: error.chatMessage,
+          label: error.chatLabel,
+        ),
+      );
     } catch (_) {
-      if (sentRevision != _session.revision) return;
-      if (!mounted) {
-        sentConversation.messages.add(
-          const ChatMessage(
-            fromUser: false,
-            text: 'Guidance could not be loaded. Your question is preserved; please try again.',
-            label: 'SERVICE ERROR',
-          ),
-        );
-        sentConversation.changed();
-        return;
-      }
-      setState(() {
-        _controller.text = text;
-        _messages.add(
-          const ChatMessage(
-            fromUser: false,
-            text: 'Guidance could not be loaded. Your question is preserved; please try again.',
-            label: 'SERVICE ERROR',
-          ),
-        );
-      });
+      if (sentRevision != sentSession.revision) return;
+      turn.state = 'uncertain';
+      userJourney.event(
+        'chat.answer',
+        metadata: {
+          'feature': 'chat',
+          'outcome': 'failed',
+          'error': 'unknown',
+          'durationMs': started.elapsedMilliseconds,
+          if (turn.id.length == 32) 'requestRef': turn.id,
+        },
+      );
+      sentConversation.messages.add(
+        const ChatMessage(
+          fromUser: false,
+          text: 'Guidance could not be confirmed. Your messages are saved; Retry checks the same request without automatically sending it again.',
+          label: 'SERVICE ERROR',
+        ),
+      );
     } finally {
       sentConversation.pending = false;
       sentConversation.changed();
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
-        _scrollController.animateTo(
-          _scrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOut,
-        );
+      if (mounted &&
+          sentRevision == _session.revision &&
+          identical(sentSession, _session) &&
+          identical(sentConversation, _conversation)) {
+        _draining = false;
+        _scrollToLatest();
+        unawaited(_drainQueue());
       }
-    });
+    }
   }
 
   bool _reporting = false;
@@ -1691,7 +1888,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _endChat() async {
-    if (_thinking) return;
+    if (_ending) return;
     setState(() => _ending = true);
     try {
       final confirmed = await showDialog<bool>(
@@ -1699,7 +1896,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         builder: (context) => AlertDialog(
           title: const Text('End chat?'),
           content: const Text(
-            'Your conversation stays saved for this profile and guide. You can read or continue it later.',
+            'Your conversation stays saved. Queued messages will be cancelled. An answer already requested may finish and be saved for this profile.',
           ),
           actions: [
             TextButton(
@@ -1714,6 +1911,22 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
       );
       if (confirmed != true || !mounted) return;
+      _idleTimer?.cancel();
+      _idleReady = false;
+      for (final turn in _conversation.turns.where((t) => t.waiting)) {
+        turn.state = 'cancelled';
+        userJourney.event(
+          'chat.send',
+          metadata: {
+            'feature': 'chat',
+            'source': 'app',
+            'outcome': 'cancelled',
+            'count': turn.userMessages.length,
+            if (turn.id.length == 32) 'requestRef': turn.id,
+          },
+        );
+      }
+      setState(() => _deliveryMessage = null);
       _conversation.ended = true;
       _conversation.changed();
       await _session.flushStorage();
@@ -1788,7 +2001,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       await WidgetsBinding.instance.endOfFrame;
       if (mounted) Navigator.of(context).maybePop();
     } finally {
-      if (mounted) setState(() => _ending = false);
+      if (mounted) {
+        setState(() => _ending = false);
+        unawaited(_drainQueue());
+      }
     }
   }
 
@@ -1852,8 +2068,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
-                          Text(
-                            ex(context, 'AI guide', 'AI வழிகாட்டி'),
+                          UiText(
+                            widget.guide.category,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
@@ -1870,14 +2086,14 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 actions: [
                   TextButton(
                     key: const Key('end-chat'),
-                    onPressed: _thinking ? null : _endChat,
+                    onPressed: _ending ? null : _endChat,
                     child: Text(ex(context, 'End chat', 'முடி')),
                   ),
                   PopupMenuButton<String>(
                     tooltip: 'Chat options',
                     onOpened: () =>
                         FocusManager.instance.primaryFocus?.unfocus(),
-                    enabled: !_thinking,
+                    enabled: !_ending,
                     itemBuilder: (_) => [
                       const PopupMenuItem(
                         value: 'edit-birth',
@@ -2073,19 +2289,61 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               _MessageBubble(
                                 message: message,
                                 animate: identical(message, _deliveryMessage),
-                                onPart: _scrollToLatest,
+                                onPart: (count) {
+                                  _scrollToLatest();
+                                  userJourney.event(
+                                    'chat.present',
+                                    metadata: {
+                                      'feature': 'chat',
+                                      'source': 'app',
+                                      'outcome': 'success',
+                                      'count': count,
+                                      if (message.clientId?.length == 32)
+                                        'requestRef': message.clientId!,
+                                    },
+                                  );
+                                },
                                 onDelivered: () {
                                   if (mounted &&
                                       identical(message, _deliveryMessage)) {
                                     setState(() => _deliveryMessage = null);
                                     _scrollToLatest();
+                                    unawaited(_drainQueue());
                                   }
                                 },
+                                deliveryState: _messageDelivery(message),
                                 onReport: message.fromUser
                                     ? null
                                     : () => _reportAnswer(message),
                               ),
-                              if (message.wallet?['status'] == 'failed' &&
+                              if (message.fromUser && message.clientId != null)
+                                for (final turn in _conversation.turns.where(
+                                  (turn) =>
+                                      turn.messageIds.last ==
+                                          message.clientId &&
+                                      [
+                                        'uncertain',
+                                        'failed',
+                                      ].contains(turn.state),
+                                ))
+                                  TextButton(
+                                    key: ValueKey('retry-turn-${turn.id}'),
+                                    onPressed:
+                                        _conversation.pending ||
+                                            _deliveryMessage != null ||
+                                            _ending
+                                        ? null
+                                        : () => _retryTurn(turn),
+                                    child: Text(
+                                      _language == ChatLanguage.tamil
+                                          ? 'மீண்டும் முயற்சி'
+                                          : _language == ChatLanguage.tanglish
+                                          ? 'Meendum muyarchi'
+                                          : 'Retry',
+                                    ),
+                                  ),
+                              if (_conversation.turns.isEmpty &&
+                                  message.wallet?['status'] == 'failed' &&
                                   index == _messages.length - 1 &&
                                   !_thinking &&
                                   !_conversation.ended)
@@ -2188,6 +2446,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                 minLines: 1,
                                 maxLines: 4,
                                 textInputAction: TextInputAction.send,
+                                onChanged: (_) {
+                                  if (_conversation.turns.any(
+                                    (turn) => turn.waiting,
+                                  )) {
+                                    _armCollection();
+                                  }
+                                },
                                 onSubmitted: (_) => _send(),
                                 decoration: InputDecoration(
                                   hintText: _language == ChatLanguage.tamil
@@ -2209,7 +2474,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                             IconButton.filled(
                               key: const Key('sendMessage'),
                               tooltip: uiText(context, 'Send question'),
-                              onPressed: _thinking ? null : _send,
+                              onPressed: _ending ? null : _send,
                               icon: const Icon(Icons.send_rounded),
                               style: IconButton.styleFrom(
                                 backgroundColor: AskPalette.action,
@@ -3162,34 +3427,3 @@ Future<bool> confirmSignOut(BuildContext context) async =>
       ),
     ) ==
     true;
-
-Future<String?> showChatDepthPicker(
-  BuildContext context, {
-  int? generalCoins,
-  int? relationshipCoins,
-}) => showDialog<String>(
-  context: context,
-  builder: (dialog) => AlertDialog(
-    title: const UiText('Start chat'),
-    content: Text(
-      uiText(dialog, 'Start chat') != 'Start chat'
-          ? 'பொதுவான கேள்விகளுக்கு ஒரு பதிலுக்கு ${generalCoins ?? remoteConfig.cost('generalStandard', 10)} நாணயங்கள். '
-                'உறவு தொடர்பான கேள்விகளுக்கு ஒரு பதிலுக்கு ${relationshipCoins ?? remoteConfig.cost('relationshipStandard', 15)} நாணயங்கள். '
-                'முழுமையான பதில்களுக்கு மட்டுமே கட்டணம்.'
-          : 'General questions: ${generalCoins ?? remoteConfig.cost('generalStandard', 10)} coins per answer. '
-                'Relationship questions: ${relationshipCoins ?? remoteConfig.cost('relationshipStandard', 15)} coins per answer. '
-                'Only completed answers are charged.',
-    ),
-    actions: [
-      TextButton(
-        onPressed: () => Navigator.pop(dialog),
-        child: const UiText('Cancel'),
-      ),
-      FilledButton(
-        key: const Key('start-unified-chat'),
-        onPressed: () => Navigator.pop(dialog, 'standard'),
-        child: const UiText('Start chat'),
-      ),
-    ],
-  ),
-);

@@ -8,7 +8,7 @@ export const journeyEvents = new Set([
  'interaction.tap','interaction.scroll','navigation.back','navigation.tab',
  'auth.send','auth.verify','auth.restore','auth.logout','auth.delete',
  'profile.create','profile.update','profile.restore','profile.delete',
- 'chat.start','chat.send','chat.answer','chat.end','chat.back','chat.settings',
+ 'chat.start','chat.send','chat.answer','chat.receipt','chat.present','chat.end','chat.back','chat.settings',
  'matching.start','matching.complete','matching.add','matching.delete','matching.share',
  'daily.open','daily.expand','explore.open','explore.reading',
  'payment.start','payment.verify','payment.refresh','payment.checkout',
@@ -25,7 +25,7 @@ const outcomes=new Set(['started','success','failed','cancelled','pending','unav
 const features=new Set(['auth','profile','chat','matching','daily','explore','wallet','settings','notification','support','birth_chart','location','other']);
 const controls=new Set(['primary','back','close','tab','menu','login','otp','resend','save','edit','delete','add_person','select_person','match','share','send','end_chat','language','guide','category','recharge','payment_refresh','consent','notification','support','other']);
 const errorCodes=new Set(['network','timeout','unauthorized','validation','unavailable','provider','payment','storage','unknown']);
-const metadataKeys=new Set(['outcome','feature','control','language','error','status','durationMs','count','source']);
+const metadataKeys=new Set(['outcome','feature','control','language','error','status','durationMs','count','source','requestRef']);
 export type JourneyEvent={id:string;sessionId:string;sequence:number;name:string;screen:string;at:number;metadata:Record<string,string|number>};
 export function parseJourneyEvents(input:unknown,now=Date.now()):JourneyEvent[] {
  if(!input||typeof input!=='object'||Array.isArray(input)||Object.keys(input).some(k=>k!=='events'))throw Error('Invalid event batch');
@@ -41,6 +41,10 @@ export function parseJourneyEvents(input:unknown,now=Date.now()):JourneyEvent[] 
   if(!metadata||typeof metadata!=='object'||Array.isArray(metadata)||Object.keys(metadata).some(k=>!metadataKeys.has(k)))throw Error('Invalid metadata');
   const valid:Record<string,string|number>={};
   for(const [key,value] of Object.entries(metadata)){
+   if(key==='requestRef'){
+    if(typeof value!=='string'||! /^[A-Za-z0-9_-]{32}$/.test(value))throw Error('Invalid request reference');
+    valid[key]=value;continue;
+   }
    const allowed=key==='outcome'?outcomes:key==='feature'?features:key==='control'?controls:key==='language'?new Set(['en','ta','tanglish']):key==='error'?errorCodes:key==='source'?new Set(['touch','keyboard','system','api','app','push']):null;
    if(allowed){if(typeof value!=='string'||!allowed.has(value))throw Error('Invalid metadata');}
    else if(!Number.isSafeInteger(value)||Number(value)<0||Number(value)>(key==='status'?599:key==='durationMs'?86400000:1000000))throw Error('Invalid metadata');

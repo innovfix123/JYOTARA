@@ -86,6 +86,7 @@ class ProfileSession extends ChangeNotifier {
           'acceptedGeneralCoins': conversation.acceptedGeneralCoins,
           'acceptedRelationshipCoins': conversation.acceptedRelationshipCoins,
           'updatedAt': conversation.updatedAt?.toIso8601String(),
+          'turns': conversation.turns.map((turn) => turn.toJson()).toList(),
           'history': conversation.history
               .map(
                 (chat) => chat
@@ -95,6 +96,7 @@ class ProfileSession extends ChangeNotifier {
                         'text': m.text,
                         'label': m.label,
                         'wallet': m.wallet,
+                        'clientId': m.clientId,
                       },
                     )
                     .toList(),
@@ -107,6 +109,7 @@ class ProfileSession extends ChangeNotifier {
                   'text': m.text,
                   'label': m.label,
                   'wallet': m.wallet,
+                  'clientId': m.clientId,
                 },
               )
               .toList(),
@@ -288,6 +291,7 @@ class ProfileSession extends ChangeNotifier {
                   wallet: m['wallet'] is Map
                       ? Map<String, dynamic>.from(m['wallet'])
                       : null,
+                  clientId: m['clientId'] is String ? m['clientId'] : null,
                 ),
           ]);
         }
@@ -307,8 +311,34 @@ class ProfileSession extends ChangeNotifier {
               wallet: message['wallet'] is Map
                   ? Map<String, dynamic>.from(message['wallet'])
                   : null,
+              clientId: message['clientId'] is String
+                  ? message['clientId']
+                  : null,
             ),
           );
+        }
+        if (chat['turns'] != null) {
+          if (chat['turns'] is! List || (chat['turns'] as List).length > 5000) {
+            throw const FormatException('Invalid saved chat queue');
+          }
+          conversation.turns.addAll(
+            (chat['turns'] as List).map(ChatTurn.fromJson),
+          );
+          final knownIds = conversation.messages
+              .map((m) => m.clientId)
+              .whereType<String>()
+              .toSet();
+          final turnIds = <String>{}, messageIds = <String>{};
+          for (final turn in conversation.turns) {
+            if (!turnIds.add(turn.id) ||
+                turn.messageIds.any(
+                  (id) => !knownIds.contains(id) || !messageIds.add(id),
+                )) {
+              throw const FormatException(
+                'Invalid saved chat queue identities',
+              );
+            }
+          }
         }
         if (chat['interruptedRequest'] == true) {
           conversation.messages.add(
@@ -570,13 +600,47 @@ class ProfileSession extends ChangeNotifier {
       return false;
     }
     _responseReceipts[result] = null;
-    target.messages.add(guidanceMessage(result, language));
+    final message = guidanceMessage(result, language);
+    final displayed = ChatMessage(
+      fromUser: false,
+      text: message.text,
+      label: message.label,
+      wallet: message.wallet,
+      clientId: receipt.id,
+    );
+    final existing = target.messages.indexWhere(
+      (m) => !m.fromUser && m.clientId == receipt.id,
+    );
+    if (existing < 0) {
+      target.messages.add(displayed);
+    } else if (target.messages[existing].text != displayed.text ||
+        target.messages[existing].wallet?['status'] !=
+            displayed.wallet?['status']) {
+      target.messages[existing] = displayed;
+    }
+    final failed =
+        result.wallet?['status'] == 'failed' ||
+        result.answerMode == 'reading_unavailable';
+    for (final turn in target.turns.where((turn) => turn.id == receipt.id)) {
+      turn.state = failed ? 'failed' : 'complete';
+      if (turn.state == 'complete') turn.ack = 'complete';
+    }
     target.pending = false;
-    final originalContext = _requestContexts.remove(receipt.key);
-    final originalTurns = _conversationContexts.remove(receipt.key);
-    final originalMode = _conversationModes.remove(receipt.key);
-    final originalMemory = _conversationMemory.remove(receipt.key);
-    if (_requestIds[receipt.key] == receipt.id) _requestIds.remove(receipt.key);
+    // A failed reply can still be reopened. Keep its exact original consent,
+    // context and identity; this does not authorize another provider attempt.
+    final originalContext = failed
+        ? null
+        : _requestContexts.remove(receipt.key);
+    final originalTurns = failed
+        ? null
+        : _conversationContexts.remove(receipt.key);
+    final originalMode = failed ? null : _conversationModes.remove(receipt.key);
+    final originalMemory = failed
+        ? null
+        : _conversationMemory.remove(receipt.key);
+    if (!failed && _requestIds[receipt.key] == receipt.id) {
+      _requestIds.remove(receipt.key);
+    }
     target.changed(); // Persists the answer and identity removal together.
     await flushStorage();
     if (receipt.revision == _revision &&
@@ -585,6 +649,9 @@ class ProfileSession extends ChangeNotifier {
       // A failed write must not make another send billable. The original disk
       // generation still contains this identity, and memory must agree.
       _requestIds.putIfAbsent(receipt.key, () => receipt.id);
+      for (final turn in target.turns.where((turn) => turn.id == receipt.id)) {
+        turn.state = 'uncertain';
+      }
       if (originalMode != null) {
         _conversationModes.putIfAbsent(receipt.key, () => originalMode);
       }
@@ -608,11 +675,17 @@ class ProfileSession extends ChangeNotifier {
 
   void startNewConversation(String guide) {
     final chat = conversation(guide);
-    if (chat.pending) return;
+    if (chat.pending ||
+        chat.turns.any(
+          (turn) => ['sending', 'uncertain'].contains(turn.state),
+        )) {
+      return;
+    }
     if (chat.messages.any((m) => m.fromUser)) {
       chat.history.add(List.of(chat.messages));
     }
     chat.messages.clear();
+    chat.turns.clear();
     chat.ended = false;
     chat.rating = null;
     chat.billingAcknowledged = false;
@@ -934,6 +1007,7 @@ class ProfileSession extends ChangeNotifier {
     required String question,
     required String responseStyle,
     String? guide,
+    String? clientRequestId,
   }) {
     final profile = _raw?['profileId'];
     final normalized = question.trim().replaceAll(RegExp(r'\s+'), ' ');
@@ -945,7 +1019,11 @@ class ProfileSession extends ChangeNotifier {
           var base = jsonDecode(key);
           String? depth;
           String? upgrade;
-          if (base is List && base.length == 3 && base[0] is String) {
+          if (base is List &&
+              [3, 4].contains(base.length) &&
+              base[0] is String) {
+            if (base.length == 4 && base[3] != clientRequestId) continue;
+            if (base.length == 3 && clientRequestId != null) continue;
             depth = base[1] as String?;
             upgrade = base[2] as String?;
             base = jsonDecode(base[0] as String);
@@ -986,10 +1064,25 @@ class ProfileSession extends ChangeNotifier {
     String? conversationKey,
     String? depth,
     String? upgradeFrom,
+    List<String> userMessageBatch = const [],
+    String? clientRequestId,
+    void Function(String state)? onDeliveryState,
   }) async {
     var chart = _facts;
     // Reject invalid input before renewing access or making any network call.
-    if (question.trim().isEmpty || question.runes.length > 240) {
+    final batched = userMessageBatch.isNotEmpty && guide != null;
+    if (question.trim().isEmpty ||
+        question.runes.length > (batched ? 1000 : 240) ||
+        (userMessageBatch.isNotEmpty &&
+            (!batched ||
+                userMessageBatch.length > 4 ||
+                userMessageBatch.any(
+                  (m) => m.trim().isEmpty || m.runes.length > 240,
+                ) ||
+                userMessageBatch.map((m) => m.trim()).join('\n') !=
+                    question.trim())) ||
+        (clientRequestId != null &&
+            !RegExp(r'^[a-f0-9]{32}$').hasMatch(clientRequestId))) {
       throw const JyotaraApiException(
         'Please enter a question of up to 240 characters.',
       );
@@ -1054,6 +1147,7 @@ class ProfileSession extends ChangeNotifier {
         question: question,
         responseStyle: responseStyle,
         guide: guide,
+        clientRequestId: clientRequestId,
       );
       final consent = pending?.consent ?? researchConsent;
       final requestDepth = pending != null ? pending.depth : depth;
@@ -1082,7 +1176,14 @@ class ProfileSession extends ChangeNotifier {
             ]);
       final requestKey =
           pending?.key ??
-          (depth == null && upgradeFrom == null
+          (clientRequestId != null
+              ? jsonEncode([
+                  baseRequestKey,
+                  depth,
+                  upgradeFrom,
+                  clientRequestId,
+                ])
+              : depth == null && upgradeFrom == null
               ? baseRequestKey
               : jsonEncode([baseRequestKey, depth, upgradeFrom]));
       if (!_requestIds.containsKey(requestKey)) {
@@ -1093,10 +1194,24 @@ class ProfileSession extends ChangeNotifier {
         }
         // The current question is already visible. Only prior user statements
         // from this guide are retained for legacy topic routing.
+        final chat = _conversations[conversationKey ?? guide];
+        final queuedIds =
+            chat?.turns
+                .where((turn) => turn.state != 'complete')
+                .expand((turn) => turn.messageIds)
+                .toSet() ??
+            <String>{};
+        final contextMessages = (chat?.messages ?? <ChatMessage>[])
+            .where(
+              (m) =>
+                  !m.fromUser ||
+                  m.clientId == null ||
+                  !queuedIds.contains(m.clientId),
+            )
+            .toList();
         final messages = guide == null
             ? <String>[]
-            : (_conversations[conversationKey ?? guide]?.messages ??
-                      <ChatMessage>[])
+            : contextMessages
                   .where(
                     (m) =>
                         m.fromUser &&
@@ -1105,33 +1220,32 @@ class ProfileSession extends ChangeNotifier {
                   )
                   .map((m) => m.text.trim().replaceAll(RegExp(r'\s+'), ' '))
                   .toList();
-        if (messages.isNotEmpty && messages.last == normalizedQuestion) {
+        if (clientRequestId == null &&
+            messages.isNotEmpty &&
+            messages.last == normalizedQuestion) {
           messages.removeLast();
         }
         _requestContexts[requestKey] = messages
             .skip(max(0, messages.length - 6))
             .toList(growable: false);
         // Freeze both sides for retries. Conversation is memory, not evidence.
-        final turns =
-            (guide == null
-                    ? <ChatMessage>[]
-                    : (_conversations[conversationKey ?? guide]?.messages ??
-                          <ChatMessage>[]))
-                .where(
-                  (m) =>
-                      m.text.trim().isNotEmpty &&
-                      m.wallet?['status'] != 'failed' &&
-                      ![
-                        'INTERRUPTED REQUEST',
-                        'ERROR',
-                        'REQUEST FAILED',
-                        'ANSWER NOT CONFIRMED',
-                        'REQUEST NOT COMPLETED',
-                        'SERVICE ERROR',
-                      ].contains(m.label),
-                )
-                .toList();
-        if (turns.isNotEmpty &&
+        final turns = (guide == null ? <ChatMessage>[] : contextMessages)
+            .where(
+              (m) =>
+                  m.text.trim().isNotEmpty &&
+                  m.wallet?['status'] != 'failed' &&
+                  ![
+                    'INTERRUPTED REQUEST',
+                    'ERROR',
+                    'REQUEST FAILED',
+                    'ANSWER NOT CONFIRMED',
+                    'REQUEST NOT COMPLETED',
+                    'SERVICE ERROR',
+                  ].contains(m.label),
+            )
+            .toList();
+        if (clientRequestId == null &&
+            turns.isNotEmpty &&
             turns.last.fromUser &&
             turns.last.text.trim().replaceAll(RegExp(r'\s+'), ' ') ==
                 normalizedQuestion) {
@@ -1185,10 +1299,12 @@ class ProfileSession extends ChangeNotifier {
           });
         }
         final random = Random.secure();
-        _requestIds[requestKey] = List.generate(
-          16,
-          (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
-        ).join();
+        _requestIds[requestKey] =
+            clientRequestId ??
+            List.generate(
+              16,
+              (_) => random.nextInt(256).toRadixString(16).padLeft(2, '0'),
+            ).join();
       }
       final requestId = _requestIds[requestKey]!;
       // Persist identity BEFORE transport so a process restart cannot turn an
@@ -1223,6 +1339,8 @@ class ProfileSession extends ChangeNotifier {
         guide: requestGuide,
         depth: requestDepth,
         upgradeFrom: requestUpgrade,
+        userMessageBatch: userMessageBatch,
+        onDeliveryState: onDeliveryState,
       );
       if (revision != _revision) {
         throw const JyotaraApiException(

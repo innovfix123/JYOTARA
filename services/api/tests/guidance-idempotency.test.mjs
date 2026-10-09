@@ -8,11 +8,11 @@ import {moduleFor} from './helpers/load.mjs';
 const compile = text => ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText;
 const url = text => `data:text/javascript;base64,${Buffer.from(text).toString('base64')}`;
 const source = path => readFileSync(new URL(path, import.meta.url), 'utf8');
-const moduleUrl = path => url(compile(source(path)));
+const moduleUrl = path => moduleFor(path,'__receiptTestEnv');
 const evidence = moduleUrl('../lib/astrology-evidence.ts');
 const tickets = url(compile(source('../lib/chart-ticket.ts')).replace('./astrology-evidence', evidence));
 const receipts = moduleUrl('../db/guidance-requests.ts');
-const deletion = url(compile(source('../db/profile-deletion.ts')).replace('./guidance-requests', receipts));
+const deletion = moduleUrl('../db/profile-deletion.ts');
 const rules = moduleUrl('../lib/career-rules.ts');
 const contract = url(compile(source('../lib/career-answer-contract.ts')).replace('./career-rules', rules));
 const career = url(compile(source('../lib/career-response.ts')).replaceAll('./astrology-evidence', evidence).replace('./career-rules', rules).replace('./career-answer-contract', contract));
@@ -20,6 +20,8 @@ const { issueChartTicket, openChartTicket } = await import(tickets);
 const { sealReply, openReply } = await import(receipts);
 const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace("import { env } from 'cloudflare:workers';", 'const env = globalThis.__receiptTestEnv;')
+  .replace('@/runtime/financial-tracking',moduleUrl('../runtime/financial-tracking.ts'))
+  .replace('@/runtime/research-content',moduleUrl('../runtime/research-content.ts'))
   .replace('@/lib/chat-access-window', url(compile(source('../lib/chat-access-window.ts'))))
       .replace('@/lib/chart-ticket', tickets)
   .replace('@/db/guidance-requests', receipts)
@@ -28,6 +30,7 @@ const route = url(compile(source('../app/api/guidance/route.ts'))
   .replace('@/db/current-context', moduleUrl('../db/current-context.ts'))
   .replace('@/lib/divine-calculations', moduleUrl('../lib/divine-calculations.ts'))
   .replace('@/lib/limited-birth-guidance', moduleFor('../lib/limited-birth-guidance.ts'))
+  .replace('@/lib/conversation-acknowledgement', moduleUrl('../lib/conversation-acknowledgement.ts'))
   .replace('@/lib/divine-consultation', moduleUrl('../lib/divine-consultation.ts'))
   .replace('@/lib/marriage-report', moduleUrl('../lib/marriage-report.ts'))
   .replaceAll('@/lib/prokerala-client', moduleUrl('../lib/prokerala-client.ts'))
@@ -379,6 +382,29 @@ test('Divine route verifies birth details, replays without charge and isolates p
   assert.equal(boundary.answerMode,'practical_guidance');
   assert.match(boundary.answer,/Respect the request for no contact/);
   assert.equal(requests.length,beforeUnified+2,'a long retained boundary must avoid paid provider work');
+  const beforeAck=requests.length;
+  const ack={...base,requestId:'local-acknowledgement-01',question:'Please keep it brief.',responseMode:'conversation',userMessageBatch:['Please keep it brief.']};
+  const ackReply=await (await post(ack)).json();
+  assert.equal(ackReply.answerMode,'limited_guidance');
+  assert.match(ackReply.answer,/brief|short/i);
+  assert.equal(ackReply.providerUsage.newProviderCalls,0);
+  const ackReplay=await (await post(ack)).json();
+  assert.equal(ackReplay.replayed,true);assert.equal(ackReplay.answer,ackReply.answer);
+  assert.equal((await post({...ack,question:'Thanks',userMessageBatch:['Thanks']})).status,409,'changed same-ID preference cannot overwrite its saved receipt');
+  const foreign=await POST(new Request('https://test/api/guidance',{method:'POST',headers:{cookie:'nirayana_pilot_session=foreign','content-type':'application/json'},body:JSON.stringify(ack)}));
+  assert.equal(foreign.status,401);
+  assert.equal((await post({...ack,requestId:'invalid-acknowledgement-01',chartTicket:'tampered'})).status,401);
+  assert.equal((await post({...ack,requestId:'forged-free-batch-01',question:'When will I get married?',userMessageBatch:['Thanks']})).status,400);
+  assert.equal(requests.length,beforeAck,'acknowledgment, replay and rejected requests must not call a provider');
+  const mixed=['When will I get married?','Please keep it brief.'];
+  const mixedReply=await (await post({...ack,requestId:'real-question-plus-brief-01',question:mixed.join('\n'),userMessageBatch:mixed})).json();
+  assert.equal(mixedReply.answerMode,'provider_reading');assert.equal(requests.length,beforeAck+2,'a real question with a preference is still a full reading');
+  const multiline=await (await post({...ack,requestId:'legacy-multiline-brief-01',question:'Please\nkeep it brief.',userMessageBatch:undefined})).json();
+  assert.equal(multiline.answerMode,'provider_reading','legacy whitespace must not turn a paid quote into a free local response');
+  assert.equal(requests.length,beforeAck+4);
+  db.prepare('INSERT INTO deleted_chart_sessions (session_id,expires_at) VALUES (?,?)').run('owner',Date.now()+60000);
+  assert.equal((await post({...ack,requestId:'deleted-acknowledgement-01'})).status,410);
+  assert.equal(requests.length,beforeAck+4);
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM divine_cleanup').get().n,0);
  }finally{globalThis.fetch=old;delete globalThis.__receiptTestEnv;db.close();}
 });

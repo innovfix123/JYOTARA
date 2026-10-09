@@ -28,6 +28,56 @@ test('conversational price keeps legacy Standard cost and binds exact retained m
  assert.equal((await wallet.price(tx,'account','guidance',{...legacy,depth:'detailed'})).cost,20,'legacy Detailed clients retain their existing price');
 });
 
+test('only exact conversation acknowledgments are free without consuming the reading trial',async()=>{
+ const tx={query:async sql=>({rows:sql.includes('count(*)')?[{n:0}]:[]})};
+ const wallet=new CoinWallet({}, {JYOTARA_CHART_TICKET_KEY:secret},{});
+ const ack={...body,question:'Please keep it brief.',userMessageBatch:['Please keep it brief.']};
+ const price=await wallet.price(tx,'account','guidance',ack);
+ assert.equal(price.cost,0);
+ assert.equal(price.trial,false,'an acknowledgment must not consume the first-reading trial');
+ const paidTx={query:async sql=>({rows:sql.includes('count(*)')?[{n:200}]:sql.includes('trial=1')?[{id:'used-trial'}]:[]})};
+ const realMessages=['What does my chart suggest about career growth?','Please keep it brief.'];
+ for(const payload of [
+  {...body,question:realMessages.join('\n'),userMessageBatch:realMessages},
+  {...body,userMessageBatch:['Thanks']},
+  {...body,question:'Thanks, when will I get a job?',userMessageBatch:undefined},
+  {...body,question:'Please keep it brief.',responseMode:undefined,conversationMemory:undefined,userMessageBatch:undefined},
+  {...body,question:'Please\nkeep it brief.',userMessageBatch:undefined},
+ ])assert.equal((await wallet.price(paidTx,'account','guidance',payload)).cost,10,'real, forged or legacy questions keep their ordinary price');
+ const prior={id:'old-paid-ack',request_id:ack.requestId,payload_hash:price.hash,cost:10,trial:0,status:'complete'};
+ const priorTx={query:async sql=>({rows:sql.includes('SELECT * FROM wallet_usage')?[prior]:sql.includes('count(*)')?[{n:200}]:[]})};
+ assert.equal((await wallet.price(priorTx,'account','guidance',ack)).cost,10,'a sealed earlier paid receipt is not retroactively repriced');
+});
+
+test('a zero-price acknowledgement settles once without allocating purchased coins',async()=>{
+ let row;let coinDebits=0;
+ const tx={query:async(sql,args)=>{
+  if(sql.startsWith('INSERT INTO wallet_usage')){row={id:args[0],request_id:args[2],payload_hash:args[3],action:args[4],category:args[5],depth:args[6],cost:args[7],trial:args[8],status:'reserved',allocations:args[11]};return {rows:[row]};}
+  if(sql.includes('FOR UPDATE')&&sql.includes('wallet_usage'))return {rows:[row]};
+  if(sql.startsWith('UPDATE wallet_usage SET status=')){row={...row,status:args[0],result_ciphertext:args[1]};return {rows:[row]};}
+  if(sql.includes('SELECT * FROM wallet_usage'))return {rows:row?[row]:[]};
+  if(sql.includes('remaining=remaining-'))coinDebits++;
+  if(sql.includes('COALESCE(sum'))return {rows:[{n:50}]};
+  if(sql.includes('remaining>0'))return {rows:[{id:'coin-lot',remaining:50}]};
+  if(sql.includes('count(*)'))return {rows:[{n:200}]};
+  if(sql.includes('trial=1'))return {rows:[{id:'trial-used'}]};
+  return {rows:[]};
+ }};
+ const wallet=new CoinWallet({transaction:fn=>fn(tx),pool:tx},{JYOTARA_COIN_WALLET_ENABLED:'true',JYOTARA_CHART_TICKET_KEY:secret},{configured:()=>true,account:async()=> 'account'});
+ const payload={...body,question:'Please keep it brief.',userMessageBatch:['Please keep it brief.']};
+ const quote=await (await wallet.handle(new Request('https://test/api/wallet/quote',{method:'POST',body:JSON.stringify({action:'guidance',payload})}),'test')).json();
+ assert.equal(quote.cost,0);payload.coinQuote=quote.quote;
+ const send=()=>wallet.run(new Request('https://test/api/guidance',{method:'POST',body:JSON.stringify(payload)}),'account','guidance',async()=>Response.json({answer:'I’ll keep my replies brief.',answerMode:'limited_guidance'}));
+ for(let i=0;i<2;i++){
+  const response=await send();assert.equal(response.status,200);
+  const result=await response.json();assert.equal(result.wallet.status,'complete');assert.equal(result.wallet.coins,0);assert.equal(result.wallet.trial,false);
+ }
+ assert.equal(coinDebits,0);
+ assert.deepEqual(JSON.parse(row.allocations),[]);
+ const changed={...payload,question:'What about career growth?',userMessageBatch:['What about career growth?']};
+ await assert.rejects(()=>wallet.price(tx,'account','guidance',changed),/request changed/);
+});
+
 test('long recent user boundary overrides an assistant suggestion and is free in the quote',async()=>{
  const tx={query:async sql=>({rows:sql.includes('count(*)')?[{n:200}]:sql.includes('trial=1')?[{id:'used-trial'}]:[]})};
  const wallet=new CoinWallet({}, {JYOTARA_CHART_TICKET_KEY:secret},{});

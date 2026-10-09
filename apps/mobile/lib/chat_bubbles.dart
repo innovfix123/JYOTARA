@@ -7,10 +7,13 @@ class _MessageBubble extends StatefulWidget {
     this.animate = false,
     this.onPart,
     this.onDelivered,
+    this.deliveryState,
   });
   final ChatMessage message;
-  final VoidCallback? onReport, onPart, onDelivered;
+  final VoidCallback? onReport, onDelivered;
+  final ValueChanged<int>? onPart;
   final bool animate;
+  final String? deliveryState;
   @override
   State<_MessageBubble> createState() => _MessageBubbleState();
 }
@@ -28,7 +31,9 @@ class _MessageBubbleState extends State<_MessageBubble>
     _parts = widget.message.fromUser
         ? [widget.message.text]
         : chatReplyParts(widget.message.text);
-    _visible = widget.animate ? 0 : _parts.length;
+    // The idle collector and provider request already displayed typing. The
+    // first completed thought is ready now; only later thoughts are paced.
+    _visible = widget.animate && _parts.isNotEmpty ? 1 : _parts.length;
     super.initState();
   }
 
@@ -38,6 +43,14 @@ class _MessageBubbleState extends State<_MessageBubble>
     if (_started) return;
     _started = true;
     if (MediaQuery.disableAnimationsOf(context)) _visible = _parts.length;
+    if (widget.animate && _visible > 0) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        for (var index = 1; index <= _visible; index++) {
+          widget.onPart?.call(index);
+        }
+      });
+    }
     if (_visible < _parts.length) {
       _schedulePart();
     } else if (widget.animate) {
@@ -51,7 +64,7 @@ class _MessageBubbleState extends State<_MessageBubble>
     _timer = Timer(chatPartPause(_parts[_visible], _parts.length), () {
       if (!mounted) return;
       setState(() => _visible++);
-      widget.onPart?.call();
+      widget.onPart?.call(_visible);
       if (_visible == _parts.length) {
         updateKeepAlive();
         widget.onDelivered?.call();
@@ -90,6 +103,7 @@ class _MessageBubbleState extends State<_MessageBubble>
               text: _parts[i],
               label: i == 0 ? widget.message.label : null,
             ),
+            deliveryState: widget.deliveryState,
             onReport: i == _parts.length - 1 ? widget.onReport : null,
           ),
         if (_visible < _parts.length) const _TypingBubble(),
@@ -99,9 +113,14 @@ class _MessageBubbleState extends State<_MessageBubble>
 }
 
 class _MessagePiece extends StatelessWidget {
-  const _MessagePiece({required this.message, this.onReport});
+  const _MessagePiece({
+    required this.message,
+    this.onReport,
+    this.deliveryState,
+  });
   final ChatMessage message;
   final VoidCallback? onReport;
+  final String? deliveryState;
   @override
   Widget build(BuildContext context) => Align(
     alignment: message.fromUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -147,6 +166,39 @@ class _MessagePiece extends StatelessWidget {
               ),
             ),
           ),
+          if (message.fromUser && deliveryState != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Tooltip(
+                message: switch (deliveryState) {
+                  'queued' => 'Queued on this device',
+                  'sent' => 'Sending; server receipt is not confirmed',
+                  'received' => 'Received by Jyotara',
+                  'processing' => 'Being processed by the AI service',
+                  'complete' => 'Processed by the AI service',
+                  'cancelled' => 'Cancelled before sending',
+                  _ => 'Delivery could not be confirmed; retry uses the same request',
+                },
+                child: Icon(
+                  deliveryState == 'queued'
+                      ? Icons.schedule
+                      : deliveryState == 'sent'
+                      ? Icons.check
+                      : [
+                          'received',
+                          'processing',
+                          'complete',
+                        ].contains(deliveryState)
+                      ? Icons.done_all
+                      : Icons.error_outline,
+                  key: ValueKey('message-status-$deliveryState'),
+                  size: 15,
+                  color: ['processing', 'complete'].contains(deliveryState)
+                      ? const Color(0xff76c9ff)
+                      : AskPalette.muted,
+                ),
+              ),
+            ),
           if (onReport != null)
             Align(
               alignment: Alignment.centerRight,

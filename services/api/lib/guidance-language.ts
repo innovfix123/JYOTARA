@@ -1,5 +1,25 @@
 export type ResponseStyle = 'english' | 'tamil' | 'tanglish';
 
+/** Batching is an explicit new-client contract; old questions keep their cap.
+ * Keep each submitted message intact for history and idempotency identity. */
+export function normalizeUserMessageBatch(value:unknown,responseMode:unknown,legacyQuestion:unknown):{question:string;userMessageBatch:string[]}|null {
+  const controls=/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u;
+  if(value===undefined) {
+    if(typeof legacyQuestion!=='string'||!legacyQuestion.trim()||[...legacyQuestion.trim()].length>240||controls.test(legacyQuestion))return null;
+    return {question:legacyQuestion.trim(),userMessageBatch:[]};
+  }
+  if(responseMode!=='conversation'||!Array.isArray(value)||value.length<1||value.length>4)return null;
+  const userMessageBatch:string[]=[];
+  for(const item of value) {
+    if(typeof item!=='string'||!item.trim()||[...item.trim()].length>240||controls.test(item))return null;
+    userMessageBatch.push(item.trim());
+  }
+  const question=userMessageBatch.join('\n');
+  if([...question].length>1000)return null;
+  if(legacyQuestion!==undefined&&(typeof legacyQuestion!=='string'||legacyQuestion.trim()!==question))return null;
+  return {question,userMessageBatch};
+}
+
 export function responseStyle(value: unknown, language: string): ResponseStyle {
   return value === 'english' || value === 'tamil' || value === 'tanglish'
     ? value : language === 'en' ? 'english' : 'tamil';
