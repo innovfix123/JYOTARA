@@ -15,7 +15,9 @@ for(const mode of ['test','live'] as const)test(mode+' introductory trial: eligi
  const quote=async(body:any)=>await wallet.handle(req('quote',{action:'guidance',payload:body}),'qa');
  const run=async(body:any,handler:any=async()=>Response.json({answer:'Useful reading.',answerMode:'provider_reading'}))=>{
   const q:any=await (await quote(body)).json();assert.ok(q.quote,q.error);
-  return wallet.run(req('guidance',{...body,coinQuote:q.quote}),owner,'guidance',handler);
+  const response=await wallet.run(req('guidance',{...body,coinQuote:q.quote}),owner,'guidance',handler);
+  assert.equal(response.status,200,await response.clone().text());
+  return response;
  };
  try{
   await db.pool.query('INSERT INTO phone_accounts(id,phone_hash,last_four,created_at) VALUES($1,$1,$2,$3)',[owner,'0000',now]);
@@ -27,11 +29,17 @@ for(const mode of ['test','live'] as const)test(mode+' introductory trial: eligi
   now+=600000;assert.equal((await snapshot()).started,false);assert.equal((await snapshot()).remainingMs,60000);
   const unavailable:any=await (await run(question('failed'),async()=>Response.json({answer:'Unavailable.',answerMode:'reading_unavailable'}))).json();
   assert.equal(unavailable.wallet.status,'failed');assert.equal((await snapshot()).started,false);
-  const first:any=await (await run(question('first'),async()=>{now+=120000;return Response.json({answer:'Useful reading.',answerMode:'provider_reading'});})).json();
+  const firstQuestion=question('first',{responseStyle:'english',language:'en'});
+  const first:any=await (await run(firstQuestion,async()=>{now+=120000;return Response.json({answer:'Useful reading.',answerMode:'provider_reading'});})).json();
   assert.equal(first.wallet.coins,0);assert.equal(first.wallet.trial,true);assert.equal(first.wallet.introTrial.remainingMs,60000);assert.equal(await wallet.balance(db.pool,owner),0);
+  const firstUsage=(await db.pool.query(`SELECT billing_session FROM ${wallet.usageTable} WHERE account_id=$1 AND status='complete'`,[owner])).rows[0];
+  assert.equal(firstUsage.billing_session,'a'.repeat(32));
   now+=10000;
-  await run(question('second'),async()=>{now+=90000;assert.equal((await snapshot()).remainingMs,50000);assert.equal((await snapshot()).pending,true);return Response.json({answer:'Useful follow-up.',answerMode:'provider_reading'});});
+  let followups=0;
+  await run(question('second'),async()=>{followups++;now+=90000;assert.equal((await snapshot()).remainingMs,50000);assert.equal((await snapshot()).pending,true);return Response.json({answer:'Useful follow-up.',answerMode:'provider_reading'});});
+  assert.equal(followups,1);
   assert.equal((await snapshot()).remainingMs,50000);
+  await run(question('tamil',{responseStyle:'tamil',language:'ta'}));
   // Editing owned birth details keeps the remaining trial, not another minute.
   await run(question('edited',{profileId:'profile2'}));assert.equal((await snapshot()).remainingMs,50000);
   assert.equal((await quote(question('wrong-guide',{guide:'Nila'}))).status,422);
@@ -40,7 +48,7 @@ for(const mode of ['test','live'] as const)test(mode+' introductory trial: eligi
   now+=50001;
   const expired=await quote(question('expired',{profileId:'profile2'}));assert.equal(expired.status,422);assert.equal((await expired.json() as any).code,'intro_trial_ended');
   assert.equal((await snapshot()).state,'ended');assert.equal(await wallet.balance(db.pool,owner),0);
-  const recovered:any=await (await run(question('first'))).json();assert.equal(recovered.wallet.coins,0);assert.equal((await snapshot()).state,'ended');
+  const recovered:any=await (await run(firstQuestion)).json();assert.equal(recovered.wallet.coins,0);assert.equal((await snapshot()).state,'ended');
   assert.equal((await trial('finish',{billingSession:'b'.repeat(32)})).status,409);
   assert.equal((await trial('finish',{billingSession:'a'.repeat(32)})).status,200);
   assert.equal((await trial('start',{billingSession:'c'.repeat(32),guide:'Meera'})).status,422);
@@ -48,6 +56,11 @@ for(const mode of ['test','live'] as const)test(mode+' introductory trial: eligi
   const paid:any=await (await quote(question('paid',{billingSession:'c'.repeat(32)}))).json();assert.equal(paid.cost,40);assert.equal(paid.canProceed,false);assert.equal(paid.trial,false);
   const newProcess=new CoinWallet(db,{JYOTARA_COIN_WALLET_ENABLED:'true',JYOTARA_CHART_TICKET_KEY:'e'.repeat(64)},{configured:()=>true,account:async()=>owner,provider:async()=>{throw Error('No payments');}},mode);
   assert.equal((await (await newProcess.handle(req('intro-trial',{operation:'status'}),'qa')).json() as any).state,'ended');
+  // The migration must keep the older one-answer limit. A client-supplied
+  // billingSession without verified timed billing cannot bypass that index.
+  const insertLegacy=(id:string)=>db.pool.query(`INSERT INTO ${wallet.usageTable}(id,account_id,request_id,payload_hash,action,category,depth,cost,trial,binding_hash,status,created_at,updated_at) VALUES($1,$2,$1,$1,'guidance','Love','standard',0,1,$1,'complete',$3,$3)`,[id,owner,now]);
+  await insertLegacy(owner+'-legacy-first');
+  await assert.rejects(insertLegacy(owner+'-legacy-second'),(error:any)=>error.code==='23505'&&error.constraint===`${mode==='live'?'live_':''}wallet_trial_once`);
   await db.pool.query('DELETE FROM phone_accounts WHERE id=$1',[owner]);assert.equal((await db.pool.query('SELECT 1 FROM intro_chat_trials WHERE account_id=$1',[owner])).rows.length,0);
  }finally{Date.now=actual;await db.pool.query('DELETE FROM phone_accounts WHERE id=$1',[owner]);await db.close();}
 });

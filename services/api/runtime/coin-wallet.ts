@@ -359,11 +359,12 @@ export class CoinWallet {
     let needed=price.cost;const allocations:{id:string;coins:number}[]=[];
     const lots=(await tx.query(`SELECT id,remaining FROM ${this.ordersTable} WHERE account_id=$1 AND status='paid' AND remaining>0 ORDER BY created_at,id FOR UPDATE`,[account])).rows;
     for(const lot of lots){const coins=Math.min(needed,Number(lot.remaining));if(!coins)break;allocations.push({id:lot.id,coins});needed-=coins;await tx.query(`UPDATE ${this.ordersTable} SET remaining=remaining-$1 WHERE id=$2`,[coins,lot.id]);}
-    const row=(await tx.query(`INSERT INTO ${this.usageTable}(id,account_id,request_id,payload_hash,action,category,depth,cost,trial,upgrade_from,binding_hash,allocations,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$13) RETURNING *`,[randomUUID(),account,price.requestId,price.hash,action,price.category,price.depth,price.cost,price.trial?1:0,price.upgradeFrom,price.binding,JSON.stringify(allocations),Date.now()])).rows[0];
+    // Set the verified minute session at insertion, before the legacy one-free-
+    // answer unique index runs. Updating it later rejects trial follow-ups.
+    const row=(await tx.query(`INSERT INTO ${this.usageTable}(id,account_id,request_id,payload_hash,action,category,depth,cost,trial,upgrade_from,binding_hash,allocations,billing_session,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$14) RETURNING *`,[randomUUID(),account,price.requestId,price.hash,action,price.category,price.depth,price.cost,price.trial?1:0,price.upgradeFrom,price.binding,JSON.stringify(allocations),price.minute?body.billingSession:null,Date.now()])).rows[0];
     if(price.minute){
      await tx.query('INSERT INTO minute_chat_sessions(account_id,mode,id,binding_hash,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5) ON CONFLICT DO NOTHING',[account,this.mode,body.billingSession,price.minute.binding_hash,Date.now()]);
      await tx.query('UPDATE minute_chat_sessions SET pending_usage=$1,updated_at=$2,binding_hash=$6 WHERE account_id=$3 AND mode=$4 AND id=$5',[row.id,Date.now(),account,this.mode,body.billingSession,price.minute.binding_hash]);
-     await tx.query(`UPDATE ${this.usageTable} SET billing_session=$1 WHERE id=$2`,[body.billingSession,row.id]);
     }
     if(action==='guidance')await tx.query(`UPDATE ${this.usageTable} SET session_id=$1 WHERE id=$2`,[/nirayana_pilot_session=([A-Za-z0-9_-]+)/.exec(request.headers.get('cookie')??'')?.[1]??null,row.id]);
     return {...price,row,fresh:true};
