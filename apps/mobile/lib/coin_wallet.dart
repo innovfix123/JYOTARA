@@ -17,6 +17,7 @@ import 'payment_support.dart';
 import 'launch_intro.dart';
 
 const minuteBillingEnabled = bool.fromEnvironment('JYOTARA_MINUTE_BILLING');
+const introTrialEnabled = bool.fromEnvironment('JYOTARA_INTRO_CHAT_TRIAL');
 int get matchingCoinCost => minuteBillingEnabled
     ? remoteConfig.cost('matchingV2', 15)
     : remoteConfig.cost('matching', 20);
@@ -25,6 +26,9 @@ const coinWalletEnabled = bool.fromEnvironment('JYOTARA_COIN_WALLET');
 // Receipt amounts are server-authoritative; free allowance is not a paid answer.
 String coinReceiptLabel(Map<String, dynamic> receipt) {
   final depth = receipt['depth'];
+  if (receipt['introTrial'] is Map && receipt['coins'] == 0) {
+    return receipt['status'] == 'failed' ? 'Not charged' : 'Free trial';
+  }
   if (receipt['coins'] == 0 && receipt['freeReason'] == 'general_guidance') {
     return '$depth · General guidance · Free';
   }
@@ -84,6 +88,7 @@ class CoinChatConsent {
     this.upgrade,
     this.generalCoins,
     this.relationshipCoins,
+    this.introSession,
   });
   final String? account;
   final String depth;
@@ -91,6 +96,7 @@ class CoinChatConsent {
   final String? upgrade;
   final int? generalCoins;
   final int? relationshipCoins;
+  final String? introSession;
   bool accepts(
     String? owner,
     Map<String, dynamic> payload,
@@ -100,6 +106,12 @@ class CoinChatConsent {
       owner == account &&
       (payload['billingVersion'] == 2
           ? quote['billingVersion'] == 2 &&
+                (introSession == null ||
+                    (quote['cost'] == 0 &&
+                        quote['trial'] == true &&
+                        quote['introTrial'] is Map &&
+                        quote['introTrial']['billingSession'] ==
+                            introSession)) &&
                 quote['coinsPerMinute'] == chatCoinsPerMinute &&
                 [0, chatCoinsPerMinute].contains(quote['cost']) &&
                 quote['canProceed'] == true
@@ -194,6 +206,11 @@ Future<Map<String, dynamic>> confirmCoins(
   final consent = Zone.current[_coinConsentZone] as CoinChatConsent?;
   if (action == 'guidance' && consent?.accepts(account, payload, q) == true) {
     return {...payload, 'coinQuote': q['quote']};
+  }
+  if (action == 'guidance' && consent?.introSession != null) {
+    throw const AccountServiceError(
+      'The free trial could not be verified. Please reopen the trial. No coins used.',
+    );
   }
   if (action == 'guidance' && consent != null && q['canProceed'] != true) {
     throw const AccountServiceError(
@@ -455,7 +472,13 @@ List<Color> _packColors(dynamic id) => id == 'regular'
     : [BronzePalette.card, BronzePalette.gold];
 
 class CoinWalletScreen extends StatefulWidget {
-  const CoinWalletScreen({super.key, required this.api, this.originTab = 4});
+  const CoinWalletScreen({
+    super.key,
+    required this.api,
+    this.originTab = 4,
+    this.returnToChat = false,
+  });
+  final bool returnToChat;
   final int originTab;
   final AccountService api;
   @override
@@ -590,6 +613,14 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
         if (finished == true) await _store.delete(key: purchaseKey);
         await _load();
         await _clearFinished();
+        if (mounted &&
+            finished == true &&
+            widget.returnToChat &&
+            (_data?['orders'] as List? ?? []).any(
+              (o) => o['id'] == order['id'] && o['status'] == 'paid',
+            )) {
+          Navigator.of(context).pop(true);
+        }
         if (mounted) setState(() => _busy = false);
         return;
       }
@@ -677,6 +708,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Payment verified. Coins added.')),
           );
+          if (widget.returnToChat) Navigator.of(context).pop(true);
         }
       }
     } catch (e) {
@@ -747,6 +779,14 @@ class _CoinWalletScreenState extends State<CoinWalletScreen>
       await widget.api.post('/api/wallet/refresh', {'id': id});
       await _load();
       await _clearFinished();
+      if (mounted &&
+          widget.returnToChat &&
+          (_data?['orders'] as List? ?? []).any(
+            (o) => o['id'] == id && o['status'] == 'paid',
+          )) {
+        coinWalletRevision.value++;
+        Navigator.of(context).pop(true);
+      }
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {

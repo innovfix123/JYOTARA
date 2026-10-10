@@ -98,6 +98,7 @@ class AccountService {
           data['error'] is String
               ? data['error']
               : 'Request could not be completed.',
+          code: data['code'] is String ? data['code'] : null,
         );
       }
       return data;
@@ -121,8 +122,9 @@ class AccountService {
 }
 
 class AccountServiceError implements Exception {
-  const AccountServiceError(this.message);
+  const AccountServiceError(this.message, {this.code});
   final String message;
+  final String? code;
   @override
   String toString() => message;
 }

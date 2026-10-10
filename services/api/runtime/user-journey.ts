@@ -9,6 +9,7 @@ export const journeyEvents = new Set([
  'auth.send','auth.verify','auth.restore','auth.logout','auth.delete',
  'profile.create','profile.update','profile.restore','profile.delete',
  'chat.start','chat.send','chat.answer','chat.receipt','chat.present','chat.end','chat.back','chat.settings',
+ 'chat.trial_offer','chat.trial_start','chat.trial_end','chat.trial_recharge',
  'matching.start','matching.complete','matching.add','matching.delete','matching.share',
  'daily.open','daily.expand','explore.open','explore.reading',
  'payment.start','payment.verify','payment.refresh','payment.checkout',

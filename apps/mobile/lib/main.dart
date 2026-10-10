@@ -817,10 +817,135 @@ class _MainShellState extends State<MainShell>
   void initState() {
     super.initState();
     requestedMainTab.addListener(_routeTab);
-    if (!const bool.fromEnvironment('JYOTARA_OFFLINE_QA'))
+    if (!const bool.fromEnvironment('JYOTARA_OFFLINE_QA')) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) unawaited(firebaseServices.offerNotifications(context));
+        if (mounted) unawaited(_prepareEntry());
       });
+    }
+  }
+
+  Future<void> _prepareEntry() async {
+    final api = coinAccount;
+    final owner = api?.account();
+    if (introTrialEnabled &&
+        minuteBillingEnabled &&
+        api != null &&
+        owner != null &&
+        profileSession.facts != null) {
+      try {
+        var trial = await api.post('/api/wallet/intro-trial', {
+          'operation': 'status',
+        });
+        if (!mounted || owner != api.account()) return;
+        if (['available', 'offered'].contains(trial['state']) &&
+            remoteConfig.enabled('chat')) {
+          await api.post('/api/wallet/intro-trial', {'operation': 'offer'});
+          if (!mounted || owner != api.account()) return;
+          userJourney.event(
+            'chat.trial_offer',
+            metadata: {'feature': 'chat', 'outcome': 'started'},
+          );
+          final begin = await showDialog<bool>(
+            context: context,
+            builder: (dialog) => AlertDialog(
+              key: const Key('introTrialOffer'),
+              icon: const Icon(
+                Icons.auto_awesome_rounded,
+                color: gold,
+                size: 34,
+              ),
+              title: Text(
+                ex(dialog, 'Your first chat is on us', 'முதல் உரையாடல் இலவசம்'),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    ex(
+                      dialog,
+                      'Love, studies, work or what’s on your mind?\nAsk your guide with a 1-minute free trial.',
+                      'காதல், படிப்பு, வேலை அல்லது உங்கள் மனதில் உள்ளதைப் பற்றிக் கேளுங்கள்.\n1 நிமிட இலவச உரையாடலை முயற்சிக்கலாம்.',
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    ex(
+                      dialog,
+                      'Your minute starts after the first useful answer. No recharge required. Coin packages open after the trial; buying is optional.',
+                      'முதல் பயனுள்ள பதிலுக்குப் பிறகே நேரம் தொடங்கும். ரீசார்ஜ் தேவையில்லை. முடிந்ததும் நாணயத் தொகுப்புகளைப் பார்க்கலாம்; வாங்குவது உங்கள் விருப்பம்.',
+                    ),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: BronzePalette.muted,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialog, false),
+                  child: Text(
+                    ex(
+                      dialog,
+                      'Explore free features',
+                      'இலவச அம்சங்களைப் பார்',
+                    ),
+                  ),
+                ),
+                FilledButton(
+                  key: const Key('startIntroTrial'),
+                  onPressed: () => Navigator.pop(dialog, true),
+                  child: Text(ex(dialog, 'Start free chat', 'இலவசமாகப் பேசு')),
+                ),
+              ],
+            ),
+          );
+          if (!mounted || owner != api.account()) return;
+          if (begin != true) {
+            await api.post('/api/wallet/intro-trial', {'operation': 'skip'});
+            userJourney.event(
+              'chat.trial_offer',
+              metadata: {'feature': 'chat', 'outcome': 'cancelled'},
+            );
+          } else {
+            final guide = guides.firstWhere(
+              (g) => remoteConfig.guideEnabled(g.name),
+            );
+            trial = await api.post('/api/wallet/intro-trial', {
+              'operation': 'start',
+              'billingSession': requestId().substring(0, 32),
+              'guide': guide.name,
+            });
+          }
+        }
+        if (!mounted || owner != api.account()) return;
+        if (trial['state'] == 'active' && trial['billingSession'] is String) {
+          final guide = guides
+              .where((g) => g.name == trial['guide'])
+              .firstOrNull;
+          if (guide != null && remoteConfig.guideEnabled(guide.name)) {
+            await Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ChatScreen(guide: guide, introTrial: trial),
+              ),
+            );
+          }
+        }
+      } catch (_) {
+        // A promotion failure must not lock the user out of free app features.
+        userJourney.event(
+          'chat.trial_offer',
+          metadata: {
+            'feature': 'chat',
+            'outcome': 'failed',
+            'error': 'network',
+          },
+        );
+      }
+    }
+    if (mounted) await firebaseServices.offerNotifications(context);
   }
 
   void _routeTab() {
@@ -1202,6 +1327,7 @@ class ChatScreen extends StatefulWidget {
     this.allowProfileSwitch = false,
     this.generalCoins,
     this.relationshipCoins,
+    this.introTrial,
     super.key,
   });
 
@@ -1209,6 +1335,7 @@ class ChatScreen extends StatefulWidget {
   final ProfileSession? session;
   final bool allowProfileSwitch;
   final int? generalCoins, relationshipCoins;
+  final Map<String, dynamic>? introTrial;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -1228,6 +1355,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   BuildContext? _chatUiContext;
   bool _controlsExpanded = false;
   CoinChatConsent? _coinConsent;
+  Map<String, dynamic>? _introTrial;
+  final _trialClock = Stopwatch();
+  Timer? _trialTimer;
+  bool _trialSyncing = false, _trialTransition = false;
+  bool get _inTrial => _introTrial != null;
+  int get _trialSeconds =>
+      (((_introTrial?['remainingMs'] as num? ?? 60000).toInt() -
+                      _trialClock.elapsedMilliseconds)
+                  .clamp(0, 60000) /
+              1000)
+          .ceil();
   // Capture the disclosed entry schedule before any later remote refresh.
   // Existing saved consent remains authoritative when a chat is reopened.
   late final int _entryGeneralCoins, _entryRelationshipCoins;
@@ -1246,6 +1384,21 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         remoteConfig.cost('relationshipStandard', 15);
     WidgetsBinding.instance.addObserver(this);
     _bindConversation();
+    if (widget.introTrial != null) {
+      _conversation.billingSession =
+          widget.introTrial!['billingSession'] as String;
+      _coinConsent = null;
+      _applyTrial(widget.introTrial!);
+      _trialTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted || !_inTrial || _paused) return;
+        setState(() {});
+        if (_trialSeconds == 0 && !_thinking) unawaited(_syncTrial());
+      });
+      userJourney.event(
+        'chat.trial_start',
+        metadata: {'feature': 'chat', 'outcome': 'started'},
+      );
+    }
     _session.addListener(_profileChanged);
     userJourney.screen('chat');
     userJourney.event(
@@ -1253,6 +1406,115 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       metadata: {'feature': 'chat', 'outcome': 'started'},
     );
     if (_messages.length > 1) _scrollToLatest();
+  }
+
+  void _applyTrial(Map<String, dynamic> value) {
+    if (!mounted) return;
+    setState(() => _introTrial = Map<String, dynamic>.from(value));
+    _trialClock
+      ..stop()
+      ..reset();
+    if (value['started'] == true && value['pending'] != true) {
+      _trialClock.start();
+    }
+  }
+
+  Future<void> _syncTrial() async {
+    final api = coinAccount;
+    if (!_inTrial || _trialSyncing || _trialTransition || api == null) return;
+    _trialSyncing = true;
+    final owner = api.account();
+    try {
+      final value = await api.post('/api/wallet/intro-trial', {
+        'operation': 'status',
+      });
+      if (!mounted ||
+          owner != api.account() ||
+          value['billingSession'] != _introTrial?['billingSession']) {
+        return;
+      }
+      _applyTrial(value);
+      if (value['state'] == 'ended' && !_thinking) await _finishTrial();
+    } catch (_) {
+      // The server still rejects expired trial requests without paid fallback.
+    } finally {
+      _trialSyncing = false;
+    }
+  }
+
+  Future<void> _finishTrial() async {
+    final api = coinAccount;
+    if (!_inTrial ||
+        _trialTransition ||
+        api == null ||
+        _conversation.pending ||
+        _deliveryMessage != null) {
+      return;
+    }
+    _trialTransition = true;
+    final owner = api.account();
+    try {
+      await api.post('/api/wallet/intro-trial', {
+        'operation': 'finish',
+        'billingSession': _introTrial!['billingSession'],
+      });
+      if (!mounted || owner != api.account()) return;
+      _idleTimer?.cancel();
+      for (final turn in _conversation.turns.where((t) => t.waiting)) {
+        if (_controller.text.isEmpty) _controller.text = turn.question;
+        turn.state = 'cancelled';
+      }
+      _trialClock.stop();
+      _trialTimer?.cancel();
+      _conversation.billingSession = requestId().substring(0, 32);
+      _conversation.changed();
+      await _session.flushStorage();
+      if (!mounted) return;
+      setState(() => _introTrial = null);
+      _coinConsent = null;
+      userJourney.event(
+        'chat.trial_end',
+        metadata: {'feature': 'chat', 'outcome': 'success'},
+      );
+      FocusManager.instance.primaryFocus?.unfocus();
+      final paid = await Navigator.of(context).push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) =>
+              CoinWalletScreen(api: api, originTab: 3, returnToChat: true),
+        ),
+      );
+      if (!mounted || owner != api.account()) return;
+      if (paid == true) {
+        userJourney.event(
+          'chat.trial_recharge',
+          metadata: {'feature': 'chat', 'outcome': 'success'},
+        );
+      } else {
+        _conversation.ended = true;
+        _conversation.changed();
+        await _session.flushStorage();
+        if (!mounted) return;
+        setState(() => _canExit = true);
+        await WidgetsBinding.instance.endOfFrame;
+        if (mounted) Navigator.of(context).pop();
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ex(
+                context,
+                'Could not finish the trial. Please try again.',
+                'முடிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.',
+              ),
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _trialTransition = false);
+    }
   }
 
   void _bindConversation() {
@@ -1282,7 +1544,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     }
     if (minuteBillingEnabled) {
-      _conversation.billingSession ??= requestId().substring(0, 32);
+      if (_inTrial) {
+        _conversation.billingSession = _introTrial!['billingSession'] as String;
+      } else {
+        _conversation.billingSession ??= requestId().substring(0, 32);
+      }
     }
     // One customer-facing conversation mode. Existing pending request receipts
     // retain their original depth in ProfileSession for recovery.
@@ -1405,6 +1671,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _paused = false;
+      if (_inTrial) unawaited(_syncTrial());
       if (_conversation.turns.any((turn) => turn.waiting)) _armCollection();
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
@@ -1464,6 +1731,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _idleTimer?.cancel();
+    _trialTimer?.cancel();
     _inputFocus.dispose();
     _session.removeListener(_profileChanged);
     _conversation.removeListener(_conversationChanged);
@@ -1554,6 +1822,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     String? suggestion,
     Map<String, dynamic>? upgrade,
   ]) async {
+    if (_trialTransition) return;
+    if (_inTrial && _introTrial?['started'] == true && _trialSeconds == 0) {
+      await _syncTrial();
+      return;
+    }
     if (!publicChatEnabled ||
         !remoteConfig.enabled('chat') ||
         upgrade != null) {
@@ -1595,6 +1868,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         generalCoins > relationshipCoins ? generalCoins : relationshipCoins,
         generalCoins: generalCoins,
         relationshipCoins: relationshipCoins,
+        introSession: _introTrial?['billingSession'] as String?,
       );
     }
     var turn = _conversation.turns.lastOrNull;
@@ -1665,6 +1939,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         _draining ||
         _paused ||
         _ending ||
+        _trialTransition ||
         !_idleReady ||
         _conversation.ended ||
         _conversation.pending ||
@@ -1726,6 +2001,16 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           if (turn.id.length == 32) 'requestRef': turn.id,
         },
       );
+      if (_inTrial) {
+        _introTrial = {
+          ..._introTrial!,
+          'remainingMs': (_trialSeconds * 1000),
+          'pending': true,
+        };
+        _trialClock
+          ..stop()
+          ..reset();
+      }
       final result = await withCoinChatConsent(
         _coinConsent,
         () => sentSession.ask(
@@ -1776,6 +2061,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           },
         ),
       );
+      if (_inTrial && result.wallet?['introTrial'] is Map) {
+        _applyTrial(Map<String, dynamic>.from(result.wallet!['introTrial']));
+      }
       userJourney.event(
         'chat.answer',
         metadata: {
@@ -1800,6 +2088,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         turn.language,
       );
     } on JyotaraApiException catch (error) {
+      if (error.code == 'intro_trial_ended' && _inTrial) {
+        turn.state = 'cancelled';
+        if (_controller.text.isEmpty) _controller.text = turn.question;
+        _introTrial = {
+          ..._introTrial!,
+          'state': 'ended',
+          'started': true,
+          'remainingMs': 0,
+        };
+        return;
+      }
       userJourney.event(
         'chat.answer',
         metadata: {
@@ -1848,6 +2147,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           identical(sentConversation, _conversation)) {
         _draining = false;
         _scrollToLatest();
+        if (_inTrial) unawaited(_syncTrial());
         unawaited(_drainQueue());
       }
     }
@@ -1915,6 +2215,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _endChat() async {
+    if (_inTrial) {
+      await _finishTrial();
+      return;
+    }
     if (_ending) return;
     setState(() => _ending = true);
     try {
@@ -2127,8 +2431,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 actions: [
                   TextButton(
                     key: const Key('end-chat'),
-                    onPressed: _ending ? null : _endChat,
-                    child: Text(ex(context, 'End chat', 'முடி')),
+                    onPressed:
+                        _ending || (_inTrial && (_thinking || _trialTransition))
+                        ? null
+                        : _endChat,
+                    child: Text(
+                      _inTrial
+                          ? ex(context, 'Finish trial', 'முடி')
+                          : ex(context, 'End chat', 'முடி'),
+                    ),
                   ),
                   PopupMenuButton<String>(
                     tooltip: 'Chat options',
@@ -2211,6 +2522,40 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               body: ChatWallpaper(
                 child: Column(
                   children: [
+                    if (_inTrial)
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.auto_awesome_rounded,
+                              color: AskPalette.action,
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _introTrial?['started'] == true
+                                    ? ex(
+                                        context,
+                                        'Free trial · ${_trialSeconds}s',
+                                        'இலவசம் · $_trialSeconds வினாடி',
+                                      )
+                                    : ex(
+                                        context,
+                                        'Free trial · starts with your first answer',
+                                        'முதல் பதிலுக்குப் பிறகு நேரம் தொடங்கும்',
+                                      ),
+                                key: const Key('introTrialTimer'),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: AskPalette.ink,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (MediaQuery.viewInsetsOf(context).bottom == 0)
                       Align(
                         alignment: Alignment.centerRight,
@@ -2349,6 +2694,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                       identical(message, _deliveryMessage)) {
                                     setState(() => _deliveryMessage = null);
                                     _scrollToLatest();
+                                    if (_inTrial) unawaited(_syncTrial());
                                     unawaited(_drainQueue());
                                   }
                                 },

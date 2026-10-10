@@ -1,5 +1,6 @@
 import 'user_journey.dart';
 import '../coin_wallet.dart';
+import '../payment_support.dart' show AccountServiceError;
 
 import 'dart:async';
 import 'dart:math';
@@ -458,6 +459,8 @@ class JyotaraApiClient {
       try {
         body.putIfAbsent('depth', () => 'standard');
         body = await confirmCoins('guidance', body);
+      } on AccountServiceError catch (e) {
+        throw JyotaraApiException(e.message, code: e.code);
       } catch (e) {
         throw JyotaraApiException(e.toString());
       }
