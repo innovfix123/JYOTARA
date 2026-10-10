@@ -38,14 +38,13 @@ test('practical questions mentioning a Rasi still receive useful help without re
 });
 
 test('unified unknown-time conversation explains useful practical context without inventing astrology',async()=>{
- const paragraph=('While waiting for the official result, keep your documents ready and review what the next stage requires. ').repeat(5).trim();
- const answer=paragraph+'\n\n'+paragraph;
+ const answer='You have already completed your application, so focus on the next stage requirements rather than applying again.\n\nKeep the required documents together and note any submission deadlines in the official notice.\n\nReview the topics or interview format listed for that next stage, adjusting your preparation around the time you have.\n\nWhich next stage are you preparing for?';
  const dialogue=Array.from({length:32},(_,i)=>({role:i%2?'assistant':'user',content:i===30?'I have already completed my application.':`Previous exam discussion ${i}.`}));
  const memory=['I prefer a bank role near my family.'];
  const result=await limitedBirthGuidance({OPENROUTER_API_KEY:'mock',OPENROUTER_MODEL:'google/gemini-2.5-flash'},{...input,question:'Explain in detail how I can prepare for the next stage while waiting.',depth:'standard',responseMode:'conversation',conversationMemory:memory,dialogue},async(url,options)=>{
   assert.match(url,/openrouter/);
   const body=JSON.parse(options.body),context=JSON.parse(body.messages[1].content);
-  assert.equal(body.model,'google/gemini-2.5-flash');assert.equal(body.max_tokens,2200);
+  assert.equal(body.model,'google/gemini-2.5-flash');assert.equal(body.max_tokens,1800);
   assert.deepEqual(context.conversation_context,dialogue);assert.deepEqual(context.last_exchange,dialogue.slice(-2));
   assert.deepEqual(context.earlier_user_statements,memory);
   assert.equal(context.chart,undefined);assert.equal(context.hour,undefined);
@@ -53,7 +52,7 @@ test('unified unknown-time conversation explains useful practical context withou
   assert.doesNotMatch(body.messages[0].content,/at most 55 words|at most 90 words/);
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer})}}]});
  });
- assert.ok(answer.split(/\s+/).length>110);assert.equal(result.answer,answer);assert.equal(result.calls.length,1);
+ assert.ok(answer.split(/\s+/).length>45);assert.ok(answer.split(/\s+/).length<=110);assert.equal(result.answer,answer);assert.equal(result.calls.length,1);
 });
 
 test('general guidance selects the chat model and retains complete attempt metadata',async()=>{
@@ -98,7 +97,7 @@ test('unknown-time bank preparation accepts optional practical quantities and co
   assert.equal(request.temperature,undefined);assert.equal(request.top_p,undefined);
   assert.deepEqual(context.current_user_messages,userMessageBatch);assert.deepEqual(context.earlier_user_statements,['I have already covered the basic concepts.']);
   assert.match(request.messages[0].content,/usable concise plan, not result announcements/);assert.match(request.messages[0].content,/optional study minutes/);
-  assert.equal(request.max_tokens,1400);assert.match(request.messages[0].content,/maximum of 120 words and three messages/);
+  assert.equal(request.max_tokens,1200);assert.match(request.messages[0].content,/maximum of 65 words and three messages/);
   assert.doesNotMatch(request.messages[0].content,/One complete sentence per line/);
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer})}}],usage:{cost:0.003,prompt_tokens:500,completion_tokens:120}});
  });
@@ -135,7 +134,7 @@ test('transport fallback respects the latest no-coaching correction across Engli
  ]){
   const userMessageBatch=[request,refusal];
   const result=await limitedBirthGuidance({OPENROUTER_API_KEY:'mock'},{...input,question:userMessageBatch.join('\n'),userMessageBatch,style,responseMode:'conversation'},async(_,options)=>{
-   assert.equal(JSON.parse(options.body).max_tokens,1400);throw Error('synthetic transport failure');
+   assert.equal(JSON.parse(options.body).max_tokens,1200);throw Error('synthetic transport failure');
   });
   assert.match(result.answer,limited);assert.doesNotMatch(result.answer,coaching);assert.equal(result.calls.length,1);
   assert.equal(result.calls[0].status,'delivery_uncertain');
@@ -171,7 +170,7 @@ test('astrology outcome questions do not receive unsolicited exam coaching when 
  assert.match(fallback.answer,/can’t predict/);assert.doesNotMatch(fallback.answer,/syllabus|practice paper|routine|documents/);
  const answer='I can’t reliably establish an astrological indication for selection from the information available. It would not be responsible to turn that into a pass-or-fail prediction.';
  const result=await limitedBirthGuidance({OPENROUTER_API_KEY:'mock'},{...input,question,responseMode:'conversation',dialogue:[{role:'user',content:'Give me a detailed study plan.'},{role:'assistant',content:'We discussed practical preparation earlier.'}]},async(_,options)=>{
-  const request=JSON.parse(options.body);assert.equal(request.max_tokens,1400);
+  const request=JSON.parse(options.body);assert.equal(request.max_tokens,1200);
   assert.match(request.messages[0].content,/do not replace it with generic study or career coaching/);
   assert.match(request.messages[0].content,/current user has not requested an extended explanation/);
   assert.match(request.messages[0].content,/Give the complete direct answer first/);
@@ -183,15 +182,15 @@ test('astrology outcome questions do not receive unsolicited exam coaching when 
 });
 
 test('requested detail alone permits a longer general reply; default overflow repairs concisely without losing the current correction',async()=>{
- const thought=('You have already covered the basics, so focus on reviewing the questions you missed and the reasoning behind their answers. ').repeat(2).trim();
+ const thought='You have already covered the basics, so review the questions you missed and the reasoning behind their answers before choosing your next topic.';
  const longAnswer=Array(4).fill(thought).join('\n\n');
  const shortAnswer='You have already covered the basics. Use a short practice set to identify the weak topic, then review the mistakes before moving on.\n\nAdjust the size of the set to the time you have, rather than restarting the whole syllabus.';
  for(const expanded of [false,true]){
   let attempts=0;
   const question=expanded?'Explain in detail how I can adjust my study plan.':'Suggest a simple study plan.';
   const result=await limitedBirthGuidance({OPENROUTER_API_KEY:'mock'},{...input,question,responseMode:'conversation',conversationMemory:['I have already completed the basics.']},async(_,options)=>{
-   attempts++;const request=JSON.parse(options.body);assert.equal(request.max_tokens,expanded?2200:1400);
-   if(attempts===2){assert.match(request.messages.at(-1).content,/120 words and three messages/);assert.match(request.messages.at(-1).content,/completed actions/);}
+   attempts++;const request=JSON.parse(options.body);assert.equal(request.max_tokens,expanded?1800:1200);
+   if(attempts===2){assert.match(request.messages.at(-1).content,/65 words and three messages/);assert.match(request.messages.at(-1).content,/completed actions/);}
    return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer:expanded||attempts===1?longAnswer:shortAnswer})}}]});
   });
   assert.equal(result.answer,expanded?longAnswer:shortAnswer);assert.equal(attempts,expanded?1:2);

@@ -53,7 +53,7 @@ test('current source is the only timing evidence, with supported interpretation 
  assert.equal(context.reading,source);assert.equal(context.conversation_context[0].content,'Earlier I guessed a wedding in September.');
  assert.match(request.messages[0].content,/lead with what it DOES indicate/);
  assert.match(request.messages[0].content,/do not reuse|do not invent a date or reuse dates/i);
- assert.match(request.messages[0].content,/usually 35–75 words/);
+ assert.match(request.messages[0].content,/usually 25–50 words/);
  assert.match(request.messages[0].content,/source notes, datasets, verification pipelines/);
  assert.match(request.messages[0].content,/unga\/neenga/);
  assert.match(request.messages[0].content,/translate month names into Tamil script/);

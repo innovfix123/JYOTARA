@@ -225,7 +225,7 @@ test('source citations tolerate whitespace only, never altered claims',()=>{
 });
 
 test('explicit current detail request expands conversation without changing model or paid provider tier',async()=>{
- const thought=('Venus may favour commitment when both people are ready to discuss their expectations patiently. ').repeat(3).trim();
+ const thought='Venus may favour commitment when both people are ready to discuss their expectations patiently, while family discussions may progress slowly.';
  const answer=Array.from({length:4},()=>thought).join('\n\n');
  const contexts=[];let reads=0;
  const result=await divineConsultation(config,{...input,depth:'standard',responseMode:'conversation',question:'Explain in detail what the reading means for family discussions.'},db(),async(url,opts)=>{
@@ -236,18 +236,18 @@ test('explicit current detail request expands conversation without changing mode
    assert.ok(body.style_notes.length<=500);
    const context=JSON.parse(body.message);contexts.push(context);
    assert.match(context.response_instructions,/explicitly requested more detail/);
-   assert.match(context.response_instructions,/at most 220 words/);
-   assert.doesNotMatch(context.response_instructions,/25–55|90–140|at most 45 words/);
+   assert.match(context.response_instructions,/at most 110 words/);
+   assert.doesNotMatch(context.response_instructions,/25–55|90–140|Answer in 2 short complete sentences/);
    return Response.json({answer,credits_charged:30});
   }
   assert.equal(body.model,config.OPENROUTER_MODEL);
   assert.equal(body.reasoning.enabled,false);
-  assert.equal(body.max_tokens,2200);
+  assert.equal(body.max_tokens,1800);
   contexts.push(JSON.parse(body.messages[1].content));
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:['Venus may favour commitment']})}}]});
  });
  assert.equal(result.answer,answer);assert.equal(reads,1);
- assert.ok(answer.split(/\s+/).length>120);assert.ok(answer.split(/\s+/).length<=220);
+ assert.ok(answer.split(/\s+/).length>65);assert.ok(answer.split(/\s+/).length<=110);
  assert.equal(result.calls[0].credits,30);
 });
 
@@ -292,13 +292,13 @@ test('new GPT editor uses supported low reasoning and a strict source schema whi
  const request=consultationEditorRequest(model,requestInput,reading);
  assert.equal(request.model,model);assert.deepEqual(request.reasoning,{effort:'low'});
  assert.equal(request.temperature,undefined);assert.equal(request.top_p,undefined);
- assert.equal(request.max_tokens,1400);assert.equal(request.response_format.type,'json_schema');
+ assert.equal(request.max_tokens,1200);assert.equal(request.response_format.type,'json_schema');
  assert.equal(request.response_format.json_schema.strict,true);
  assert.deepEqual(request.response_format.json_schema.schema.required,['answer','source_quotes']);
  const userContext=JSON.parse(request.messages[1].content);
  assert.deepEqual(userContext.current_user_messages,messages);assert.equal(userContext.question,messages.join('\n'));
  assert.match(request.messages[0].content,/latest correction/);
- assert.match(request.messages[0].content,/maximum of 120 words and three messages/);
+ assert.match(request.messages[0].content,/maximum of 65 words and three messages/);
  assert.match(request.messages[0].content,/Do not substitute an unsolicited study routine/);
  let reads=0,edits=0;
  const result=await divineConsultation({...config,OPENROUTER_CHAT_MODEL:model},requestInput,db(),async(url,options)=>{
@@ -329,13 +329,13 @@ test('conversation editor answers fully before an optional specific follow-up wi
  assert.match(prompt,/Never withhold the core answer, manufacture unnecessary questions/);
  assert.match(prompt,/pressure the user to stay or spend/);
  assert.match(prompt,/Explicit goodbyes and short factual answers need no follow-up/);
- assert.match(prompt,/maximum of 120 words and three messages/);assert.equal(request.max_tokens,1400);
+ assert.match(prompt,/maximum of 65 words and three messages/);assert.equal(request.max_tokens,1200);
 });
 
 test('current detail and brevity requests control limits; earlier context never expands a reply',()=>{
  const defaults=conversationReplyLimits({question:'What does this indicate for my exam?',dialogue:[{role:'user',content:'Explain in detail.'}],conversationMemory:['I like detailed answers.']});
- assert.deepEqual(defaults,{expanded:false,maxWords:120,maxCharacters:3000,maxMessages:3,maxTokens:1400});
- for(const question of ['Explain more about that indication.','Please explain in detail.','இன்னும் விரிவாக விளக்குங்கள்.','Konjam virivaaga sollunga.'])assert.equal(conversationReplyLimits({question}).maxWords,220);
+ assert.deepEqual(defaults,{expanded:false,maxWords:65,maxCharacters:1400,maxMessages:3,maxMessageWords:32,maxTokens:1200});
+ for(const question of ['Explain more about that indication.','Please explain in detail.','இன்னும் விரிவாக விளக்குங்கள்.','Konjam virivaaga sollunga.'])assert.equal(conversationReplyLimits({question}).maxWords,110);
  assert.equal(conversationReplyLimits({question:'Explain in detail but keep the answer short.'}).expanded,false);
  assert.equal(conversationReplyLimits({userMessageBatch:['Explain in detail.','Actually, a short answer please.']}).expanded,false);
  assert.equal(conversationReplyLimits({userMessageBatch:['A short answer first.','Now explain more.']}).expanded,true);
@@ -361,7 +361,7 @@ test('negated detail requests remain concise in each supported language and late
   'Virivaaga vilakkama solla thevai illai.',
  ]){
   const limits=conversationReplyLimits({question});
-  assert.equal(limits.expanded,false,question);assert.equal(limits.maxWords,120,question);assert.equal(limits.maxTokens,1400,question);
+  assert.equal(limits.expanded,false,question);assert.equal(limits.maxWords,65,question);assert.equal(limits.maxTokens,1200,question);
   assert.equal(conversationReplyLimits({userMessageBatch:['Explain in detail.',question]}).expanded,false,question);
  }
  assert.equal(conversationReplyLimits({userMessageBatch:["Don't explain in detail.",'Now explain more.']}).expanded,true);
@@ -389,8 +389,8 @@ test('a long default edit is repaired into the same concise grounded answer rath
  const result=await divineConsultation(config,{...input,responseMode:'conversation',question:'What does the chart indicate?'},db(),async(url,options)=>{
   if(String(url).endsWith('/session/delete'))return Response.json({deleted:true});
   if(url.includes('ask.divine')){reads++;return Response.json({answer:reading});}
-  edits++;const request=JSON.parse(options.body);assert.equal(request.max_tokens,1400);
-  assert.match(request.messages[0].content,/120 words and three messages/);
+  edits++;const request=JSON.parse(options.body);assert.equal(request.max_tokens,1200);
+  assert.match(request.messages[0].content,/65 words and three messages/);
   if(edits===2)assert.match(request.messages.at(-1).content,/conversation_message_bound/);
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer:edits===1?longAnswer:reading,source_quotes:[reading]})}}]});
  });
@@ -400,7 +400,7 @@ test('a long default edit is repaired into the same concise grounded answer rath
 test('default astrology reply condenses the full source into the requested indication without volunteered exam coaching',async()=>{
  const indication='The Mercury period may support study and careful reasoning when effort is consistent. This is a traditional indication only; it cannot establish exam selection or a pass result.';
  const fullSource=Array(8).fill(indication).join('\n\n');
- const answer='The supplied Mercury-period indication may support study and careful reasoning when effort is consistent.\n\nThat suggests a supportive traditional theme, with the effort condition kept in place. It does not establish exam selection or whether you will pass.\n\nThis reading supports a cautious indication, rather than a definite result.';
+ const answer='Your Mercury period may support study and careful reasoning when your effort is consistent.\n\nIt suggests support for preparation, without confirming selection or a pass result.\n\nAre you preparing for the written exam or an interview?';
  let reads=0,edits=0;
  const requestInput={...input,category:'Education',responseMode:'conversation',question:'Does the reading show support for my banking exam?'};
  const result=await divineConsultation(config,requestInput,db(),async(url,options)=>{
@@ -408,11 +408,11 @@ test('default astrology reply condenses the full source into the requested indic
   if(url.includes('ask.divine')){reads++;return Response.json({answer:fullSource,credits_charged:30});}
   edits++;const request=JSON.parse(options.body),context=JSON.parse(request.messages[1].content);
   assert.equal(context.reading,fullSource);assert.ok(fullSource.split(/\s+/).length>220);
-  assert.equal(request.max_tokens,1400);assert.match(request.messages[0].content,/requested astrological indication/);
+  assert.equal(request.max_tokens,1200);assert.match(request.messages[0].content,/requested astrological indication/);
   assert.match(request.messages[0].content,/only when the current user explicitly asks for practical help/);
   return Response.json({choices:[{finish_reason:'stop',message:{content:JSON.stringify({answer,source_quotes:[indication]})}}]});
  });
  assert.equal(result.answer,answer);assert.equal(reads,1);assert.equal(edits,1);assert.equal(result.calls[0].credits,30);
- assert.equal(answer.split(/\n\n/).length,3);assert.ok(answer.split(/\s+/).length<=120);
+ assert.equal(answer.split(/\n\n/).length,3);assert.ok(answer.split(/\s+/).length<=65);
  assert.doesNotMatch(answer,/minutes|syllabus|practice questions|error log/);
 });

@@ -16,6 +16,7 @@ const language = (style:string)=>style==='tamil'?'Tamil':style==='tanglish'?'Tan
 // New clients choose one conversational experience. Legacy paid depth requests
 // retain their existing provider tier, prompt and receipt behavior.
 export const conversationReplyInstruction = 'Be concise by default and answer the actual current question. Focus on the requested astrological indication when supported evidence exists; preserve its uncertainty and conditions. Do not substitute an unsolicited study routine, career coaching or generic action plan. Give practical coaching only when the current user explicitly asks for practical help, a plan or steps. A simple acknowledgement or clarification can be shorter than the usual reply; never pad it to meet a target. Write natural short complete sentences. Separate complete thoughts with blank lines into messages of one or two sentences; do not split a thought or repeat advice in different bubbles. Respond to all newly submitted messages together, using the latest correction. Start with the actual concern, not a stock greeting or generic reassurance. Be supportive without inventing feelings or pretending to be a real human. Give the complete direct answer first. Then ask at most one relevant, specific follow-up when its answer would help explore the actual concern or change the guidance, such as whether a career concern is about changing jobs or growth in the current role. Avoid generic closers such as "anything else?". Never withhold the core answer, manufacture unnecessary questions, or pressure the user to stay or spend. Explicit goodbyes and short factual answers need no follow-up; otherwise finish naturally when a question would not help.';
+export const conversationFollowupInstruction = 'For an ordinary guidance turn, end with one short, relevant question in its own final message, after answering the concern. Ask about the next useful detail, not permission to reveal an answer you already have. Use the latest exchange and earlier user statements so you never ask again for information already supplied. Do not stack questions or use a generic engagement hook. Respect a request for no questions. Thanks, goodbyes, a complete single-fact answer and urgent safety guidance need no question. Keep the question inside the same total word and message budget. Prefer everyday words over a dump of planet names, multiple periods or technical jargon; retain a relevant supplied timing window when timing is the question. Do not repeat the limitation in another message. Do not omit a material condition just to make the reply shorter.';
 type ReplyPreference = {question?:string;userMessageBatch?:string[]};
 const currentMessages=(input:ReplyPreference)=>input.userMessageBatch?.length?input.userMessageBatch:[input.question??''];
 /** Only current submitted messages can request detail; old conversation cannot. */
@@ -27,7 +28,7 @@ export function conversationReplyLimits(input:ReplyPreference={}) {
     if(/\b(?:short(?:er)?|brief(?:ly)?|concise|quick answer|no details?|do not elaborate|don't elaborate|surukkama)\b|சுருக்கமா|சுருக்கமாக|குறுகிய பதில்/iu.test(message))break;
     if(/\b(?:in detail|detailed|more details?|explain more|elaborate|in depth|go deeper|step[- ]by[- ]step|full explanation|detail(?:a|aa)?|virivaa(?:ga)?|vilakkama)\b|விரிவா|விவரமாக|மேலும் விளக்க|இன்னும் விளக்க/iu.test(message)){expanded=true;break;}
   }
-  return expanded?{expanded:true,maxWords:220,maxCharacters:4500,maxMessages:4,maxTokens:2200}:{expanded:false,maxWords:120,maxCharacters:3000,maxMessages:3,maxTokens:1400};
+  return expanded?{expanded:true,maxWords:110,maxCharacters:2400,maxMessages:4,maxMessageWords:45,maxTokens:1800}:{expanded:false,maxWords:65,maxCharacters:1400,maxMessages:3,maxMessageWords:32,maxTokens:1200};
 }
 export function practicalGuidanceRequested(input:ReplyPreference) {
   // Resolve an explicit current correction before looking at an older request
@@ -40,7 +41,7 @@ export function practicalGuidanceRequested(input:ReplyPreference) {
 }
 export function conversationReplyInstructionFor(input:ReplyPreference) {
   const limits=conversationReplyLimits(input);
-  return conversationReplyInstruction+' '+astrologerChatStyle+' '+(limits.expanded?'The current user explicitly requested more detail: use two to four short messages, at most 220 words total and at most four messages.':'Use one or two short messages, usually 35–75 words total, with a hard maximum of 120 words and three messages. The current user has not requested an extended explanation.');
+  return conversationReplyInstruction+' '+astrologerChatStyle+' '+conversationFollowupInstruction+' '+(limits.expanded?'The current user explicitly requested more detail: use two to four short messages, at most 110 words total, at most four messages and at most 45 words per message. Answer the requested details concisely; do not turn them into a report.':'Use one or two short answer messages and one short closing question, usually 25–50 words total, with a hard maximum of 65 words and three messages. Each message must have at most 32 words. The current user has not requested an extended explanation.');
 }
 export const conversationJsonInstruction = 'Inside the JSON answer, encode each whole-thought message break as \\n\\n so the decoded answer contains real blank lines between messages.';
 export const sourceUncertaintyInstruction = 'Preserve the exact uncertainty and modal strength of EVERY retained source claim, including practical benefits and drawbacks. May, might, could, possible, sometimes, slightly, conditions and dependencies must remain equally tentative in the requested language; an exact source quote does not make a stronger paraphrase valid. Never translate may happen into will happen. Tamil: கிடைக்கலாம் must stay கிடைக்கலாம் or கிடைக்க வாய்ப்பு உள்ளது, never கிடைக்கும்; இருக்கலாம் must not become இருக்கும். Tanglish: may or could must remain kidaikkalaam, irukkalaam or an equally tentative phrase, never an unconditional kidaikkum or irukkum. Clearly separate supported chart indications from practical considerations; neither establishes a future outcome.';
@@ -97,7 +98,7 @@ export function validChatText(answer:unknown,style:string,maxWords=85,maxCharact
 export function validConversationText(answer:string,input:ReplyPreference={}):boolean {
   const limits=conversationReplyLimits(input);
   const messages=answer.trim().split(/\n+/).map(value=>value.trim()).filter(Boolean);
-  return messages.length<=limits.maxMessages&&messages.every(message=>message.length<=1800&&message.split(/\s+/).length<=120)&&answer.length<=limits.maxCharacters&&answer.trim().split(/\s+/).length<=limits.maxWords;
+  return messages.length>0&&messages.length<=limits.maxMessages&&messages.every(message=>message.length<=limits.maxCharacters&&message.split(/\s+/).length<=limits.maxMessageWords)&&answer.length<=limits.maxCharacters&&answer.trim().split(/\s+/).length<=limits.maxWords;
 }
 // Provider reports are source material, not the final chat bubble. Markdown,
 // headings and long paragraphs are valid input for the short-answer editor.
@@ -219,7 +220,7 @@ export async function divineConsultation(config:ChatConfig,input:ChatInput,db:D1
       let modelHttpStatus:number|undefined;
       try {
       const request=repairReason ? {...editRequest,messages:[...editRequest.messages,
-        {role:'user',content:'The previous edit failed validation: '+repairReason+'. Produce a fresh JSON edit from the supplied reading. Keep the requested language, length limit and complete sentence endings. source_quotes must be exact, unmodified excerpts of at least 8 characters from the reading. Do not add numeric claims absent from the reading. Do not invent or strengthen predictions. '+sourceUncertaintyInstruction}]} : editRequest;
+        {role:'user',content:'The previous edit failed validation: '+repairReason+'. Produce a fresh JSON edit from the supplied reading. Keep the requested language, length limit and complete sentence endings. '+(conversational?conversationReplyInstructionFor(input)+' ':'')+'source_quotes must be exact, unmodified excerpts of at least 8 characters from the reading. Do not add numeric claims absent from the reading. Do not invent or strengthen predictions. '+sourceUncertaintyInstruction}]} : editRequest;
       const polished=await send('https://openrouter.ai/api/v1/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${config.OPENROUTER_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify(request),signal:AbortSignal.timeout(Math.min(remaining,attempt===0?18000:12000))});
       modelHttpStatus=polished.status;modelCharge.status=`http_${polished.status}`;
       if(!polished.ok)throw Error('Editor unavailable');
