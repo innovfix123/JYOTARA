@@ -15,7 +15,7 @@ import {localConversationAcknowledgement} from '../lib/conversation-acknowledgem
 import {claimPhoneTrial} from './phone-trial';
 
 export const coinPacks=[{id:'starter',rupees:49,coins:50},{id:'regular',rupees:149,coins:200},{id:'plus',rupees:299,coins:450},{id:'premium',rupees:499,coins:800},{id:'max',rupees:999,coins:1800}];
-export const minuteCoinPacks=[{id:'minuteentry',rupees:25,coins:40},{id:'minutestarter',rupees:49,coins:80},{id:'minuteregular',rupees:99,coins:170},{id:'minuteplus',rupees:199,coins:360},{id:'minutepremium',rupees:499,coins:960},{id:'minutemax',rupees:999,coins:2000}];
+export const minuteCoinPacks=[{id:'minuteentry',rupees:25,coins:100},{id:'minutestarter',rupees:49,coins:200},{id:'minuteregular',rupees:99,coins:440},{id:'minuteplus',rupees:199,coins:920},{id:'minutepremium',rupees:499,coins:2400},{id:'minutemax',rupees:999,coins:5000}];
 export const minuteRate=40;
 export const coinCost=(category:string,depth:string)=>{const c=appConfig().costs;return ['Love','Relationships','Breakup','Marriage'].includes(category)?(depth==='detailed'?c.relationshipDetailed:c.relationshipStandard):(depth==='detailed'?c.generalDetailed:c.generalStandard);};
 const error=(message:string,status=422)=>Response.json({error:message},{status});
