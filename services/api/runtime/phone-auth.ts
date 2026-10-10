@@ -41,7 +41,7 @@ export class PhoneAuth {
       if(!token || !await erasePhoneAccount(this.db,digest(token),tester,this.now())) {
         return response({error:'Please sign in again.',code:'phone_auth_required'},401);
       }
-      return response({deleted:true,retained:'Minimal abuse-prevention and revocation records remain temporarily. Backups expire within eight days. External provider deletion may remain pending; this response does not confirm external erasure.'});
+      return response({deleted:true,retained:'A protected phone-number eligibility hash remains while the introductory offer is available to prevent repeat free trials. Other minimal security and revocation records remain temporarily. Backups expire within eight days. External provider deletion may remain pending; this response does not confirm external erasure.'});
     }
     if(path==='/api/auth/logout') {
       const token=request.headers.get('authorization')?.match(/^Bearer ([a-f0-9]{64})$/)?.[1];

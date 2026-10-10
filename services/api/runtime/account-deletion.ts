@@ -1,4 +1,5 @@
 import type {PostgresDatabase} from './postgres';
+import {retainPhoneTrialEligibility} from './phone-trial';
 
 /** Authenticated account erasure, serialized with profile writes. Never accepts
  * a caller-supplied account ID or deletes another account's profiles. */
@@ -11,6 +12,7 @@ export async function erasePhoneAccount(db:PostgresDatabase, tokenHash:string, t
       const receipt=await tx.query('SELECT 1 FROM account_erasure_receipts WHERE token_hash=$1 AND tester_key=$2 AND expires_at>$3',[tokenHash,tester,now]);
       return receipt.rows.length>0;
     }
+    await retainPhoneTrialEligibility(tx,account);
     const profiles=await tx.query('SELECT session_id FROM phone_profile_owners WHERE account_id=$1',[account]);
     for(const {session_id:session} of profiles.rows) {
       await tx.query(`INSERT INTO deleted_chart_sessions(session_id,expires_at) VALUES($1,$2)

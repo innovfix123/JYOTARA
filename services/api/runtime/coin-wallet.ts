@@ -12,6 +12,7 @@ import {inferIntent,type GuidanceCategory} from '../lib/astrology-evidence';
 import {matchingLanguage,validBirth} from './discovery';
 import {recordWalletOutcome} from './financial-tracking';
 import {localConversationAcknowledgement} from '../lib/conversation-acknowledgement';
+import {claimPhoneTrial} from './phone-trial';
 
 export const coinPacks=[{id:'starter',rupees:49,coins:50},{id:'regular',rupees:149,coins:200},{id:'plus',rupees:299,coins:450},{id:'premium',rupees:499,coins:800},{id:'max',rupees:999,coins:1800}];
 export const minuteCoinPacks=[{id:'minuteentry',rupees:25,coins:40},{id:'minutestarter',rupees:49,coins:80},{id:'minuteregular',rupees:99,coins:170},{id:'minuteplus',rupees:199,coins:360},{id:'minutepremium',rupees:499,coins:960},{id:'minutemax',rupees:999,coins:2000}];
@@ -61,9 +62,10 @@ export class CoinWallet {
    FROM intro_chat_trials t LEFT JOIN minute_chat_sessions m ON m.account_id=t.account_id AND m.mode=t.mode AND m.id=t.billing_session
    LEFT JOIN ${this.usageTable} u ON u.id=m.pending_usage WHERE t.account_id=$1 AND t.mode=$2`,[account,this.mode])).rows[0];
   if(!row){
-   const eligible=(await tx.query(`SELECT id FROM phone_accounts WHERE id=$1
+   const eligible=(await tx.query(`SELECT id FROM phone_accounts a WHERE id=$1
+    AND NOT EXISTS(SELECT 1 FROM phone_trial_claims WHERE phone_hash=a.phone_hash AND mode=$2)
     AND NOT EXISTS(SELECT 1 FROM ${this.ordersTable} WHERE account_id=$1 AND status='paid')
-    AND NOT EXISTS(SELECT 1 FROM ${this.usageTable} WHERE account_id=$1 AND action='guidance' AND status IN ('reserved','complete'))`,[account])).rows.length>0;
+    AND NOT EXISTS(SELECT 1 FROM ${this.usageTable} WHERE account_id=$1 AND action='guidance' AND status IN ('reserved','complete'))`,[account,this.mode])).rows.length>0;
    return {state:eligible?'available':'unavailable',durationMs:trialDurationMs,remainingMs:eligible?trialDurationMs:0,started:false,pending:false};
   }
   const started=Number(row.window_until??0)>0;
@@ -117,7 +119,8 @@ export class CoinWallet {
   }else if(action==='guidance'&&depth==='standard'&&!existing){
    const used=(await tx.query(`SELECT count(*) n FROM ${this.usageTable} WHERE trial=1 AND status IN ('reserved','complete')`)).rows[0].n;
    const own=(await tx.query(`SELECT id FROM ${this.usageTable} WHERE account_id=$1 AND trial=1 AND status IN ('reserved','complete')`,[account])).rows.length;
-   if(!own&&Number(used)<100){cost=0;trial=true;}
+   const claimed=(await tx.query('SELECT 1 FROM phone_trial_claims t JOIN phone_accounts a ON a.phone_hash=t.phone_hash WHERE a.id=$1 AND t.mode=$2',[account,this.mode])).rows.length>0;
+   if(!own&&!claimed&&Number(used)<100){cost=0;trial=true;}
   }
   const personalReading=action==='guidance'&&request?.headers.get('x-jyotara-wallet-catalog')==='2'&&!body.guide&&body.responseMode===undefined&&!body.upgradeFrom;
   if(personalReading){cost=appConfig().costs.explore;trial=false;}
@@ -182,10 +185,11 @@ export class CoinWallet {
     }
     if(body.operation==='start'){
      if(state.state==='active')return Response.json(state);
-     if(state.state!=='offered')return error('This account has already used or skipped its introductory trial.');
+     if(state.state!=='offered')return error('This phone number is not eligible for another free trial.');
      if(!/^[a-f0-9]{32}$/.test(body.billingSession??'')||!['Meera','Nila','Janaki','Harini','Aravind','Kavya','Adithya','Raghavan','Revathi','Karthik'].includes(body.guide)||!appConfig().features.chat||appConfig().maintenance||appConfig().disabledGuides.includes(body.guide))return error('Choose an available guide.');
      // An existing paid window cannot be relabelled as a free trial.
      if((await tx.query('SELECT 1 FROM minute_chat_sessions WHERE account_id=$1 AND mode=$2 AND id=$3',[account,this.mode,body.billingSession])).rows.length)return error('Start a new introductory chat.');
+     if(!await claimPhoneTrial(tx,account,this.mode))return error('This phone number has already received its free trial.');
      await tx.query("UPDATE intro_chat_trials SET state='active',billing_session=$1,guide=$2,updated_at=$3 WHERE account_id=$4 AND mode=$5 AND state='offered'",[body.billingSession,body.guide,Date.now(),account,this.mode]);
     }else if(body.operation==='skip'&&state.state==='offered'){
      await tx.query("UPDATE intro_chat_trials SET state='skipped',updated_at=$1 WHERE account_id=$2 AND mode=$3",[Date.now(),account,this.mode]);
@@ -356,6 +360,7 @@ export class CoinWallet {
     if(price.existing && !(action==='matching'&&price.existing.status==='failed'))return {...price,row:price.existing,fresh:false};
     if(price.existing)await tx.query(`UPDATE ${this.usageTable} SET request_id=$1 WHERE id=$2`,[price.requestId+'-'+randomUUID(),price.existing.id]);
     if(await this.balance(tx,account)<price.cost)throw Error('Not enough coins. Open Coin wallet to choose a pack.');
+    if(price.trial&&!price.intro&&!await claimPhoneTrial(tx,account,this.mode))throw Error('This phone number has already received its free trial.');
     let needed=price.cost;const allocations:{id:string;coins:number}[]=[];
     const lots=(await tx.query(`SELECT id,remaining FROM ${this.ordersTable} WHERE account_id=$1 AND status='paid' AND remaining>0 ORDER BY created_at,id FOR UPDATE`,[account])).rows;
     for(const lot of lots){const coins=Math.min(needed,Number(lot.remaining));if(!coins)break;allocations.push({id:lot.id,coins});needed-=coins;await tx.query(`UPDATE ${this.ordersTable} SET remaining=remaining-$1 WHERE id=$2`,[coins,lot.id]);}
